@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -26,6 +27,7 @@ type Server struct {
 	portManager *utils.PortManager
 	clients     map[string]*ClientSession
 	mu          sync.RWMutex
+	tlsConfig   *tls.Config
 }
 
 // ClientSession 客户端会话
@@ -52,16 +54,32 @@ func NewServer(cs db.ClientStore, bindAddr string, bindPort int, token string, h
 	}
 }
 
+// SetTLSConfig 设置 TLS 配置
+func (s *Server) SetTLSConfig(config *tls.Config) {
+	s.tlsConfig = config
+}
+
 // Run 启动服务端
 func (s *Server) Run() error {
 	addr := fmt.Sprintf("%s:%d", s.bindAddr, s.bindPort)
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %v", addr, err)
+
+	var ln net.Listener
+	var err error
+
+	if s.tlsConfig != nil {
+		ln, err = tls.Listen("tcp", addr, s.tlsConfig)
+		if err != nil {
+			return fmt.Errorf("failed to listen TLS on %s: %v", addr, err)
+		}
+		log.Printf("[Server] TLS listening on %s", addr)
+	} else {
+		ln, err = net.Listen("tcp", addr)
+		if err != nil {
+			return fmt.Errorf("failed to listen on %s: %v", addr, err)
+		}
+		log.Printf("[Server] Listening on %s (no TLS)", addr)
 	}
 	defer ln.Close()
-
-	log.Printf("[Server] Listening on %s", addr)
 
 	for {
 		conn, err := ln.Accept()

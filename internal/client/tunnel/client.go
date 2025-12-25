@@ -1,15 +1,16 @@
 package tunnel
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/relay"
-	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
 )
 
@@ -18,6 +19,8 @@ type Client struct {
 	ServerAddr string
 	Token      string
 	ID         string
+	TLSEnabled bool
+	TLSConfig  *tls.Config
 	session    *yamux.Session
 	rules      []protocol.ProxyRule
 	mu         sync.RWMutex
@@ -53,7 +56,15 @@ func (c *Client) Run() error {
 
 // connect 连接到服务端并认证
 func (c *Client) connect() error {
-	conn, err := net.DialTimeout("tcp", c.ServerAddr, 10*time.Second)
+	var conn net.Conn
+	var err error
+
+	if c.TLSEnabled && c.TLSConfig != nil {
+		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		conn, err = tls.DialWithDialer(dialer, "tcp", c.ServerAddr, c.TLSConfig)
+	} else {
+		conn, err = net.DialTimeout("tcp", c.ServerAddr, 10*time.Second)
+	}
 	if err != nil {
 		return err
 	}

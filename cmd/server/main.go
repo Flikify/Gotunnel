@@ -9,6 +9,7 @@ import (
 	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/internal/server/tunnel"
+	"github.com/gotunnel/pkg/crypto"
 )
 
 func main() {
@@ -37,6 +38,16 @@ func main() {
 		cfg.Server.HeartbeatSec,
 		cfg.Server.HeartbeatTimeout,
 	)
+
+	// 配置 TLS（默认启用）
+	if !cfg.Server.TLSDisabled {
+		tlsConfig, err := crypto.GenerateTLSConfig()
+		if err != nil {
+			log.Fatalf("Generate TLS config error: %v", err)
+		}
+		server.SetTLSConfig(tlsConfig)
+		log.Printf("[Server] TLS enabled")
+	}
 
 	// 启动 Web 控制台
 	if cfg.Web.Enabled {

@@ -22,6 +22,7 @@ type ServerSettings struct {
 	HeartbeatSec     int    `yaml:"heartbeat_sec"`
 	HeartbeatTimeout int    `yaml:"heartbeat_timeout"`
 	DBPath           string `yaml:"db_path"`
+	TLSDisabled      bool   `yaml:"tls_disabled"` // 默认启用 TLS，设置为 true 禁用
 }
 
 // WebSettings Web控制台设置
