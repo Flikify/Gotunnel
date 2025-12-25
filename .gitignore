@@ -1,0 +1,38 @@
+# 编译输出
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go
+*.test
+*.out
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 前端 node_modules
+web/node_modules/
+
+# 前端构建产物 (源码在 web/dist，嵌入用的在 pkg/webserver/dist)
+web/dist/
+pkg/webserver/dist/
+
+# 日志
+*.log
+
+# 配置文件 (包含敏感信息)
+server.yaml
+client.yaml

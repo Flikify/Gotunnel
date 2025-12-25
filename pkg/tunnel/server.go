@@ -300,3 +300,63 @@ func (s *Server) heartbeatLoop(cs *ClientSession) {
 		}
 	}
 }
+
+// GetClientStatus 获取客户端状态
+func (s *Server) GetClientStatus(clientID string) (online bool, lastPing string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if cs, ok := s.clients[clientID]; ok {
+		cs.mu.Lock()
+		defer cs.mu.Unlock()
+		return true, cs.LastPing.Format(time.RFC3339)
+	}
+	return false, ""
+}
+
+// GetAllClientStatus 获取所有客户端状态
+func (s *Server) GetAllClientStatus() map[string]struct {
+	Online   bool
+	LastPing string
+} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make(map[string]struct {
+		Online   bool
+		LastPing string
+	})
+
+	for id, cs := range s.clients {
+		cs.mu.Lock()
+		result[id] = struct {
+			Online   bool
+			LastPing string
+		}{
+			Online:   true,
+			LastPing: cs.LastPing.Format(time.RFC3339),
+		}
+		cs.mu.Unlock()
+	}
+	return result
+}
+
+// ReloadConfig 重新加载配置
+func (s *Server) ReloadConfig() error {
+	// 目前仅返回nil，后续可实现热重载
+	return nil
+}
+
+// SetConfig 设置配置
+func (s *Server) SetConfig(cfg *config.ServerConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config = cfg
+}
+
+// GetConfig 获取配置
+func (s *Server) GetConfig() *config.ServerConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.config
+}
