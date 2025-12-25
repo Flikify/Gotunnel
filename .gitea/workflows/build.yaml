@@ -1,0 +1,54 @@
+name: Build Multi-Platform Binaries
+
+on:
+  push:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.gitea/workflows/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build binaries
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then
+            EXT=".exe"
+          fi
+          mkdir -p dist
+          go build -ldflags="-s -w" -o dist/server-${GOOS}-${GOARCH}${EXT} ./cmd/server
+          go build -ldflags="-s -w" -o dist/client-${GOOS}-${GOARCH}${EXT} ./cmd/client
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gotunnel-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
