@@ -4,7 +4,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/gotunnel/pkg/tunnel"
+	"github.com/gotunnel/internal/client/tunnel"
 )
 
 func main() {

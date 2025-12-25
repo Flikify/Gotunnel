@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gotunnel/pkg/protocol"
+	"github.com/gotunnel/pkg/relay"
 	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
 )
@@ -57,7 +58,6 @@ func (c *Client) connect() error {
 		return err
 	}
 
-	// 发送认证
 	authReq := protocol.AuthRequest{ClientID: c.ID, Token: c.Token}
 	msg, _ := protocol.NewMessage(protocol.MsgTypeAuth, authReq)
 	if err := protocol.WriteMessage(conn, msg); err != nil {
@@ -65,7 +65,6 @@ func (c *Client) connect() error {
 		return err
 	}
 
-	// 读取响应
 	resp, err := protocol.ReadMessage(conn)
 	if err != nil {
 		conn.Close()
@@ -81,7 +80,6 @@ func (c *Client) connect() error {
 
 	log.Printf("[Client] Authenticated as %s", c.ID)
 
-	// 建立 Yamux 会话
 	session, err := yamux.Client(conn, nil)
 	if err != nil {
 		conn.Close()
@@ -147,7 +145,6 @@ func (c *Client) handleNewProxy(stream net.Conn, msg *protocol.Message) {
 	var req protocol.NewProxyRequest
 	msg.ParsePayload(&req)
 
-	// 查找对应规则
 	var rule *protocol.ProxyRule
 	c.mu.RLock()
 	for _, r := range c.rules {
@@ -163,7 +160,6 @@ func (c *Client) handleNewProxy(stream net.Conn, msg *protocol.Message) {
 		return
 	}
 
-	// 连接本地服务
 	localAddr := fmt.Sprintf("%s:%d", rule.LocalIP, rule.LocalPort)
 	localConn, err := net.DialTimeout("tcp", localAddr, 5*time.Second)
 	if err != nil {
@@ -171,8 +167,7 @@ func (c *Client) handleNewProxy(stream net.Conn, msg *protocol.Message) {
 		return
 	}
 
-	// 双向转发
-	relay(stream, localConn)
+	relay.Relay(stream, localConn)
 }
 
 // handleHeartbeat 处理心跳

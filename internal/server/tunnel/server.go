@@ -7,15 +7,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gotunnel/pkg/config"
+	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/pkg/protocol"
+	"github.com/gotunnel/pkg/relay"
 	"github.com/gotunnel/pkg/utils"
 	"github.com/hashicorp/yamux"
 )
 
 // Server 隧道服务端
 type Server struct {
-	config      *config.ServerConfig
+	clientStore db.ClientStore
+	bindAddr    string
+	bindPort    int
+	token       string
+	heartbeat   int
+	hbTimeout   int
 	portManager *utils.PortManager
 	clients     map[string]*ClientSession
 	mu          sync.RWMutex
@@ -32,9 +38,14 @@ type ClientSession struct {
 }
 
 // NewServer 创建服务端
-func NewServer(cfg *config.ServerConfig) *Server {
+func NewServer(cs db.ClientStore, bindAddr string, bindPort int, token string, heartbeat, hbTimeout int) *Server {
 	return &Server{
-		config:      cfg,
+		clientStore: cs,
+		bindAddr:    bindAddr,
+		bindPort:    bindPort,
+		token:       token,
+		heartbeat:   heartbeat,
+		hbTimeout:   hbTimeout,
 		portManager: utils.NewPortManager(),
 		clients:     make(map[string]*ClientSession),
 	}
@@ -42,7 +53,7 @@ func NewServer(cfg *config.ServerConfig) *Server {
 
 // Run 启动服务端
 func (s *Server) Run() error {
-	addr := fmt.Sprintf("%s:%d", s.config.Server.BindAddr, s.config.Server.BindPort)
+	addr := fmt.Sprintf("%s:%d", s.bindAddr, s.bindPort)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %v", addr, err)
@@ -65,10 +76,8 @@ func (s *Server) Run() error {
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	// 设置认证超时
 	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
-	// 读取认证消息
 	msg, err := protocol.ReadMessage(conn)
 	if err != nil {
 		log.Printf("[Server] Read auth error: %v", err)
@@ -86,15 +95,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// 验证 Token
-	if authReq.Token != s.config.Server.Token {
+	if authReq.Token != s.token {
 		s.sendAuthResponse(conn, false, "invalid token")
 		return
 	}
 
-	// 获取客户端配置
-	rules := s.config.GetClientRules(authReq.ClientID)
-	if rules == nil {
+	rules, err := s.clientStore.GetClientRules(authReq.ClientID)
+	if err != nil || rules == nil {
 		s.sendAuthResponse(conn, false, "client not configured")
 		return
 	}
@@ -172,7 +179,6 @@ func (s *Server) unregisterClient(cs *ClientSession) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 关闭所有监听器
 	cs.mu.Lock()
 	for port, ln := range cs.Listeners {
 		ln.Close()
@@ -224,7 +230,6 @@ func (s *Server) acceptProxyConns(cs *ClientSession, ln net.Listener, rule proto
 func (s *Server) handleProxyConn(cs *ClientSession, conn net.Conn, rule protocol.ProxyRule) {
 	defer conn.Close()
 
-	// 打开到客户端的流
 	stream, err := cs.Session.Open()
 	if err != nil {
 		log.Printf("[Server] Open stream error: %v", err)
@@ -232,47 +237,21 @@ func (s *Server) handleProxyConn(cs *ClientSession, conn net.Conn, rule protocol
 	}
 	defer stream.Close()
 
-	// 发送新代理请求
 	req := protocol.NewProxyRequest{RemotePort: rule.RemotePort}
 	msg, _ := protocol.NewMessage(protocol.MsgTypeNewProxy, req)
 	if err := protocol.WriteMessage(stream, msg); err != nil {
 		return
 	}
 
-	// 双向转发
-	relay(conn, stream)
-}
-
-// relay 双向数据转发
-func relay(c1, c2 net.Conn) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	copy := func(dst, src net.Conn) {
-		defer wg.Done()
-		buf := make([]byte, 32*1024)
-		for {
-			n, err := src.Read(buf)
-			if n > 0 {
-				dst.Write(buf[:n])
-			}
-			if err != nil {
-				return
-			}
-		}
-	}
-
-	go copy(c1, c2)
-	go copy(c2, c1)
-	wg.Wait()
+	relay.Relay(conn, stream)
 }
 
 // heartbeatLoop 心跳检测循环
 func (s *Server) heartbeatLoop(cs *ClientSession) {
-	ticker := time.NewTicker(time.Duration(s.config.Server.HeartbeatSec) * time.Second)
+	ticker := time.NewTicker(time.Duration(s.heartbeat) * time.Second)
 	defer ticker.Stop()
 
-	timeout := time.Duration(s.config.Server.HeartbeatTimeout) * time.Second
+	timeout := time.Duration(s.hbTimeout) * time.Second
 
 	for {
 		select {
@@ -286,7 +265,6 @@ func (s *Server) heartbeatLoop(cs *ClientSession) {
 			}
 			cs.mu.Unlock()
 
-			// 发送心跳
 			stream, err := cs.Session.Open()
 			if err != nil {
 				return
@@ -343,20 +321,15 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 
 // ReloadConfig 重新加载配置
 func (s *Server) ReloadConfig() error {
-	// 目前仅返回nil，后续可实现热重载
 	return nil
 }
 
-// SetConfig 设置配置
-func (s *Server) SetConfig(cfg *config.ServerConfig) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.config = cfg
+// GetBindAddr 获取绑定地址
+func (s *Server) GetBindAddr() string {
+	return s.bindAddr
 }
 
-// GetConfig 获取配置
-func (s *Server) GetConfig() *config.ServerConfig {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.config
+// GetBindPort 获取绑定端口
+func (s *Server) GetBindPort() int {
+	return s.bindPort
 }

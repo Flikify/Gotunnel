@@ -63,7 +63,6 @@ type ErrorMessage struct {
 
 // WriteMessage 写入消息到 writer
 func WriteMessage(w io.Writer, msg *Message) error {
-	// 消息格式: [1字节类型][4字节长度][payload]
 	header := make([]byte, 5)
 	header[0] = msg.Type
 	binary.BigEndian.PutUint32(header[1:], uint32(len(msg.Payload)))
@@ -89,7 +88,7 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	msgType := header[0]
 	length := binary.BigEndian.Uint32(header[1:])
 
-	if length > 1024*1024 { // 最大 1MB
+	if length > 1024*1024 {
 		return nil, errors.New("message too large")
 	}
 
