@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -33,17 +35,24 @@ type WebSettings struct {
 
 // LoadServerConfig 加载服务端配置
 func LoadServerConfig(path string) (*ServerConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
 	var cfg ServerConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+
+	// 尝试读取配置文件，不存在则使用默认配置
+	data, err := os.ReadFile(path)
+	if err == nil {
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return nil, err
+		}
 	}
 
 	// 设置默认值
+	setDefaults(&cfg)
+
+	return &cfg, nil
+}
+
+// setDefaults 设置默认值
+func setDefaults(cfg *ServerConfig) {
 	if cfg.Server.BindAddr == "" {
 		cfg.Server.BindAddr = "0.0.0.0"
 	}
@@ -60,13 +69,33 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		cfg.Server.DBPath = "gotunnel.db"
 	}
 
-	// Web 默认值
+	// Web 默认启用
 	if cfg.Web.BindAddr == "" {
 		cfg.Web.BindAddr = "0.0.0.0"
 	}
 	if cfg.Web.BindPort == 0 {
 		cfg.Web.BindPort = 7500
+		cfg.Web.Enabled = true
 	}
 
-	return &cfg, nil
+	// Token 未配置时自动生成 32 位
+	if cfg.Server.Token == "" {
+		cfg.Server.Token = generateToken(32)
+	}
+}
+
+// generateToken 生成随机 token
+func generateToken(length int) string {
+	bytes := make([]byte, length/2)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
+}
+
+// SaveServerConfig 保存服务端配置
+func SaveServerConfig(path string, cfg *ServerConfig) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
 }

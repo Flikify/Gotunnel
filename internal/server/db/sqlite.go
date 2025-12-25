@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 
 	"github.com/gotunnel/pkg/protocol"
 )
@@ -18,7 +18,7 @@ type SQLiteStore struct {
 
 // NewSQLiteStore 创建 SQLite 存储
 func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}

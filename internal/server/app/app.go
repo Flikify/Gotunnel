@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/internal/server/router"
 )
@@ -45,13 +46,17 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type WebServer struct {
 	ClientStore db.ClientStore
 	Server      router.ServerInterface
+	Config      *config.ServerConfig
+	ConfigPath  string
 }
 
 // NewWebServer 创建Web服务
-func NewWebServer(cs db.ClientStore, srv router.ServerInterface) *WebServer {
+func NewWebServer(cs db.ClientStore, srv router.ServerInterface, cfg *config.ServerConfig, cfgPath string) *WebServer {
 	return &WebServer{
 		ClientStore: cs,
 		Server:      srv,
+		Config:      cfg,
+		ConfigPath:  cfgPath,
 	}
 }
 
@@ -109,4 +114,19 @@ func (w *WebServer) GetClientStore() db.ClientStore {
 // GetServer 获取服务端接口
 func (w *WebServer) GetServer() router.ServerInterface {
 	return w.Server
+}
+
+// GetConfig 获取配置
+func (w *WebServer) GetConfig() *config.ServerConfig {
+	return w.Config
+}
+
+// GetConfigPath 获取配置文件路径
+func (w *WebServer) GetConfigPath() string {
+	return w.ConfigPath
+}
+
+// SaveConfig 保存配置
+func (w *WebServer) SaveConfig() error {
+	return config.SaveServerConfig(w.ConfigPath, w.Config)
 }

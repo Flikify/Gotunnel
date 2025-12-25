@@ -40,7 +40,7 @@ func main() {
 
 	// 启动 Web 控制台
 	if cfg.Web.Enabled {
-		ws := app.NewWebServer(clientStore, server)
+		ws := app.NewWebServer(clientStore, server, cfg, *configPath)
 		addr := fmt.Sprintf("%s:%d", cfg.Web.BindAddr, cfg.Web.BindPort)
 
 		go func() {

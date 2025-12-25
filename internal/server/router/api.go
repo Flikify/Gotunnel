@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/pkg/protocol"
 )
@@ -32,12 +33,16 @@ type ServerInterface interface {
 type AppInterface interface {
 	GetClientStore() db.ClientStore
 	GetServer() ServerInterface
+	GetConfig() *config.ServerConfig
+	GetConfigPath() string
+	SaveConfig() error
 }
 
 // APIHandler API处理器
 type APIHandler struct {
 	clientStore db.ClientStore
 	server      ServerInterface
+	app         AppInterface
 }
 
 // RegisterRoutes 注册所有 API 路由
@@ -45,12 +50,14 @@ func RegisterRoutes(r *Router, app AppInterface) {
 	h := &APIHandler{
 		clientStore: app.GetClientStore(),
 		server:      app.GetServer(),
+		app:         app,
 	}
 
 	api := r.Group("/api")
 	api.HandleFunc("/status", h.handleStatus)
 	api.HandleFunc("/clients", h.handleClients)
 	api.HandleFunc("/client/", h.handleClient)
+	api.HandleFunc("/config", h.handleConfig)
 	api.HandleFunc("/config/reload", h.handleReload)
 }
 
@@ -192,6 +199,100 @@ func (h *APIHandler) deleteClient(rw http.ResponseWriter, clientID string) {
 	}
 
 	if err := h.clientStore.DeleteClient(clientID); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+func (h *APIHandler) handleConfig(rw http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		h.getConfig(rw)
+	case http.MethodPut:
+		h.updateConfig(rw, r)
+	default:
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *APIHandler) getConfig(rw http.ResponseWriter) {
+	cfg := h.app.GetConfig()
+	h.jsonResponse(rw, map[string]interface{}{
+		"server": map[string]interface{}{
+			"bind_addr":         cfg.Server.BindAddr,
+			"bind_port":         cfg.Server.BindPort,
+			"token":             cfg.Server.Token,
+			"heartbeat_sec":     cfg.Server.HeartbeatSec,
+			"heartbeat_timeout": cfg.Server.HeartbeatTimeout,
+		},
+		"web": map[string]interface{}{
+			"enabled":   cfg.Web.Enabled,
+			"bind_addr": cfg.Web.BindAddr,
+			"bind_port": cfg.Web.BindPort,
+			"username":  cfg.Web.Username,
+			"password":  cfg.Web.Password,
+		},
+	})
+}
+
+func (h *APIHandler) updateConfig(rw http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Server *struct {
+			BindAddr         string `json:"bind_addr"`
+			BindPort         int    `json:"bind_port"`
+			Token            string `json:"token"`
+			HeartbeatSec     int    `json:"heartbeat_sec"`
+			HeartbeatTimeout int    `json:"heartbeat_timeout"`
+		} `json:"server"`
+		Web *struct {
+			Enabled  bool   `json:"enabled"`
+			BindAddr string `json:"bind_addr"`
+			BindPort int    `json:"bind_port"`
+			Username string `json:"username"`
+			Password string `json:"password"`
+		} `json:"web"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cfg := h.app.GetConfig()
+
+	// 更新 Server 配置
+	if req.Server != nil {
+		if req.Server.BindAddr != "" {
+			cfg.Server.BindAddr = req.Server.BindAddr
+		}
+		if req.Server.BindPort > 0 {
+			cfg.Server.BindPort = req.Server.BindPort
+		}
+		if req.Server.Token != "" {
+			cfg.Server.Token = req.Server.Token
+		}
+		if req.Server.HeartbeatSec > 0 {
+			cfg.Server.HeartbeatSec = req.Server.HeartbeatSec
+		}
+		if req.Server.HeartbeatTimeout > 0 {
+			cfg.Server.HeartbeatTimeout = req.Server.HeartbeatTimeout
+		}
+	}
+
+	// 更新 Web 配置
+	if req.Web != nil {
+		cfg.Web.Enabled = req.Web.Enabled
+		if req.Web.BindAddr != "" {
+			cfg.Web.BindAddr = req.Web.BindAddr
+		}
+		if req.Web.BindPort > 0 {
+			cfg.Web.BindPort = req.Web.BindPort
+		}
+		cfg.Web.Username = req.Web.Username
+		cfg.Web.Password = req.Web.Password
+	}
+
+	if err := h.app.SaveConfig(); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
