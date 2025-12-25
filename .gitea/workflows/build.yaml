@@ -11,20 +11,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,21 +20,45 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Build binaries
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
+      - name: Build all platforms
         run: |
-          EXT=""
-          if [ "$GOOS" = "windows" ]; then
-            EXT=".exe"
-          fi
           mkdir -p dist
-          go build -ldflags="-s -w" -o dist/server-${GOOS}-${GOARCH}${EXT} ./cmd/server
-          go build -ldflags="-s -w" -o dist/client-${GOOS}-${GOARCH}${EXT} ./cmd/client
+
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/server-linux-amd64 ./cmd/server
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/client-linux-amd64 ./cmd/client
+
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/server-linux-arm64 ./cmd/server
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/client-linux-arm64 ./cmd/client
+
+          # Darwin amd64
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/server-darwin-amd64 ./cmd/server
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/client-darwin-amd64 ./cmd/client
+
+          # Darwin arm64
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/server-darwin-arm64 ./cmd/server
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
+            -o dist/client-darwin-arm64 ./cmd/client
+
+          # Windows amd64
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/server-windows-amd64.exe ./cmd/server
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
+            -o dist/client-windows-amd64.exe ./cmd/client
+
+      - name: List artifacts
+        run: ls -lah dist/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          name: gotunnel-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: gotunnel-binaries
           path: dist/
