@@ -17,6 +17,8 @@ const (
 	MsgTypeNewProxy     uint8 = 6  // 新建代理连接请求
 	MsgTypeProxyReady   uint8 = 7  // 代理就绪
 	MsgTypeError        uint8 = 8  // 错误消息
+	MsgTypeProxyConnect uint8 = 9  // 代理连接请求 (SOCKS5/HTTP)
+	MsgTypeProxyResult  uint8 = 10 // 代理连接结果
 )
 
 // Message 基础消息结构
@@ -40,9 +42,10 @@ type AuthResponse struct {
 // ProxyRule 代理规则
 type ProxyRule struct {
 	Name       string `json:"name" yaml:"name"`
-	LocalIP    string `json:"local_ip" yaml:"local_ip"`
-	LocalPort  int    `json:"local_port" yaml:"local_port"`
-	RemotePort int    `json:"remote_port" yaml:"remote_port"`
+	Type       string `json:"type" yaml:"type"`               // tcp, socks5, http
+	LocalIP    string `json:"local_ip" yaml:"local_ip"`       // tcp 模式使用
+	LocalPort  int    `json:"local_port" yaml:"local_port"`   // tcp 模式使用
+	RemotePort int    `json:"remote_port" yaml:"remote_port"` // 服务端监听端口
 }
 
 // ProxyConfig 代理配置下发
@@ -59,6 +62,17 @@ type NewProxyRequest struct {
 type ErrorMessage struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+// ProxyConnectRequest 代理连接请求
+type ProxyConnectRequest struct {
+	Target string `json:"target"` // 目标地址 host:port
+}
+
+// ProxyConnectResult 代理连接结果
+type ProxyConnectResult struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
 }
 
 // WriteMessage 写入消息到 writer

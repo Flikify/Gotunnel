@@ -108,20 +108,24 @@ func (c *Client) handleSession() {
 
 // handleStream 处理流
 func (c *Client) handleStream(stream net.Conn) {
-	defer stream.Close()
-
 	msg, err := protocol.ReadMessage(stream)
 	if err != nil {
+		stream.Close()
 		return
 	}
 
 	switch msg.Type {
 	case protocol.MsgTypeProxyConfig:
+		defer stream.Close()
 		c.handleProxyConfig(msg)
 	case protocol.MsgTypeNewProxy:
+		defer stream.Close()
 		c.handleNewProxy(stream, msg)
 	case protocol.MsgTypeHeartbeat:
+		defer stream.Close()
 		c.handleHeartbeat(stream)
+	case protocol.MsgTypeProxyConnect:
+		c.handleProxyConnect(stream, msg)
 	}
 }
 
@@ -174,4 +178,38 @@ func (c *Client) handleNewProxy(stream net.Conn, msg *protocol.Message) {
 func (c *Client) handleHeartbeat(stream net.Conn) {
 	msg := &protocol.Message{Type: protocol.MsgTypeHeartbeatAck}
 	protocol.WriteMessage(stream, msg)
+}
+
+// handleProxyConnect 处理代理连接请求 (SOCKS5/HTTP)
+func (c *Client) handleProxyConnect(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var req protocol.ProxyConnectRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		c.sendProxyResult(stream, false, "invalid request")
+		return
+	}
+
+	// 连接目标地址
+	targetConn, err := net.DialTimeout("tcp", req.Target, 10*time.Second)
+	if err != nil {
+		c.sendProxyResult(stream, false, err.Error())
+		return
+	}
+	defer targetConn.Close()
+
+	// 发送成功响应
+	if err := c.sendProxyResult(stream, true, ""); err != nil {
+		return
+	}
+
+	// 双向转发数据
+	relay.Relay(stream, targetConn)
+}
+
+// sendProxyResult 发送代理连接结果
+func (c *Client) sendProxyResult(stream net.Conn, success bool, message string) error {
+	result := protocol.ProxyConnectResult{Success: success, Message: message}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeProxyResult, result)
+	return protocol.WriteMessage(stream, msg)
 }

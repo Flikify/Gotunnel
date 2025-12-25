@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/pkg/protocol"
+	"github.com/gotunnel/pkg/proxy"
 	"github.com/gotunnel/pkg/relay"
 	"github.com/gotunnel/pkg/utils"
 	"github.com/hashicorp/yamux"
@@ -208,10 +209,21 @@ func (s *Server) startProxyListeners(cs *ClientSession) {
 		cs.Listeners[rule.RemotePort] = ln
 		cs.mu.Unlock()
 
-		log.Printf("[Server] Proxy %s: :%d -> %s:%d",
-			rule.Name, rule.RemotePort, rule.LocalIP, rule.LocalPort)
+		ruleType := rule.Type
+		if ruleType == "" {
+			ruleType = "tcp"
+		}
 
-		go s.acceptProxyConns(cs, ln, rule)
+		switch ruleType {
+		case "socks5", "http":
+			log.Printf("[Server] %s proxy %s on :%d",
+				ruleType, rule.Name, rule.RemotePort)
+			go s.acceptProxyServerConns(cs, ln, rule)
+		default:
+			log.Printf("[Server] TCP proxy %s: :%d -> %s:%d",
+				rule.Name, rule.RemotePort, rule.LocalIP, rule.LocalPort)
+			go s.acceptProxyConns(cs, ln, rule)
+		}
 	}
 }
 
@@ -223,6 +235,20 @@ func (s *Server) acceptProxyConns(cs *ClientSession, ln net.Listener, rule proto
 			return
 		}
 		go s.handleProxyConn(cs, conn, rule)
+	}
+}
+
+// acceptProxyServerConns 接受 SOCKS5/HTTP 代理连接
+func (s *Server) acceptProxyServerConns(cs *ClientSession, ln net.Listener, rule protocol.ProxyRule) {
+	dialer := proxy.NewTunnelDialer(cs.Session)
+	proxyServer := proxy.NewServer(rule.Type, dialer)
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go proxyServer.HandleConn(conn)
 	}
 }
 
