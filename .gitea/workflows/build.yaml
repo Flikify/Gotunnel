@@ -13,7 +13,7 @@ jobs:
     runs-on: node-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3 # 保持 v3 兼容性
+        uses: actions/checkout@v3
 
       - name: Build Frontend
         run: |
@@ -23,17 +23,23 @@ jobs:
           
       - name: Move Frontend to Go Folder
         run: |
-          # 提前把前端产物放到 Go 嵌入目录，减少下游 Job 的操作
+          # 1. 确保目标目录存在
           mkdir -p internal/server/app/dist
+          # 2. 拷贝构建好的静态资源
           cp -r web/dist/* internal/server/app/dist/
+          # 3. 【关键步骤】删除 node_modules，避免它们被上传
+          rm -rf web/node_modules
+          # 4. (可选) 如果你不需要 web 源码，也可以删掉源码目录只留 dist
+          # rm -rf web/src
 
       - name: Upload Integrated Workspace
         uses: actions/upload-artifact@v3
         with:
           name: full-workspace
+          # 依然上传根目录，但此时 node_modules 已经没了
           path: .
           retention-days: 1
-
+          
   build-binaries:
     needs: prepare-all
     runs-on: golang-latest
