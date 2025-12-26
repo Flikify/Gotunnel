@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, h } from 'vue'
+import { ref, onMounted, computed, h, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { NLayout, NLayoutHeader, NLayoutContent, NMenu, NButton, NSpace, NTag, NIcon, NConfigProvider, NMessageProvider, NDialogProvider } from 'naive-ui'
 import { HomeOutline, ExtensionPuzzleOutline, LogOutOutline } from '@vicons/ionicons5'
 import type { MenuOption } from 'naive-ui'
-import { getServerStatus, removeToken } from './api'
+import { getServerStatus, removeToken, getToken } from './api'
 
 const router = useRouter()
 const route = useRoute()
@@ -35,8 +35,8 @@ const handleMenuUpdate = (key: string) => {
   router.push(key)
 }
 
-onMounted(async () => {
-  if (isLoginPage.value) return
+const fetchServerStatus = async () => {
+  if (isLoginPage.value || !getToken()) return
   try {
     const { data } = await getServerStatus()
     serverInfo.value = data.server
@@ -44,6 +44,17 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to get server status', e)
   }
+}
+
+// 监听路由变化，离开登录页时获取状态
+watch(() => route.path, (newPath, oldPath) => {
+  if (oldPath === '/login' && newPath !== '/login') {
+    fetchServerStatus()
+  }
+})
+
+onMounted(() => {
+  fetchServerStatus()
 })
 
 const logout = () => {
