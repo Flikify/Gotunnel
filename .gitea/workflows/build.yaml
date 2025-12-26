@@ -94,6 +94,9 @@ jobs:
             echo "Unknown package manager"
             exit 1
           fi
+      - name: Set Node IPv4 Priority
+        run: echo "NODE_OPTIONS=--dns-result-order=ipv4first" >> $GITHUB_ENV
+        
       - name: Checkout code
         uses: actions/checkout@v4
       
