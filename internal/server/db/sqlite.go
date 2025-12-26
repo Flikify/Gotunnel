@@ -34,11 +34,35 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 
 // init 初始化数据库表
 func (s *SQLiteStore) init() error {
+	// 创建客户端表
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS clients (
 			id TEXT PRIMARY KEY,
+			nickname TEXT NOT NULL DEFAULT '',
 			rules TEXT NOT NULL DEFAULT '[]'
-		);
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	// 迁移：添加 nickname 列
+	s.db.Exec(`ALTER TABLE clients ADD COLUMN nickname TEXT NOT NULL DEFAULT ''`)
+
+	// 创建插件表
+	_, err = s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS plugins (
+			name TEXT PRIMARY KEY,
+			version TEXT NOT NULL,
+			type TEXT NOT NULL DEFAULT 'proxy',
+			source TEXT NOT NULL DEFAULT 'wasm',
+			description TEXT,
+			author TEXT,
+			checksum TEXT,
+			size INTEGER DEFAULT 0,
+			enabled INTEGER DEFAULT 1,
+			wasm_data BLOB
+		)
 	`)
 	return err
 }
@@ -53,7 +77,7 @@ func (s *SQLiteStore) GetAllClients() ([]Client, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT id, rules FROM clients`)
+	rows, err := s.db.Query(`SELECT id, nickname, rules FROM clients`)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +87,7 @@ func (s *SQLiteStore) GetAllClients() ([]Client, error) {
 	for rows.Next() {
 		var c Client
 		var rulesJSON string
-		if err := rows.Scan(&c.ID, &rulesJSON); err != nil {
+		if err := rows.Scan(&c.ID, &c.Nickname, &rulesJSON); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(rulesJSON), &c.Rules); err != nil {
@@ -81,7 +105,7 @@ func (s *SQLiteStore) GetClient(id string) (*Client, error) {
 
 	var c Client
 	var rulesJSON string
-	err := s.db.QueryRow(`SELECT id, rules FROM clients WHERE id = ?`, id).Scan(&c.ID, &rulesJSON)
+	err := s.db.QueryRow(`SELECT id, nickname, rules FROM clients WHERE id = ?`, id).Scan(&c.ID, &c.Nickname, &rulesJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +124,7 @@ func (s *SQLiteStore) CreateClient(c *Client) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`INSERT INTO clients (id, rules) VALUES (?, ?)`, c.ID, string(rulesJSON))
+	_, err = s.db.Exec(`INSERT INTO clients (id, nickname, rules) VALUES (?, ?, ?)`, c.ID, c.Nickname, string(rulesJSON))
 	return err
 }
 
@@ -113,7 +137,7 @@ func (s *SQLiteStore) UpdateClient(c *Client) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`UPDATE clients SET rules = ? WHERE id = ?`, string(rulesJSON), c.ID)
+	_, err = s.db.Exec(`UPDATE clients SET nickname = ?, rules = ? WHERE id = ?`, c.Nickname, string(rulesJSON), c.ID)
 	return err
 }
 
@@ -143,4 +167,101 @@ func (s *SQLiteStore) GetClientRules(id string) ([]protocol.ProxyRule, error) {
 		return nil, err
 	}
 	return c.Rules, nil
+}
+
+// ========== 插件存储方法 ==========
+
+// GetAllPlugins 获取所有插件
+func (s *SQLiteStore) GetAllPlugins() ([]PluginData, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rows, err := s.db.Query(`
+		SELECT name, version, type, source, description, author, checksum, size, enabled
+		FROM plugins
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var plugins []PluginData
+	for rows.Next() {
+		var p PluginData
+		var enabled int
+		err := rows.Scan(&p.Name, &p.Version, &p.Type, &p.Source,
+			&p.Description, &p.Author, &p.Checksum, &p.Size, &enabled)
+		if err != nil {
+			return nil, err
+		}
+		p.Enabled = enabled == 1
+		plugins = append(plugins, p)
+	}
+	return plugins, nil
+}
+
+// GetPlugin 获取单个插件
+func (s *SQLiteStore) GetPlugin(name string) (*PluginData, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var p PluginData
+	var enabled int
+	err := s.db.QueryRow(`
+		SELECT name, version, type, source, description, author, checksum, size, enabled
+		FROM plugins WHERE name = ?
+	`, name).Scan(&p.Name, &p.Version, &p.Type, &p.Source,
+		&p.Description, &p.Author, &p.Checksum, &p.Size, &enabled)
+	if err != nil {
+		return nil, err
+	}
+	p.Enabled = enabled == 1
+	return &p, nil
+}
+
+// SavePlugin 保存插件
+func (s *SQLiteStore) SavePlugin(p *PluginData) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	enabled := 0
+	if p.Enabled {
+		enabled = 1
+	}
+	_, err := s.db.Exec(`
+		INSERT OR REPLACE INTO plugins
+		(name, version, type, source, description, author, checksum, size, enabled, wasm_data)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, p.Name, p.Version, p.Type, p.Source, p.Description, p.Author,
+		p.Checksum, p.Size, enabled, p.WASMData)
+	return err
+}
+
+// DeletePlugin 删除插件
+func (s *SQLiteStore) DeletePlugin(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`DELETE FROM plugins WHERE name = ?`, name)
+	return err
+}
+
+// SetPluginEnabled 设置插件启用状态
+func (s *SQLiteStore) SetPluginEnabled(name string, enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	val := 0
+	if enabled {
+		val = 1
+	}
+	_, err := s.db.Exec(`UPDATE plugins SET enabled = ? WHERE name = ?`, val, name)
+	return err
+}
+
+// GetPluginWASM 获取插件 WASM 数据
+func (s *SQLiteStore) GetPluginWASM(name string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var data []byte
+	err := s.db.QueryRow(`SELECT wasm_data FROM plugins WHERE name = ?`, name).Scan(&data)
+	return data, err
 }

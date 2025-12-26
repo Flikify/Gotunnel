@@ -51,11 +51,11 @@ func NewManager(cacheDir string) (*Manager, error) {
 // registerBuiltins 注册内置 plugins
 // 注意: tcp, udp, http, https 是内置类型，直接在 tunnel 中处理
 func (m *Manager) registerBuiltins() error {
-	// 注册 SOCKS5 plugin
-	if err := m.registry.RegisterBuiltin(builtin.NewSOCKS5Plugin()); err != nil {
+	// 使用统一的插件注册入口
+	if err := m.registry.RegisterAll(builtin.GetAll()); err != nil {
 		return err
 	}
-	log.Println("[Plugin] Builtin plugins registered: socks5")
+	log.Printf("[Plugin] Registered %d builtin plugins", len(builtin.GetAll()))
 	return nil
 }
 

@@ -4,33 +4,50 @@ import "github.com/gotunnel/pkg/protocol"
 
 // Client 客户端数据
 type Client struct {
-	ID    string               `json:"id"`
-	Rules []protocol.ProxyRule `json:"rules"`
+	ID       string               `json:"id"`
+	Nickname string               `json:"nickname,omitempty"`
+	Rules    []protocol.ProxyRule `json:"rules"`
+}
+
+// PluginData 插件数据
+type PluginData struct {
+	Name        string            `json:"name"`
+	Version     string            `json:"version"`
+	Type        string            `json:"type"`
+	Source      string            `json:"source"`
+	Description string            `json:"description"`
+	Author      string            `json:"author"`
+	Checksum    string            `json:"checksum"`
+	Size        int64             `json:"size"`
+	Enabled     bool              `json:"enabled"`
+	WASMData    []byte            `json:"-"`
 }
 
 // ClientStore 客户端存储接口
 type ClientStore interface {
-	// GetAllClients 获取所有客户端
 	GetAllClients() ([]Client, error)
-
-	// GetClient 获取单个客户端
 	GetClient(id string) (*Client, error)
-
-	// CreateClient 创建客户端
 	CreateClient(c *Client) error
-
-	// UpdateClient 更新客户端
 	UpdateClient(c *Client) error
-
-	// DeleteClient 删除客户端
 	DeleteClient(id string) error
-
-	// ClientExists 检查客户端是否存在
 	ClientExists(id string) (bool, error)
-
-	// GetClientRules 获取客户端规则
 	GetClientRules(id string) ([]protocol.ProxyRule, error)
+	Close() error
+}
 
-	// Close 关闭连接
+// PluginStore 插件存储接口
+type PluginStore interface {
+	GetAllPlugins() ([]PluginData, error)
+	GetPlugin(name string) (*PluginData, error)
+	SavePlugin(p *PluginData) error
+	DeletePlugin(name string) error
+	SetPluginEnabled(name string, enabled bool) error
+	GetPluginWASM(name string) ([]byte, error)
+}
+
+// Store 统一存储接口
+type Store interface {
+	ClientStore
+	PluginStore
 	Close() error
 }

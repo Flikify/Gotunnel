@@ -1,24 +1,72 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getClient, updateClient, deleteClient } from '../api'
-import type { ProxyRule } from '../types'
+import {
+  NCard, NButton, NSpace, NTag, NTable, NEmpty,
+  NFormItem, NInput, NInputNumber, NSelect, NModal, NCheckbox,
+  NIcon, useMessage, useDialog
+} from 'naive-ui'
+import {
+  ArrowBackOutline, CreateOutline, TrashOutline,
+  PushOutline, PowerOutline, AddOutline, SaveOutline, CloseOutline,
+  DownloadOutline
+} from '@vicons/ionicons5'
+import { getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, getPlugins, installPluginsToClient } from '../api'
+import type { ProxyRule, PluginInfo } from '../types'
 
 const route = useRoute()
 const router = useRouter()
+const message = useMessage()
+const dialog = useDialog()
 const clientId = route.params.id as string
 
 const online = ref(false)
 const lastPing = ref('')
+const nickname = ref('')
 const rules = ref<ProxyRule[]>([])
 const editing = ref(false)
+const editNickname = ref('')
 const editRules = ref<ProxyRule[]>([])
+
+const typeOptions = [
+  { label: 'TCP', value: 'tcp' },
+  { label: 'UDP', value: 'udp' },
+  { label: 'HTTP', value: 'http' },
+  { label: 'HTTPS', value: 'https' },
+  { label: 'SOCKS5', value: 'socks5' }
+]
+
+// 插件安装相关
+const showInstallModal = ref(false)
+const availablePlugins = ref<PluginInfo[]>([])
+const selectedPlugins = ref<string[]>([])
+
+const loadPlugins = async () => {
+  try {
+    const { data } = await getPlugins()
+    availablePlugins.value = (data || []).filter(p => p.enabled)
+  } catch (e) {
+    console.error('Failed to load plugins', e)
+  }
+}
+
+const openInstallModal = async () => {
+  await loadPlugins()
+  selectedPlugins.value = []
+  showInstallModal.value = true
+}
+
+const getTypeLabel = (type: string) => {
+  const labels: Record<string, string> = { proxy: '协议', app: '应用', service: '服务', tool: '工具' }
+  return labels[type] || type
+}
 
 const loadClient = async () => {
   try {
     const { data } = await getClient(clientId)
     online.value = data.online
     lastPing.value = data.last_ping || ''
+    nickname.value = data.nickname || ''
     rules.value = data.rules || []
   } catch (e) {
     console.error('Failed to load client', e)
@@ -28,7 +76,11 @@ const loadClient = async () => {
 onMounted(loadClient)
 
 const startEdit = () => {
-  editRules.value = JSON.parse(JSON.stringify(rules.value))
+  editNickname.value = nickname.value
+  editRules.value = rules.value.map(rule => ({
+    ...rule,
+    type: rule.type || 'tcp'
+  }))
   editing.value = true
 }
 
@@ -38,7 +90,7 @@ const cancelEdit = () => {
 
 const addRule = () => {
   editRules.value.push({
-    name: '', local_ip: '127.0.0.1', local_port: 80, remote_port: 8080
+    name: '', local_ip: '127.0.0.1', local_port: 80, remote_port: 8080, type: 'tcp'
   })
 }
 
@@ -48,156 +100,228 @@ const removeRule = (index: number) => {
 
 const saveEdit = async () => {
   try {
-    await updateClient(clientId, { id: clientId, rules: editRules.value })
+    await updateClient(clientId, { id: clientId, nickname: editNickname.value, rules: editRules.value })
     editing.value = false
+    message.success('保存成功')
     loadClient()
   } catch (e) {
-    alert('保存失败')
+    message.error('保存失败')
   }
 }
 
-const confirmDelete = async () => {
-  if (!confirm('确定删除此客户端?')) return
+const confirmDelete = () => {
+  dialog.warning({
+    title: '确认删除',
+    content: '确定要删除此客户端吗？',
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deleteClient(clientId)
+        message.success('删除成功')
+        router.push('/')
+      } catch (e) {
+        message.error('删除失败')
+      }
+    }
+  })
+}
+
+const pushConfig = async () => {
   try {
-    await deleteClient(clientId)
-    router.push('/')
-  } catch (e) {
-    alert('删除失败')
+    await pushConfigToClient(clientId)
+    message.success('配置已推送')
+  } catch (e: any) {
+    message.error(e.response?.data || '推送失败')
+  }
+}
+
+const disconnect = () => {
+  dialog.warning({
+    title: '确认断开',
+    content: '确定要断开此客户端连接吗？',
+    positiveText: '断开',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await disconnectClient(clientId)
+        online.value = false
+        message.success('已断开连接')
+      } catch (e: any) {
+        message.error(e.response?.data || '断开失败')
+      }
+    }
+  })
+}
+
+const installPlugins = async () => {
+  if (selectedPlugins.value.length === 0) {
+    message.warning('请选择要安装的插件')
+    return
+  }
+  try {
+    await installPluginsToClient(clientId, selectedPlugins.value)
+    message.success(`已推送 ${selectedPlugins.value.length} 个插件到客户端`)
+    showInstallModal.value = false
+  } catch (e: any) {
+    message.error(e.response?.data || '安装失败')
   }
 }
 </script>
 
 <template>
   <div class="client-view">
-    <div class="header">
-      <button class="btn" @click="router.push('/')">← 返回</button>
-      <h2>{{ clientId }}</h2>
-      <span :class="['status-badge', online ? 'online' : 'offline']">
-        {{ online ? '在线' : '离线' }}
-      </span>
-    </div>
+    <!-- 头部信息卡片 -->
+    <n-card style="margin-bottom: 16px;">
+      <n-space justify="space-between" align="center" wrap>
+        <n-space align="center">
+          <n-button quaternary @click="router.push('/')">
+            <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
+            返回
+          </n-button>
+          <h2 style="margin: 0;">{{ nickname || clientId }}</h2>
+          <span v-if="nickname" style="color: #999; font-size: 12px;">{{ clientId }}</span>
+          <n-tag :type="online ? 'success' : 'default'">
+            {{ online ? '在线' : '离线' }}
+          </n-tag>
+          <span v-if="lastPing" style="color: #666; font-size: 14px;">
+            最后心跳: {{ lastPing }}
+          </span>
+        </n-space>
+        <n-space>
+          <template v-if="online">
+            <n-button type="info" @click="pushConfig">
+              <template #icon><n-icon><PushOutline /></n-icon></template>
+              推送配置
+            </n-button>
+            <n-button type="success" @click="openInstallModal">
+              <template #icon><n-icon><DownloadOutline /></n-icon></template>
+              安装插件
+            </n-button>
+            <n-button type="warning" @click="disconnect">
+              <template #icon><n-icon><PowerOutline /></n-icon></template>
+              断开连接
+            </n-button>
+          </template>
+          <template v-if="!editing">
+            <n-button type="primary" @click="startEdit">
+              <template #icon><n-icon><CreateOutline /></n-icon></template>
+              编辑规则
+            </n-button>
+            <n-button type="error" @click="confirmDelete">
+              <template #icon><n-icon><TrashOutline /></n-icon></template>
+              删除
+            </n-button>
+          </template>
+        </n-space>
+      </n-space>
+    </n-card>
 
-    <div v-if="lastPing" class="ping-info">最后心跳: {{ lastPing }}</div>
-
-    <div class="rules-section">
-      <div class="section-header">
-        <h3>代理规则</h3>
-        <div v-if="!editing">
-          <button class="btn primary" @click="startEdit">编辑</button>
-          <button class="btn danger" @click="confirmDelete">删除</button>
-        </div>
-      </div>
+    <!-- 规则卡片 -->
+    <n-card title="代理规则">
+      <template #header-extra v-if="editing">
+        <n-space>
+          <n-button @click="cancelEdit">
+            <template #icon><n-icon><CloseOutline /></n-icon></template>
+            取消
+          </n-button>
+          <n-button type="primary" @click="saveEdit">
+            <template #icon><n-icon><SaveOutline /></n-icon></template>
+            保存
+          </n-button>
+        </n-space>
+      </template>
 
       <!-- 查看模式 -->
-      <table v-if="!editing" class="rules-table">
-        <thead>
-          <tr>
-            <th>名称</th>
-            <th>本地地址</th>
-            <th>远程端口</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="rule in rules" :key="rule.name">
-            <td>{{ rule.name }}</td>
-            <td>{{ rule.local_ip }}:{{ rule.local_port }}</td>
-            <td>{{ rule.remote_port }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <template v-if="!editing">
+        <n-empty v-if="rules.length === 0" description="暂无代理规则" />
+        <n-table v-else :bordered="false" :single-line="false">
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>本地地址</th>
+              <th>远程端口</th>
+              <th>类型</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="rule in rules" :key="rule.name">
+              <td>{{ rule.name || '未命名' }}</td>
+              <td>{{ rule.local_ip }}:{{ rule.local_port }}</td>
+              <td>{{ rule.remote_port }}</td>
+              <td><n-tag size="small">{{ rule.type || 'tcp' }}</n-tag></td>
+            </tr>
+          </tbody>
+        </n-table>
+      </template>
 
       <!-- 编辑模式 -->
-      <div v-if="editing" class="edit-form">
-        <div v-for="(rule, i) in editRules" :key="i" class="rule-row">
-          <input v-model="rule.name" placeholder="名称" />
-          <input v-model="rule.local_ip" placeholder="本地IP" />
-          <input v-model.number="rule.local_port" type="number" placeholder="本地端口" />
-          <input v-model.number="rule.remote_port" type="number" placeholder="远程端口" />
-          <button class="btn-icon" @click="removeRule(i)">×</button>
-        </div>
-        <button class="btn secondary" @click="addRule">+ 添加规则</button>
-        <div class="edit-actions">
-          <button class="btn" @click="cancelEdit">取消</button>
-          <button class="btn primary" @click="saveEdit">保存</button>
-        </div>
-      </div>
-    </div>
+      <template v-else>
+        <n-space vertical :size="12">
+          <n-form-item label="昵称" :show-feedback="false">
+            <n-input v-model:value="editNickname" placeholder="给客户端起个名字（可选）" style="max-width: 300px;" />
+          </n-form-item>
+          <n-card v-for="(rule, i) in editRules" :key="i" size="small">
+            <n-space align="center">
+              <n-form-item label="名称" :show-feedback="false">
+                <n-input v-model:value="rule.name" placeholder="规则名称" />
+              </n-form-item>
+              <n-form-item label="类型" :show-feedback="false">
+                <n-select v-model:value="rule.type" :options="typeOptions" style="width: 100px;" />
+              </n-form-item>
+              <n-form-item label="本地IP" :show-feedback="false">
+                <n-input v-model:value="rule.local_ip" placeholder="127.0.0.1" />
+              </n-form-item>
+              <n-form-item label="本地端口" :show-feedback="false">
+                <n-input-number v-model:value="rule.local_port" :show-button="false" />
+              </n-form-item>
+              <n-form-item label="远程端口" :show-feedback="false">
+                <n-input-number v-model:value="rule.remote_port" :show-button="false" />
+              </n-form-item>
+              <n-button v-if="editRules.length > 1" quaternary type="error" @click="removeRule(i)">
+                <template #icon><n-icon><TrashOutline /></n-icon></template>
+              </n-button>
+            </n-space>
+          </n-card>
+          <n-button dashed block @click="addRule">
+            <template #icon><n-icon><AddOutline /></n-icon></template>
+            添加规则
+          </n-button>
+        </n-space>
+      </template>
+    </n-card>
+
+    <!-- 安装插件模态框 -->
+    <n-modal v-model:show="showInstallModal" preset="card" title="安装插件到客户端" style="width: 500px;">
+      <n-empty v-if="availablePlugins.length === 0" description="暂无可用插件" />
+      <n-space v-else vertical :size="12">
+        <n-card v-for="plugin in availablePlugins" :key="plugin.name" size="small">
+          <n-space justify="space-between" align="center">
+            <n-space vertical :size="4">
+              <n-space align="center">
+                <span style="font-weight: 500;">{{ plugin.name }}</span>
+                <n-tag size="small">{{ getTypeLabel(plugin.type) }}</n-tag>
+              </n-space>
+              <span style="color: #666; font-size: 12px;">{{ plugin.description }}</span>
+            </n-space>
+            <n-checkbox
+              :checked="selectedPlugins.includes(plugin.name)"
+              @update:checked="(v: boolean) => {
+                if (v) selectedPlugins.push(plugin.name)
+                else selectedPlugins = selectedPlugins.filter(n => n !== plugin.name)
+              }"
+            />
+          </n-space>
+        </n-card>
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showInstallModal = false">取消</n-button>
+          <n-button type="primary" @click="installPlugins" :disabled="selectedPlugins.length === 0">
+            安装 ({{ selectedPlugins.length }})
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
-
-<style scoped>
-.header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-.header h2 { margin: 0; }
-.status-badge {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-.status-badge.online { background: #d4edda; color: #155724; }
-.status-badge.offline { background: #f8d7da; color: #721c24; }
-.ping-info { color: #666; margin-bottom: 20px; }
-.rules-section {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.section-header h3 { margin: 0; }
-.section-header .btn { margin-left: 8px; }
-.btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-}
-.btn.primary { background: #3498db; color: #fff; }
-.btn.secondary { background: #95a5a6; color: #fff; }
-.btn.danger { background: #e74c3c; color: #fff; }
-.rules-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.rules-table th, .rules-table td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid #eee;
-}
-.rules-table th { font-weight: 600; }
-.rule-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.rule-row input {
-  flex: 1;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-}
-.btn-icon {
-  background: #e74c3c;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  width: 32px;
-  cursor: pointer;
-}
-.edit-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-</style>

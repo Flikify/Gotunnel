@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/gotunnel/pkg/plugin"
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/relay"
 	"github.com/hashicorp/yamux"
@@ -22,30 +24,63 @@ const (
 	reconnectDelay   = 5 * time.Second
 	disconnectDelay  = 3 * time.Second
 	udpBufferSize    = 65535
+	idFileName       = ".gotunnel_id"
 )
 
 // Client 隧道客户端
 type Client struct {
-	ServerAddr string
-	Token      string
-	ID         string
-	TLSEnabled bool
-	TLSConfig  *tls.Config
-	session    *yamux.Session
-	rules      []protocol.ProxyRule
-	mu         sync.RWMutex
+	ServerAddr     string
+	Token          string
+	ID             string
+	TLSEnabled     bool
+	TLSConfig      *tls.Config
+	session        *yamux.Session
+	rules          []protocol.ProxyRule
+	mu             sync.RWMutex
+	pluginRegistry *plugin.Registry
 }
 
 // NewClient 创建客户端
 func NewClient(serverAddr, token, id string) *Client {
+	// 如果未指定 ID，尝试从本地文件加载
 	if id == "" {
-		id = uuid.New().String()[:8]
+		id = loadClientID()
 	}
 	return &Client{
 		ServerAddr: serverAddr,
 		Token:      token,
 		ID:         id,
 	}
+}
+
+// getIDFilePath 获取 ID 文件路径
+func getIDFilePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return idFileName
+	}
+	return filepath.Join(home, idFileName)
+}
+
+// loadClientID 从本地文件加载客户端 ID
+func loadClientID() string {
+	data, err := os.ReadFile(getIDFilePath())
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// saveClientID 保存客户端 ID 到本地文件
+func saveClientID(id string) {
+	if err := os.WriteFile(getIDFilePath(), []byte(id), 0600); err != nil {
+		log.Printf("[Client] Failed to save client ID: %v", err)
+	}
+}
+
+// SetPluginRegistry 设置插件注册表
+func (c *Client) SetPluginRegistry(registry *plugin.Registry) {
+	c.pluginRegistry = registry
 }
 
 // Run 启动客户端（带断线重连）
@@ -100,6 +135,13 @@ func (c *Client) connect() error {
 	if !authResp.Success {
 		conn.Close()
 		return fmt.Errorf("auth failed: %s", authResp.Message)
+	}
+
+	// 如果服务端分配了新 ID，则更新并保存
+	if authResp.ClientID != "" && authResp.ClientID != c.ID {
+		c.ID = authResp.ClientID
+		saveClientID(c.ID)
+		log.Printf("[Client] New ID assigned and saved: %s", c.ID)
 	}
 
 	log.Printf("[Client] Authenticated as %s", c.ID)

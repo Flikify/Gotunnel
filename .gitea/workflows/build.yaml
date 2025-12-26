@@ -21,6 +21,11 @@ jobs:
           go-version: '1.24'
           cache: true
 
+      - name: Install UPX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx-ucl
+
       - name: Build all platforms
         run: |
           mkdir -p dist
@@ -54,6 +59,13 @@ jobs:
             -o dist/server-windows-amd64.exe ./cmd/server
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
             -o dist/client-windows-amd64.exe ./cmd/client
+
+      - name: Compress with UPX
+        run: |
+          # UPX 压缩 Linux 和 Windows 二进制 (macOS 不支持)
+          upx -9 dist/server-linux-amd64 dist/client-linux-amd64 || true
+          upx -9 dist/server-linux-arm64 dist/client-linux-arm64 || true
+          upx -9 dist/server-windows-amd64.exe dist/client-windows-amd64.exe || true
 
       - name: List artifacts
         run: ls -lah dist/

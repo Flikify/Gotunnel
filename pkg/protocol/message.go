@@ -34,6 +34,9 @@ const (
 
 	// UDP 相关消息
 	MsgTypeUDPData uint8 = 30 // UDP 数据包
+
+	// 插件安装消息
+	MsgTypeInstallPlugins uint8 = 24 // 服务端推送安装插件列表
 )
 
 // Message 基础消息结构
@@ -50,8 +53,9 @@ type AuthRequest struct {
 
 // AuthResponse 认证响应
 type AuthResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
+	Success  bool   `json:"success"`
+	Message  string `json:"message"`
+	ClientID string `json:"client_id,omitempty"` // 服务端分配的客户端 ID
 }
 
 // ProxyRule 代理规则
@@ -135,6 +139,11 @@ type PluginReadyNotification struct {
 	Version string `json:"version"`
 	Success bool   `json:"success"`
 	Error   string `json:"error,omitempty"`
+}
+
+// InstallPluginsRequest 安装插件请求
+type InstallPluginsRequest struct {
+	Plugins []string `json:"plugins"` // 要安装的插件名称列表
 }
 
 // UDPPacket UDP 数据包

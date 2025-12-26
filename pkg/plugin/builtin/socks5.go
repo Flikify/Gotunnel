@@ -10,6 +10,10 @@ import (
 	"github.com/gotunnel/pkg/plugin"
 )
 
+func init() {
+	Register(NewSOCKS5Plugin())
+}
+
 const (
 	socks5Version = 0x05
 	noAuth        = 0x00

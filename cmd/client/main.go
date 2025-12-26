@@ -6,12 +6,14 @@ import (
 
 	"github.com/gotunnel/internal/client/tunnel"
 	"github.com/gotunnel/pkg/crypto"
+	"github.com/gotunnel/pkg/plugin"
+	"github.com/gotunnel/pkg/plugin/builtin"
 )
 
 func main() {
 	server := flag.String("s", "", "server address (ip:port)")
 	token := flag.String("t", "", "auth token")
-	id := flag.String("id", "", "client id (optional)")
+	id := flag.String("id", "", "client id (optional, auto-assigned if empty)")
 	noTLS := flag.Bool("no-tls", false, "disable TLS")
 	flag.Parse()
 
@@ -27,6 +29,14 @@ func main() {
 		client.TLSConfig = crypto.ClientTLSConfig()
 		log.Printf("[Client] TLS enabled")
 	}
+
+	// 初始化插件系统
+	registry := plugin.NewRegistry()
+	if err := registry.RegisterAll(builtin.GetAll()); err != nil {
+		log.Fatalf("[Plugin] Register error: %v", err)
+	}
+	client.SetPluginRegistry(registry)
+	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetAll()))
 
 	client.Run()
 }

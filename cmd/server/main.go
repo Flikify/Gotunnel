@@ -53,14 +53,11 @@ func main() {
 
 	// 初始化插件系统
 	registry := plugin.NewRegistry()
-	if err := registry.RegisterBuiltin(builtin.NewSOCKS5Plugin()); err != nil {
-		log.Printf("[Plugin] Register socks5 error: %v", err)
-	}
-	if err := registry.RegisterBuiltin(builtin.NewHTTPPlugin()); err != nil {
-		log.Printf("[Plugin] Register http error: %v", err)
+	if err := registry.RegisterAll(builtin.GetAll()); err != nil {
+		log.Fatalf("[Plugin] Register error: %v", err)
 	}
 	server.SetPluginRegistry(registry)
-	log.Printf("[Plugin] Plugins registered: socks5, http")
+	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetAll()))
 
 	// 启动 Web 控制台
 	if cfg.Web.Enabled {
@@ -70,7 +67,7 @@ func main() {
 		go func() {
 			var err error
 			if cfg.Web.Username != "" && cfg.Web.Password != "" {
-				err = ws.RunWithAuth(addr, cfg.Web.Username, cfg.Web.Password)
+				err = ws.RunWithJWT(addr, cfg.Web.Username, cfg.Web.Password, cfg.Server.Token)
 			} else {
 				err = ws.Run(addr)
 			}

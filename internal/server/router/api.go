@@ -21,6 +21,7 @@ func validateClientID(id string) bool {
 // ClientStatus 客户端状态
 type ClientStatus struct {
 	ID        string `json:"id"`
+	Nickname  string `json:"nickname,omitempty"`
 	Online    bool   `json:"online"`
 	LastPing  string `json:"last_ping,omitempty"`
 	RuleCount int    `json:"rule_count"`
@@ -36,6 +37,23 @@ type ServerInterface interface {
 	ReloadConfig() error
 	GetBindAddr() string
 	GetBindPort() int
+	// 客户端控制
+	PushConfigToClient(clientID string) error
+	DisconnectClient(clientID string) error
+	GetPluginList() []PluginInfo
+	EnablePlugin(name string) error
+	DisablePlugin(name string) error
+	InstallPluginsToClient(clientID string, plugins []string) error
+}
+
+// PluginInfo 插件信息
+type PluginInfo struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	Source      string `json:"source"`
+	Enabled     bool   `json:"enabled"`
 }
 
 // AppInterface 应用接口
@@ -68,6 +86,8 @@ func RegisterRoutes(r *Router, app AppInterface) {
 	api.HandleFunc("/client/", h.handleClient)
 	api.HandleFunc("/config", h.handleConfig)
 	api.HandleFunc("/config/reload", h.handleReload)
+	api.HandleFunc("/plugins", h.handlePlugins)
+	api.HandleFunc("/plugin/", h.handlePlugin)
 }
 
 func (h *APIHandler) handleStatus(rw http.ResponseWriter, r *http.Request) {
@@ -108,7 +128,7 @@ func (h *APIHandler) getClients(rw http.ResponseWriter) {
 	statusMap := h.server.GetAllClientStatus()
 	var result []ClientStatus
 	for _, c := range clients {
-		cs := ClientStatus{ID: c.ID, RuleCount: len(c.Rules)}
+		cs := ClientStatus{ID: c.ID, Nickname: c.Nickname, RuleCount: len(c.Rules)}
 		if s, ok := statusMap[c.ID]; ok {
 			cs.Online = s.Online
 			cs.LastPing = s.LastPing
@@ -156,6 +176,32 @@ func (h *APIHandler) handleClient(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "client id required", http.StatusBadRequest)
 		return
 	}
+
+	// 处理子路径操作
+	if idx := len(clientID) - 1; idx > 0 {
+		if clientID[idx] == '/' {
+			clientID = clientID[:idx]
+		}
+	}
+
+	// 检查是否是特殊操作
+	parts := splitPath(clientID)
+	if len(parts) == 2 {
+		clientID = parts[0]
+		action := parts[1]
+		switch action {
+		case "push":
+			h.pushConfigToClient(rw, r, clientID)
+			return
+		case "disconnect":
+			h.disconnectClient(rw, r, clientID)
+			return
+		case "install-plugins":
+			h.installPluginsToClient(rw, r, clientID)
+			return
+		}
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		h.getClient(rw, clientID)
@@ -168,6 +214,16 @@ func (h *APIHandler) handleClient(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// splitPath 分割路径
+func splitPath(path string) []string {
+	for i, c := range path {
+		if c == '/' {
+			return []string{path[:i], path[i+1:]}
+		}
+	}
+	return []string{path}
+}
+
 func (h *APIHandler) getClient(rw http.ResponseWriter, clientID string) {
 	client, err := h.clientStore.GetClient(clientID)
 	if err != nil {
@@ -176,27 +232,29 @@ func (h *APIHandler) getClient(rw http.ResponseWriter, clientID string) {
 	}
 	online, lastPing := h.server.GetClientStatus(clientID)
 	h.jsonResponse(rw, map[string]interface{}{
-		"id": client.ID, "rules": client.Rules,
+		"id": client.ID, "nickname": client.Nickname, "rules": client.Rules,
 		"online": online, "last_ping": lastPing,
 	})
 }
 
 func (h *APIHandler) updateClient(rw http.ResponseWriter, r *http.Request, clientID string) {
 	var req struct {
-		Rules []protocol.ProxyRule `json:"rules"`
+		Nickname string               `json:"nickname"`
+		Rules    []protocol.ProxyRule `json:"rules"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	exists, _ := h.clientStore.ClientExists(clientID)
-	if !exists {
+	client, err := h.clientStore.GetClient(clientID)
+	if err != nil {
 		http.Error(rw, "client not found", http.StatusNotFound)
 		return
 	}
 
-	client := &db.Client{ID: clientID, Rules: req.Rules}
+	client.Nickname = req.Nickname
+	client.Rules = req.Rules
 	if err := h.clientStore.UpdateClient(client); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -332,4 +390,131 @@ func (h *APIHandler) handleReload(rw http.ResponseWriter, r *http.Request) {
 func (h *APIHandler) jsonResponse(rw http.ResponseWriter, data interface{}) {
 	rw.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(rw).Encode(data)
+}
+
+// pushConfigToClient 推送配置到客户端
+func (h *APIHandler) pushConfigToClient(rw http.ResponseWriter, r *http.Request, clientID string) {
+	if r.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	online, _ := h.server.GetClientStatus(clientID)
+	if !online {
+		http.Error(rw, "client not online", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.server.PushConfigToClient(clientID); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+// disconnectClient 断开客户端连接
+func (h *APIHandler) disconnectClient(rw http.ResponseWriter, r *http.Request, clientID string) {
+	if r.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := h.server.DisconnectClient(clientID); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+// handlePlugins 处理插件列表
+func (h *APIHandler) handlePlugins(rw http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	plugins := h.server.GetPluginList()
+	h.jsonResponse(rw, plugins)
+}
+
+// handlePlugin 处理单个插件操作
+func (h *APIHandler) handlePlugin(rw http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path[len("/api/plugin/"):]
+	if path == "" {
+		http.Error(rw, "plugin name required", http.StatusBadRequest)
+		return
+	}
+
+	parts := splitPath(path)
+	pluginName := parts[0]
+
+	if len(parts) == 2 {
+		action := parts[1]
+		switch action {
+		case "enable":
+			h.enablePlugin(rw, r, pluginName)
+			return
+		case "disable":
+			h.disablePlugin(rw, r, pluginName)
+			return
+		}
+	}
+
+	http.Error(rw, "invalid action", http.StatusBadRequest)
+}
+
+func (h *APIHandler) enablePlugin(rw http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := h.server.EnablePlugin(name); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+func (h *APIHandler) disablePlugin(rw http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := h.server.DisablePlugin(name); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+// installPluginsToClient 安装插件到客户端
+func (h *APIHandler) installPluginsToClient(rw http.ResponseWriter, r *http.Request, clientID string) {
+	if r.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	online, _ := h.server.GetClientStatus(clientID)
+	if !online {
+		http.Error(rw, "client not online", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Plugins []string `json:"plugins"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Plugins) == 0 {
+		http.Error(rw, "no plugins specified", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.server.InstallPluginsToClient(clientID, req.Plugins); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
 }

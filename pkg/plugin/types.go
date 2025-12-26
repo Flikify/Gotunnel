@@ -9,7 +9,10 @@ import (
 type PluginType string
 
 const (
-	PluginTypeProxy PluginType = "proxy" // 代理处理器 (SOCKS5, HTTP 等)
+	PluginTypeProxy   PluginType = "proxy"   // 代理协议插件 (SOCKS5 等)
+	PluginTypeApp     PluginType = "app"     // 应用插件 (VNC, 文件管理等)
+	PluginTypeService PluginType = "service" // 服务插件 (Web服务等)
+	PluginTypeTool    PluginType = "tool"    // 工具插件 (监控、日志等)
 )
 
 // PluginSource 表示 plugin 来源
@@ -38,6 +41,7 @@ type PluginMetadata struct {
 type PluginInfo struct {
 	Metadata PluginMetadata `json:"metadata"`
 	Loaded   bool           `json:"loaded"`
+	Enabled  bool           `json:"enabled"`
 	LoadedAt time.Time      `json:"loaded_at,omitempty"`
 	Error    string         `json:"error,omitempty"`
 }

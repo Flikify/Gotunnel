@@ -10,6 +10,7 @@ import (
 	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/internal/server/router"
+	"github.com/gotunnel/pkg/auth"
 )
 
 //go:embed dist/*
@@ -89,6 +90,35 @@ func (w *WebServer) RunWithAuth(addr, username, password string) error {
 	auth := &router.AuthConfig{Username: username, Password: password}
 	handler := router.BasicAuthMiddleware(auth, r.Handler())
 	log.Printf("[Web] Console listening on %s (auth enabled)", addr)
+	return http.ListenAndServe(addr, handler)
+}
+
+// RunWithJWT 启动带 JWT 认证的 Web 服务
+func (w *WebServer) RunWithJWT(addr, username, password, jwtSecret string) error {
+	r := router.New()
+
+	// JWT 认证器
+	jwtAuth := auth.NewJWTAuth(jwtSecret, 24) // 24小时过期
+
+	// 注册认证路由（不需要认证）
+	authHandler := router.NewAuthHandler(username, password, jwtAuth)
+	router.RegisterAuthRoutes(r, authHandler)
+
+	// 注册业务路由
+	router.RegisterRoutes(r, w)
+
+	// 静态文件
+	staticFS, err := fs.Sub(staticFiles, "dist")
+	if err != nil {
+		return err
+	}
+	r.Handle("/", spaHandler{fs: http.FS(staticFS)})
+
+	// JWT 中间件，只对 /api/ 路径进行认证（排除 /api/auth/）
+	skipPaths := []string{"/api/auth/"}
+	handler := router.JWTMiddleware(jwtAuth, skipPaths, r.Handler())
+
+	log.Printf("[Web] Console listening on %s (JWT auth enabled)", addr)
 	return http.ListenAndServe(addr, handler)
 }
 
