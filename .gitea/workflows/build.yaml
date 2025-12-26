@@ -83,6 +83,17 @@ jobs:
             target: client
             upx: true
     steps:
+      - name: Install Node.js for Actions
+        run: |
+          # 尝试兼容 Alpine (apk) 和 Debian/Ubuntu (apt)
+          if command -v apk > /dev/null; then
+            apk add --no-cache nodejs
+          elif command -v apt-get > /dev/null; then
+            apt-get update && apt-get install -y nodejs
+          else
+            echo "Unknown package manager"
+            exit 1
+          fi
       - name: Checkout code
         uses: actions/checkout@v4
       
