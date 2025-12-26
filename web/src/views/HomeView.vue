@@ -17,6 +17,7 @@ const loadClients = async () => {
   }
 }
 
+
 const onlineClients = computed(() => {
   return clients.value.filter(client => client.online).length
 })
