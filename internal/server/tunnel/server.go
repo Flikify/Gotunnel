@@ -144,11 +144,15 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// 如果客户端没有提供 ID，则生成一个新的
+	// 处理客户端 ID
 	clientID := authReq.ClientID
 	if clientID == "" {
 		clientID = generateClientID()
-		// 创建新客户端记录
+	}
+
+	// 检查客户端是否存在，不存在则自动创建
+	exists, err := s.clientStore.ClientExists(clientID)
+	if err != nil || !exists {
 		newClient := &db.Client{ID: clientID, Rules: []protocol.ProxyRule{}}
 		if err := s.clientStore.CreateClient(newClient); err != nil {
 			log.Printf("[Server] Create client error: %v", err)
@@ -156,13 +160,6 @@ func (s *Server) handleConnection(conn net.Conn) {
 			return
 		}
 		log.Printf("[Server] New client registered: %s", clientID)
-	}
-
-	// 检查客户端是否存在
-	exists, err := s.clientStore.ClientExists(clientID)
-	if err != nil || !exists {
-		s.sendAuthResponse(conn, false, "client not found", "")
-		return
 	}
 
 	rules, _ := s.clientStore.GetClientRules(clientID)
