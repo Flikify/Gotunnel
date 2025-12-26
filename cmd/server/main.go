@@ -31,6 +31,9 @@ func main() {
 	}
 	defer clientStore.Close()
 
+	// 打印 token（便于客户端连接）
+	log.Printf("[Server] Token: %s", cfg.Server.Token)
+
 	// 创建隧道服务
 	server := tunnel.NewServer(
 		clientStore,
