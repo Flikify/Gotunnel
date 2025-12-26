@@ -43,15 +43,23 @@ internal/server/
   ├── config/        # YAML configuration loading
   ├── db/            # SQLite storage (ClientStore interface)
   ├── app/           # Web server, SPA handler
-  └── router/        # REST API endpoints
+  ├── router/        # REST API endpoints
+  └── plugin/        # Server-side plugin manager
 internal/client/
-  └── tunnel/        # Client tunnel logic, auto-reconnect
+  ├── tunnel/        # Client tunnel logic, auto-reconnect
+  └── plugin/        # Client-side plugin manager and cache
 pkg/
   ├── protocol/      # Message types and serialization
   ├── crypto/        # TLS certificate generation
-  ├── proxy/         # SOCKS5 and HTTP proxy implementations
+  ├── proxy/         # Legacy proxy implementations
   ├── relay/         # Bidirectional data relay (32KB buffers)
-  └── utils/         # Port availability checking
+  ├── utils/         # Port availability checking
+  └── plugin/        # Plugin system core
+      ├── types.go       # ProxyHandler interface, PluginMetadata
+      ├── registry.go    # Plugin registry
+      ├── builtin/       # Built-in plugins (socks5, http)
+      ├── wasm/          # WASM runtime (wazero)
+      └── store/         # Plugin persistence (SQLite)
 web/                 # Vue 3 + TypeScript frontend (Vite)
 ```
 
@@ -59,12 +67,19 @@ web/                 # Vue 3 + TypeScript frontend (Vite)
 
 - `ClientStore` (internal/server/db/): Database abstraction for client rules storage
 - `ServerInterface` (internal/server/router/): API handler interface
+- `ProxyHandler` (pkg/plugin/): Plugin interface for proxy handlers
+- `PluginStore` (pkg/plugin/store/): Plugin persistence interface
 
 ### Proxy Types
 
+**内置类型** (直接在 tunnel 中处理):
 1. **TCP** (default): Direct port forwarding (remote_port → local_ip:local_port)
-2. **SOCKS5**: Full SOCKS5 protocol via `TunnelDialer`
-3. **HTTP**: HTTP/HTTPS proxy through client network
+2. **UDP**: UDP port forwarding
+3. **HTTP**: HTTP proxy through client network
+4. **HTTPS**: HTTPS proxy through client network
+
+**插件类型** (通过 plugin 系统提供):
+- **SOCKS5**: Full SOCKS5 protocol (official plugin)
 
 ### Data Flow
 
@@ -75,3 +90,29 @@ External User → Server Port → Yamux Stream → Client → Local Service
 - Server: YAML config + SQLite database for client rules
 - Client: Command-line flags only (server address, token, client ID)
 - Default ports: 7000 (tunnel), 7500 (web console)
+
+## Plugin System
+
+GoTunnel supports a WASM-based plugin system for extensible proxy handlers.
+
+### Plugin Architecture
+
+- **内置类型**: tcp, udp, http, https 直接在 tunnel 代码中处理
+- **Official Plugin**: SOCKS5 作为官方 plugin 提供
+- **WASM Plugins**: 自定义 plugins 可通过 wazero 运行时动态加载
+- **Hybrid Distribution**: 内置 plugins 离线可用；WASM plugins 可从服务端下载
+
+### ProxyHandler Interface
+
+```go
+type ProxyHandler interface {
+    Metadata() PluginMetadata
+    Init(config map[string]string) error
+    HandleConn(conn net.Conn, dialer Dialer) error
+    Close() error
+}
+```
+
+### Creating a Built-in Plugin
+
+See `pkg/plugin/builtin/socks5.go` as reference implementation.

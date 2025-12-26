@@ -3,11 +3,20 @@ package router
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 
 	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/pkg/protocol"
 )
+
+// 客户端 ID 验证规则
+var clientIDRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+
+// validateClientID 验证客户端 ID 格式
+func validateClientID(id string) bool {
+	return clientIDRegex.MatchString(id)
+}
 
 // ClientStatus 客户端状态
 type ClientStatus struct {
@@ -122,6 +131,10 @@ func (h *APIHandler) addClient(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "client id required", http.StatusBadRequest)
 		return
 	}
+	if !validateClientID(req.ID) {
+		http.Error(rw, "invalid client id: must be 1-64 alphanumeric characters, underscore or hyphen", http.StatusBadRequest)
+		return
+	}
 
 	exists, _ := h.clientStore.ClientExists(req.ID)
 	if exists {
@@ -218,11 +231,16 @@ func (h *APIHandler) handleConfig(rw http.ResponseWriter, r *http.Request) {
 
 func (h *APIHandler) getConfig(rw http.ResponseWriter) {
 	cfg := h.app.GetConfig()
+	// Token 脱敏处理，只显示前4位
+	maskedToken := cfg.Server.Token
+	if len(maskedToken) > 4 {
+		maskedToken = maskedToken[:4] + "****"
+	}
 	h.jsonResponse(rw, map[string]interface{}{
 		"server": map[string]interface{}{
 			"bind_addr":         cfg.Server.BindAddr,
 			"bind_port":         cfg.Server.BindPort,
-			"token":             cfg.Server.Token,
+			"token":             maskedToken,
 			"heartbeat_sec":     cfg.Server.HeartbeatSec,
 			"heartbeat_timeout": cfg.Server.HeartbeatTimeout,
 		},
@@ -231,7 +249,7 @@ func (h *APIHandler) getConfig(rw http.ResponseWriter) {
 			"bind_addr": cfg.Web.BindAddr,
 			"bind_port": cfg.Web.BindPort,
 			"username":  cfg.Web.Username,
-			"password":  cfg.Web.Password,
+			"password":  "****",
 		},
 	})
 }

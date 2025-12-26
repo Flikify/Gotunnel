@@ -45,7 +45,7 @@ func (s *Server) HandleConn(conn net.Conn) {
 	switch s.typ {
 	case "socks5":
 		err = s.socks5.HandleConn(conn)
-	case "http":
+	case "http", "https":
 		err = s.http.HandleConn(conn)
 	}
 	if err != nil {

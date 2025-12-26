@@ -1,10 +1,22 @@
 # GoTunnel
 
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 一个轻量级、高性能的内网穿透工具，采用服务端集中化管理模式，支持 TLS 加密通信。
 
 ## 项目简介
 
 GoTunnel 是一个类似 frp 的内网穿透解决方案，核心特点是**服务端集中管理配置**和**零配置 TLS 加密**。客户端只需提供认证信息即可自动获取映射规则，无需在客户端维护复杂配置。
+
+### 与 frp 的主要区别
+
+| 特性 | GoTunnel | frp |
+|------|----------|-----|
+| 配置管理 | 服务端集中管理 | 客户端各自配置 |
+| TLS 证书 | 自动生成，零配置 | 需手动配置 |
+| 管理界面 | 内置 Web 控制台 | 需额外部署 Dashboard |
+| 客户端部署 | 仅需 3 个参数 | 需配置文件 |
 
 ### 架构设计
 
@@ -157,11 +169,20 @@ web:
 
 通过 Web 控制台配置客户端规则时，支持以下类型：
 
+### 内置类型
+
 | 类型 | 说明 | 示例用途 |
 |------|------|----------|
 | `tcp` | TCP 端口转发（默认） | SSH、MySQL、Web 服务 |
-| `socks5` | SOCKS5 代理 | 通过客户端网络访问任意地址 |
+| `udp` | UDP 端口转发 | DNS、游戏服务器、VoIP |
 | `http` | HTTP 代理 | 通过客户端网络访问 HTTP/HTTPS |
+| `https` | HTTPS 代理 | 同 HTTP，支持 CONNECT 方法 |
+
+### 插件类型
+
+| 类型 | 说明 | 示例用途 |
+|------|------|----------|
+| `socks5` | SOCKS5 代理（官方插件） | 通过客户端网络访问任意地址 |
 
 **规则配置示例（通过 Web API）：**
 
@@ -170,6 +191,7 @@ web:
   "id": "client-a",
   "rules": [
     {"name": "web", "type": "tcp", "local_ip": "127.0.0.1", "local_port": 80, "remote_port": 8080},
+    {"name": "dns", "type": "udp", "local_ip": "127.0.0.1", "local_port": 53, "remote_port": 5353},
     {"name": "socks5-proxy", "type": "socks5", "remote_port": 1080},
     {"name": "http-proxy", "type": "http", "remote_port": 8888}
   ]
@@ -189,17 +211,130 @@ GoTunnel/
 │   │   ├── config/          # 配置管理
 │   │   ├── db/              # 数据库存储
 │   │   ├── app/             # Web 服务
-│   │   └── router/          # API 路由
+│   │   ├── router/          # API 路由
+│   │   └── plugin/          # 服务端插件管理
 │   └── client/
-│       └── tunnel/          # 客户端隧道
+│       ├── tunnel/          # 客户端隧道
+│       └── plugin/          # 客户端插件管理和缓存
 ├── pkg/
 │   ├── protocol/            # 通信协议
 │   ├── crypto/              # TLS 加密
-│   ├── proxy/               # SOCKS5/HTTP 代理
+│   ├── proxy/               # 代理服务器
 │   ├── relay/               # 数据转发
-│   └── utils/               # 工具函数
+│   ├── utils/               # 工具函数
+│   └── plugin/              # 插件系统核心
+│       ├── builtin/         # 内置插件 (socks5)
+│       ├── wasm/            # WASM 运行时 (wazero)
+│       └── store/           # 插件持久化 (SQLite)
+├── web/                     # Vue 3 前端
 └── go.mod
 ```
+
+## 插件系统
+
+GoTunnel 支持基于 WASM 的插件系统，可扩展代理协议支持。
+
+### 架构设计
+
+- **内置类型**: tcp, udp, http, https 直接在 tunnel 代码中处理，无需插件
+- **官方插件**: SOCKS5 作为官方插件提供
+- **WASM 插件**: 自定义插件可通过 wazero 运行时动态加载
+- **混合分发**: 内置插件离线可用；WASM 插件可从服务端下载
+
+### 开发自定义插件
+
+插件需实现 `ProxyHandler` 接口：
+
+```go
+type ProxyHandler interface {
+    Metadata() PluginMetadata
+    Init(config map[string]string) error
+    HandleConn(conn net.Conn, dialer Dialer) error
+    Close() error
+}
+```
+
+参考实现：`pkg/plugin/builtin/socks5.go`
+
+## Web API
+
+Web 控制台提供 RESTful API 用于管理客户端和配置。
+
+### 客户端管理
+
+```bash
+# 获取所有客户端
+GET /api/clients
+
+# 添加客户端
+POST /api/clients
+Content-Type: application/json
+{"id": "client-a", "rules": [...]}
+
+# 获取单个客户端
+GET /api/client/{id}
+
+# 更新客户端规则
+PUT /api/client/{id}
+Content-Type: application/json
+{"rules": [...]}
+
+# 删除客户端
+DELETE /api/client/{id}
+```
+
+### 服务状态
+
+```bash
+# 获取服务状态
+GET /api/status
+
+# 获取配置
+GET /api/config
+
+# 重载配置
+POST /api/config/reload
+```
+
+## 使用场景
+
+### 场景一：暴露内网 Web 服务
+
+```bash
+# 服务端配置客户端规则（通过 Web 控制台或 API）
+curl -X POST http://server:7500/api/clients \
+  -H "Content-Type: application/json" \
+  -d '{"id":"home","rules":[{"name":"web","type":"tcp","local_ip":"127.0.0.1","local_port":80,"remote_port":8080}]}'
+
+# 客户端连接
+./client -s server:7000 -t <token> -id home
+
+# 访问：http://server:8080 -> 内网 127.0.0.1:80
+```
+
+### 场景二：SOCKS5 代理访问内网
+
+```bash
+# 配置 SOCKS5 代理规则
+{"name":"proxy","type":"socks5","remote_port":1080}
+
+# 使用代理
+curl --socks5 server:1080 http://internal-service/
+```
+
+## 常见问题
+
+**Q: 客户端连接失败，提示 "client not configured"**
+
+A: 需要先在服务端 Web 控制台添加对应的客户端 ID。
+
+**Q: 如何禁用 TLS？**
+
+A: 服务端配置 `tls_disabled: true`，客户端使用 `-no-tls` 参数。
+
+**Q: 端口被占用怎么办？**
+
+A: 服务端会自动检测端口冲突，请检查日志并更换端口。
 
 ## 许可证
 

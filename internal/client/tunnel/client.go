@@ -14,6 +14,16 @@ import (
 	"github.com/hashicorp/yamux"
 )
 
+// 客户端常量
+const (
+	dialTimeout      = 10 * time.Second
+	localDialTimeout = 5 * time.Second
+	udpTimeout       = 10 * time.Second
+	reconnectDelay   = 5 * time.Second
+	disconnectDelay  = 3 * time.Second
+	udpBufferSize    = 65535
+)
+
 // Client 隧道客户端
 type Client struct {
 	ServerAddr string
@@ -43,14 +53,14 @@ func (c *Client) Run() error {
 	for {
 		if err := c.connect(); err != nil {
 			log.Printf("[Client] Connect error: %v", err)
-			log.Printf("[Client] Reconnecting in 5s...")
-			time.Sleep(5 * time.Second)
+			log.Printf("[Client] Reconnecting in %v...", reconnectDelay)
+			time.Sleep(reconnectDelay)
 			continue
 		}
 
 		c.handleSession()
 		log.Printf("[Client] Disconnected, reconnecting...")
-		time.Sleep(3 * time.Second)
+		time.Sleep(disconnectDelay)
 	}
 }
 
@@ -60,10 +70,10 @@ func (c *Client) connect() error {
 	var err error
 
 	if c.TLSEnabled && c.TLSConfig != nil {
-		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		dialer := &net.Dialer{Timeout: dialTimeout}
 		conn, err = tls.DialWithDialer(dialer, "tcp", c.ServerAddr, c.TLSConfig)
 	} else {
-		conn, err = net.DialTimeout("tcp", c.ServerAddr, 10*time.Second)
+		conn, err = net.DialTimeout("tcp", c.ServerAddr, dialTimeout)
 	}
 	if err != nil {
 		return err
@@ -83,7 +93,10 @@ func (c *Client) connect() error {
 	}
 
 	var authResp protocol.AuthResponse
-	resp.ParsePayload(&authResp)
+	if err := resp.ParsePayload(&authResp); err != nil {
+		conn.Close()
+		return fmt.Errorf("parse auth response: %w", err)
+	}
 	if !authResp.Success {
 		conn.Close()
 		return fmt.Errorf("auth failed: %s", authResp.Message)
@@ -137,13 +150,18 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handleHeartbeat(stream)
 	case protocol.MsgTypeProxyConnect:
 		c.handleProxyConnect(stream, msg)
+	case protocol.MsgTypeUDPData:
+		c.handleUDPData(stream, msg)
 	}
 }
 
 // handleProxyConfig 处理代理配置
 func (c *Client) handleProxyConfig(msg *protocol.Message) {
 	var cfg protocol.ProxyConfig
-	msg.ParsePayload(&cfg)
+	if err := msg.ParsePayload(&cfg); err != nil {
+		log.Printf("[Client] Parse proxy config error: %v", err)
+		return
+	}
 
 	c.mu.Lock()
 	c.rules = cfg.Rules
@@ -158,7 +176,10 @@ func (c *Client) handleProxyConfig(msg *protocol.Message) {
 // handleNewProxy 处理新代理请求
 func (c *Client) handleNewProxy(stream net.Conn, msg *protocol.Message) {
 	var req protocol.NewProxyRequest
-	msg.ParsePayload(&req)
+	if err := msg.ParsePayload(&req); err != nil {
+		log.Printf("[Client] Parse new proxy request error: %v", err)
+		return
+	}
 
 	var rule *protocol.ProxyRule
 	c.mu.RLock()
@@ -176,7 +197,7 @@ func (c *Client) handleNewProxy(stream net.Conn, msg *protocol.Message) {
 	}
 
 	localAddr := fmt.Sprintf("%s:%d", rule.LocalIP, rule.LocalPort)
-	localConn, err := net.DialTimeout("tcp", localAddr, 5*time.Second)
+	localConn, err := net.DialTimeout("tcp", localAddr, localDialTimeout)
 	if err != nil {
 		log.Printf("[Client] Connect %s error: %v", localAddr, err)
 		return
@@ -202,7 +223,7 @@ func (c *Client) handleProxyConnect(stream net.Conn, msg *protocol.Message) {
 	}
 
 	// 连接目标地址
-	targetConn, err := net.DialTimeout("tcp", req.Target, 10*time.Second)
+	targetConn, err := net.DialTimeout("tcp", req.Target, dialTimeout)
 	if err != nil {
 		c.sendProxyResult(stream, false, err.Error())
 		return
@@ -223,4 +244,63 @@ func (c *Client) sendProxyResult(stream net.Conn, success bool, message string) 
 	result := protocol.ProxyConnectResult{Success: success, Message: message}
 	msg, _ := protocol.NewMessage(protocol.MsgTypeProxyResult, result)
 	return protocol.WriteMessage(stream, msg)
+}
+
+// handleUDPData 处理 UDP 数据
+func (c *Client) handleUDPData(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var packet protocol.UDPPacket
+	if err := msg.ParsePayload(&packet); err != nil {
+		return
+	}
+
+	// 查找对应的规则
+	rule := c.findRuleByPort(packet.RemotePort)
+	if rule == nil {
+		return
+	}
+
+	// 连接本地 UDP 服务
+	target := fmt.Sprintf("%s:%d", rule.LocalIP, rule.LocalPort)
+	conn, err := net.DialTimeout("udp", target, localDialTimeout)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	// 发送数据到本地服务
+	conn.SetDeadline(time.Now().Add(udpTimeout))
+	if _, err := conn.Write(packet.Data); err != nil {
+		return
+	}
+
+	// 读取响应
+	buf := make([]byte, udpBufferSize)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return
+	}
+
+	// 发送响应回服务端
+	respPacket := protocol.UDPPacket{
+		RemotePort: packet.RemotePort,
+		ClientAddr: packet.ClientAddr,
+		Data:       buf[:n],
+	}
+	respMsg, _ := protocol.NewMessage(protocol.MsgTypeUDPData, respPacket)
+	protocol.WriteMessage(stream, respMsg)
+}
+
+// findRuleByPort 根据端口查找规则
+func (c *Client) findRuleByPort(port int) *protocol.ProxyRule {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for i := range c.rules {
+		if c.rules[i].RemotePort == port {
+			return &c.rules[i]
+		}
+	}
+	return nil
 }

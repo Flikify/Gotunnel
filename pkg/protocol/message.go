@@ -7,6 +7,12 @@ import (
 	"io"
 )
 
+// 协议常量
+const (
+	MaxMessageSize = 1024 * 1024 // 最大消息大小 1MB
+	HeaderSize     = 5           // 消息头大小
+)
+
 // 消息类型定义
 const (
 	MsgTypeAuth         uint8 = 1  // 认证请求
@@ -19,6 +25,15 @@ const (
 	MsgTypeError        uint8 = 8  // 错误消息
 	MsgTypeProxyConnect uint8 = 9  // 代理连接请求 (SOCKS5/HTTP)
 	MsgTypeProxyResult  uint8 = 10 // 代理连接结果
+
+	// Plugin 相关消息
+	MsgTypePluginList     uint8 = 20 // 请求/响应可用 plugins
+	MsgTypePluginDownload uint8 = 21 // 请求下载 plugin
+	MsgTypePluginData     uint8 = 22 // Plugin 二进制数据（分块）
+	MsgTypePluginReady    uint8 = 23 // Plugin 加载确认
+
+	// UDP 相关消息
+	MsgTypeUDPData uint8 = 30 // UDP 数据包
 )
 
 // Message 基础消息结构
@@ -42,10 +57,14 @@ type AuthResponse struct {
 // ProxyRule 代理规则
 type ProxyRule struct {
 	Name       string `json:"name" yaml:"name"`
-	Type       string `json:"type" yaml:"type"`               // tcp, socks5, http
-	LocalIP    string `json:"local_ip" yaml:"local_ip"`       // tcp 模式使用
-	LocalPort  int    `json:"local_port" yaml:"local_port"`   // tcp 模式使用
+	Type       string `json:"type" yaml:"type"`               // 内置: tcp, udp, http, https; 插件: socks5 等
+	LocalIP    string `json:"local_ip" yaml:"local_ip"`       // tcp/udp 模式使用
+	LocalPort  int    `json:"local_port" yaml:"local_port"`   // tcp/udp 模式使用
 	RemotePort int    `json:"remote_port" yaml:"remote_port"` // 服务端监听端口
+	// Plugin 支持字段
+	PluginName    string            `json:"plugin_name,omitempty" yaml:"plugin_name"`
+	PluginVersion string            `json:"plugin_version,omitempty" yaml:"plugin_version"`
+	PluginConfig  map[string]string `json:"plugin_config,omitempty" yaml:"plugin_config"`
 }
 
 // ProxyConfig 代理配置下发
@@ -75,9 +94,59 @@ type ProxyConnectResult struct {
 	Message string `json:"message,omitempty"`
 }
 
+// PluginMetadata Plugin 元数据（协议层）
+type PluginMetadata struct {
+	Name        string   `json:"name"`
+	Version     string   `json:"version"`
+	Checksum    string   `json:"checksum"`
+	Size        int64    `json:"size"`
+	Description string   `json:"description,omitempty"`
+}
+
+// PluginListRequest 请求可用 plugins
+type PluginListRequest struct {
+	ClientVersion string `json:"client_version"`
+}
+
+// PluginListResponse 返回可用 plugins
+type PluginListResponse struct {
+	Plugins []PluginMetadata `json:"plugins"`
+}
+
+// PluginDownloadRequest 请求下载 plugin
+type PluginDownloadRequest struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// PluginDataChunk Plugin 二进制数据块
+type PluginDataChunk struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	ChunkIndex  int    `json:"chunk_index"`
+	TotalChunks int    `json:"total_chunks"`
+	Data        []byte `json:"data"`
+	Checksum    string `json:"checksum,omitempty"`
+}
+
+// PluginReadyNotification Plugin 加载确认
+type PluginReadyNotification struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// UDPPacket UDP 数据包
+type UDPPacket struct {
+	RemotePort int    `json:"remote_port"` // 服务端监听端口
+	ClientAddr string `json:"client_addr"` // 客户端地址 (用于回复)
+	Data       []byte `json:"data"`        // UDP 数据
+}
+
 // WriteMessage 写入消息到 writer
 func WriteMessage(w io.Writer, msg *Message) error {
-	header := make([]byte, 5)
+	header := make([]byte, HeaderSize)
 	header[0] = msg.Type
 	binary.BigEndian.PutUint32(header[1:], uint32(len(msg.Payload)))
 
@@ -94,7 +163,7 @@ func WriteMessage(w io.Writer, msg *Message) error {
 
 // ReadMessage 从 reader 读取消息
 func ReadMessage(r io.Reader) (*Message, error) {
-	header := make([]byte, 5)
+	header := make([]byte, HeaderSize)
 	if _, err := io.ReadFull(r, header); err != nil {
 		return nil, err
 	}
@@ -102,7 +171,7 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	msgType := header[0]
 	length := binary.BigEndian.Uint32(header[1:])
 
-	if length > 1024*1024 {
+	if length > MaxMessageSize {
 		return nil, errors.New("message too large")
 	}
 

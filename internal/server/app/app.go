@@ -86,24 +86,10 @@ func (w *WebServer) RunWithAuth(addr, username, password string) error {
 	}
 	r.Handle("/", spaHandler{fs: http.FS(staticFS)})
 
-	handler := &authMiddleware{username, password, r.Handler()}
+	auth := &router.AuthConfig{Username: username, Password: password}
+	handler := router.BasicAuthMiddleware(auth, r.Handler())
 	log.Printf("[Web] Console listening on %s (auth enabled)", addr)
 	return http.ListenAndServe(addr, handler)
-}
-
-type authMiddleware struct {
-	username, password string
-	handler            http.Handler
-}
-
-func (a *authMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	user, pass, ok := r.BasicAuth()
-	if !ok || user != a.username || pass != a.password {
-		w.Header().Set("WWW-Authenticate", `Basic realm="GoTunnel"`)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	a.handler.ServeHTTP(w, r)
 }
 
 // GetClientStore 获取客户端存储

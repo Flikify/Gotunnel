@@ -10,6 +10,8 @@ import (
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/internal/server/tunnel"
 	"github.com/gotunnel/pkg/crypto"
+	"github.com/gotunnel/pkg/plugin"
+	"github.com/gotunnel/pkg/plugin/builtin"
 )
 
 func main() {
@@ -48,6 +50,17 @@ func main() {
 		server.SetTLSConfig(tlsConfig)
 		log.Printf("[Server] TLS enabled")
 	}
+
+	// 初始化插件系统
+	registry := plugin.NewRegistry()
+	if err := registry.RegisterBuiltin(builtin.NewSOCKS5Plugin()); err != nil {
+		log.Printf("[Plugin] Register socks5 error: %v", err)
+	}
+	if err := registry.RegisterBuiltin(builtin.NewHTTPPlugin()); err != nil {
+		log.Printf("[Plugin] Register http error: %v", err)
+	}
+	server.SetPluginRegistry(registry)
+	log.Printf("[Plugin] Plugins registered: socks5, http")
 
 	// 启动 Web 控制台
 	if cfg.Web.Enabled {
