@@ -35,6 +35,9 @@ jobs:
           npm ci
           npm run build
 
+      - name: Copy Frontend to Embed Path
+        run: cp -r web/dist internal/server/app/dist
+
       - name: Install UPX
         run: |
           sudo apt-get update
