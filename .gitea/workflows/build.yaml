@@ -1,4 +1,5 @@
 name: Build Multi-Platform Binaries
+
 on:
   push:
     paths:
@@ -9,125 +10,169 @@ on:
       - '.gitea/workflows/**'
 
 jobs:
+  # =======================
+  # Frontend Build
+  # =======================
   build-frontend:
-    runs-on: node-latest  # 使用 Node.js 专用镜像
+    runs-on: node-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Build Frontend
         run: |
           cd web
           npm ci
           npm run build
-      
+
       - name: Upload Frontend Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
           path: web/dist
           retention-days: 1
 
+  # =======================
+  # Backend Build Matrix
+  # =======================
   build-binaries:
     needs: build-frontend
-    runs-on: golang-latest  # 使用 Golang 专用镜像
+    runs-on: golang-latest
+
     strategy:
+      fail-fast: false
       matrix:
         include:
+          # ---------- Linux amd64 ----------
           - goos: linux
             goarch: amd64
             target: server
             upx: true
+
           - goos: linux
             goarch: amd64
             target: client
             upx: true
+
+          # ---------- Linux arm64 ----------
           - goos: linux
             goarch: arm64
             target: server
             upx: true
+
           - goos: linux
             goarch: arm64
             target: client
             upx: true
+
+          # ---------- Linux ARMv7 / ARMv8l ----------
+          - goos: linux
+            goarch: arm
+            goarm: 7
+            target: server
+            upx: false
+
+          - goos: linux
+            goarch: arm
+            goarm: 7
+            target: client
+            upx: false
+
+          # ---------- (Optional) ARMv6 ----------
+          - goos: linux
+            goarch: arm
+            goarm: 6
+            target: client
+            upx: false
+
+          # ---------- macOS ----------
           - goos: darwin
             goarch: amd64
             target: server
             upx: false
-          - goos: darwin
-            goarch: amd64
-            target: client
-            upx: false
+
           - goos: darwin
             goarch: arm64
             target: server
             upx: false
-          - goos: darwin
-            goarch: arm64
-            target: client
-            upx: false
+
+          # ---------- Windows ----------
           - goos: windows
             goarch: amd64
             target: server
             upx: true
+
           - goos: windows
             goarch: amd64
             target: client
             upx: true
+
           - goos: windows
             goarch: arm64
             target: server
             upx: true
+
           - goos: windows
             goarch: arm64
             target: client
             upx: true
+
     steps:
-      - name: Install Node.js for Actions
-        run: |
-          # 尝试兼容 Alpine (apk) 和 Debian/Ubuntu (apt)
-          if command -v apk > /dev/null; then
-            apk add --no-cache nodejs
-          elif command -v apt-get > /dev/null; then
-            apt-get update && apt-get install -y nodejs
-          else
-            echo "Unknown package manager"
-            exit 1
-          fi
-      - name: Set Node IPv4 Priority
-        run: echo "NODE_OPTIONS=--dns-result-order=ipv4first" >> $GITHUB_ENV
-        
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      # ---------- Download frontend ----------
       - name: Download Frontend Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-dist
           path: internal/server/app/dist
-      
+
+      # ---------- Build ----------
       - name: Build Binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
         run: |
+          set -e
+
           OUTPUT_NAME="${{ matrix.target }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+
+          if [ "${{ matrix.goarch }}" = "arm" ]; then
+            OUTPUT_NAME="${OUTPUT_NAME}v${{ matrix.goarm }}"
+          fi
+
           if [ "${{ matrix.goos }}" = "windows" ]; then
             OUTPUT_NAME="${OUTPUT_NAME}.exe"
           fi
-          
-          go build -ldflags="-s -w" -o "${OUTPUT_NAME}" ./cmd/${{ matrix.target }}
-          echo "BINARY_NAME=${OUTPUT_NAME}" >> $GITHUB_ENV
-      
+
+          echo "Building $OUTPUT_NAME"
+
+          go build \
+            -trimpath \
+            -ldflags="-s -w" \
+            -o "$OUTPUT_NAME" \
+            ./cmd/${{ matrix.target }}
+
+          echo "BINARY_NAME=$OUTPUT_NAME" >> $GITHUB_ENV
+
+      # ---------- UPX (safe only) ----------
       - name: Install and Run UPX
-        if: matrix.upx == true
+        if: matrix.upx == true && matrix.goarch != 'arm'
         run: |
-          apk add --no-cache upx || apt-get update && apt-get install -y upx-ucl
+          if command -v apk >/dev/null; then
+            apk add --no-cache upx
+          else
+            apt-get update && apt-get install -y upx-ucl
+          fi
+
           upx -9 "${{ env.BINARY_NAME }}" || true
-      
-      - name: Upload Individual Binary
-        uses: actions/upload-artifact@v3
+
+      # ---------- Upload ----------
+      - name: Upload Binary
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BINARY_NAME }}
           path: ${{ env.BINARY_NAME }}
