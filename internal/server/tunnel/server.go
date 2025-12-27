@@ -563,7 +563,42 @@ func (s *Server) InstallPluginsToClient(clientID string, plugins []string) error
 		return fmt.Errorf("client %s not found", clientID)
 	}
 
-	return s.sendInstallPlugins(cs.Session, plugins)
+	// 发送安装请求到客户端
+	if err := s.sendInstallPlugins(cs.Session, plugins); err != nil {
+		return err
+	}
+
+	// 更新数据库中客户端的已安装插件列表
+	client, err := s.clientStore.GetClient(clientID)
+	if err != nil {
+		return fmt.Errorf("failed to get client: %w", err)
+	}
+
+	// 获取插件版本信息并添加到客户端插件列表
+	for _, pluginName := range plugins {
+		// 检查是否已安装
+		found := false
+		for _, cp := range client.Plugins {
+			if cp.Name == pluginName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			// 获取插件信息
+			version := "1.0.0"
+			if handler, err := s.pluginRegistry.Get(pluginName); err == nil && handler != nil {
+				version = handler.Metadata().Version
+			}
+			client.Plugins = append(client.Plugins, db.ClientPlugin{
+				Name:    pluginName,
+				Version: version,
+				Enabled: true,
+			})
+		}
+	}
+
+	return s.clientStore.UpdateClient(client)
 }
 
 // sendInstallPlugins 发送安装插件请求
