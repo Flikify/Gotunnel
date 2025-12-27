@@ -37,6 +37,7 @@ const (
 
 	// 插件安装消息
 	MsgTypeInstallPlugins uint8 = 24 // 服务端推送安装插件列表
+	MsgTypePluginConfig   uint8 = 25 // 插件配置同步
 )
 
 // Message 基础消息结构
@@ -153,6 +154,12 @@ type PluginReadyNotification struct {
 // InstallPluginsRequest 安装插件请求
 type InstallPluginsRequest struct {
 	Plugins []string `json:"plugins"` // 要安装的插件名称列表
+}
+
+// PluginConfigSync 插件配置同步
+type PluginConfigSync struct {
+	PluginName string            `json:"plugin_name"` // 插件名称
+	Config     map[string]string `json:"config"`      // 配置内容
 }
 
 // UDPPacket UDP 数据包

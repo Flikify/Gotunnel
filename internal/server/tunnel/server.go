@@ -700,3 +700,62 @@ func (s *Server) sendUDPPacket(cs *ClientSession, conn *net.UDPConn, clientAddr 
 		conn.WriteToUDP(respPacket.Data, clientAddr)
 	}
 }
+
+// GetPluginConfigSchema 获取插件配置模式
+func (s *Server) GetPluginConfigSchema(name string) ([]router.ConfigField, error) {
+	if s.pluginRegistry == nil {
+		return nil, fmt.Errorf("plugin registry not initialized")
+	}
+
+	handler, err := s.pluginRegistry.Get(name)
+	if err != nil {
+		return nil, fmt.Errorf("plugin %s not found", name)
+	}
+
+	metadata := handler.Metadata()
+	var result []router.ConfigField
+	for _, f := range metadata.ConfigSchema {
+		result = append(result, router.ConfigField{
+			Key:         f.Key,
+			Label:       f.Label,
+			Type:        string(f.Type),
+			Default:     f.Default,
+			Required:    f.Required,
+			Options:     f.Options,
+			Description: f.Description,
+		})
+	}
+	return result, nil
+}
+
+// SyncPluginConfigToClient 同步插件配置到客户端
+func (s *Server) SyncPluginConfigToClient(clientID string, pluginName string, config map[string]string) error {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("client %s not online", clientID)
+	}
+
+	return s.sendPluginConfig(cs.Session, pluginName, config)
+}
+
+// sendPluginConfig 发送插件配置到客户端
+func (s *Server) sendPluginConfig(session *yamux.Session, pluginName string, config map[string]string) error {
+	stream, err := session.Open()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	req := protocol.PluginConfigSync{
+		PluginName: pluginName,
+		Config:     config,
+	}
+	msg, err := protocol.NewMessage(protocol.MsgTypePluginConfig, req)
+	if err != nil {
+		return err
+	}
+	return protocol.WriteMessage(stream, msg)
+}

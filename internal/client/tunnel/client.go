@@ -194,6 +194,9 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handleProxyConnect(stream, msg)
 	case protocol.MsgTypeUDPData:
 		c.handleUDPData(stream, msg)
+	case protocol.MsgTypePluginConfig:
+		defer stream.Close()
+		c.handlePluginConfig(msg)
 	}
 }
 
@@ -345,4 +348,29 @@ func (c *Client) findRuleByPort(port int) *protocol.ProxyRule {
 		}
 	}
 	return nil
+}
+
+// handlePluginConfig 处理插件配置同步
+func (c *Client) handlePluginConfig(msg *protocol.Message) {
+	var cfg protocol.PluginConfigSync
+	if err := msg.ParsePayload(&cfg); err != nil {
+		log.Printf("[Client] Parse plugin config error: %v", err)
+		return
+	}
+
+	log.Printf("[Client] Received config for plugin: %s", cfg.PluginName)
+
+	// 应用配置到插件
+	if c.pluginRegistry != nil {
+		handler, err := c.pluginRegistry.Get(cfg.PluginName)
+		if err != nil {
+			log.Printf("[Client] Plugin %s not found: %v", cfg.PluginName, err)
+			return
+		}
+		if err := handler.Init(cfg.Config); err != nil {
+			log.Printf("[Client] Plugin %s init error: %v", cfg.PluginName, err)
+			return
+		}
+		log.Printf("[Client] Plugin %s config applied", cfg.PluginName)
+	}
 }

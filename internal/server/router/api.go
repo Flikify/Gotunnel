@@ -46,6 +46,20 @@ type ServerInterface interface {
 	EnablePlugin(name string) error
 	DisablePlugin(name string) error
 	InstallPluginsToClient(clientID string, plugins []string) error
+	// 插件配置
+	GetPluginConfigSchema(name string) ([]ConfigField, error)
+	SyncPluginConfigToClient(clientID string, pluginName string, config map[string]string) error
+}
+
+// ConfigField 配置字段（从 plugin 包导出）
+type ConfigField struct {
+	Key         string   `json:"key"`
+	Label       string   `json:"label"`
+	Type        string   `json:"type"`
+	Default     string   `json:"default,omitempty"`
+	Required    bool     `json:"required,omitempty"`
+	Options     []string `json:"options,omitempty"`
+	Description string   `json:"description,omitempty"`
 }
 
 // PluginInfo 插件信息
@@ -92,6 +106,7 @@ func RegisterRoutes(r *Router, app AppInterface) {
 	api.HandleFunc("/plugins", h.handlePlugins)
 	api.HandleFunc("/plugin/", h.handlePlugin)
 	api.HandleFunc("/store/plugins", h.handleStorePlugins)
+	api.HandleFunc("/client-plugin/", h.handleClientPlugin)
 }
 
 func (h *APIHandler) handleStatus(rw http.ResponseWriter, r *http.Request) {
@@ -585,4 +600,144 @@ func (h *APIHandler) handleStorePlugins(rw http.ResponseWriter, r *http.Request)
 		"plugins":   plugins,
 		"store_url": storeURL,
 	})
+}
+
+// handleClientPlugin 处理客户端插件配置
+// 路由: /api/client-plugin/{clientID}/{pluginName}/config
+func (h *APIHandler) handleClientPlugin(rw http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path[len("/api/client-plugin/"):]
+	if path == "" {
+		http.Error(rw, "client id required", http.StatusBadRequest)
+		return
+	}
+
+	// 解析路径: clientID/pluginName/action
+	parts := splitPathMulti(path)
+	if len(parts) < 3 {
+		http.Error(rw, "invalid path, expected: /api/client-plugin/{clientID}/{pluginName}/config", http.StatusBadRequest)
+		return
+	}
+
+	clientID := parts[0]
+	pluginName := parts[1]
+	action := parts[2]
+
+	if action != "config" {
+		http.Error(rw, "invalid action", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		h.getClientPluginConfig(rw, clientID, pluginName)
+	case http.MethodPut:
+		h.updateClientPluginConfig(rw, r, clientID, pluginName)
+	default:
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// splitPathMulti 分割路径为多个部分
+func splitPathMulti(path string) []string {
+	var parts []string
+	start := 0
+	for i, c := range path {
+		if c == '/' {
+			if i > start {
+				parts = append(parts, path[start:i])
+			}
+			start = i + 1
+		}
+	}
+	if start < len(path) {
+		parts = append(parts, path[start:])
+	}
+	return parts
+}
+
+// getClientPluginConfig 获取客户端插件配置
+func (h *APIHandler) getClientPluginConfig(rw http.ResponseWriter, clientID, pluginName string) {
+	client, err := h.clientStore.GetClient(clientID)
+	if err != nil {
+		http.Error(rw, "client not found", http.StatusNotFound)
+		return
+	}
+
+	// 获取插件配置模式
+	schema, err := h.server.GetPluginConfigSchema(pluginName)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// 查找客户端的插件配置
+	var config map[string]string
+	for _, p := range client.Plugins {
+		if p.Name == pluginName {
+			config = p.Config
+			break
+		}
+	}
+	if config == nil {
+		config = make(map[string]string)
+	}
+
+	h.jsonResponse(rw, map[string]interface{}{
+		"plugin_name": pluginName,
+		"schema":      schema,
+		"config":      config,
+	})
+}
+
+// updateClientPluginConfig 更新客户端插件配置
+func (h *APIHandler) updateClientPluginConfig(rw http.ResponseWriter, r *http.Request, clientID, pluginName string) {
+	var req struct {
+		Config map[string]string `json:"config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	client, err := h.clientStore.GetClient(clientID)
+	if err != nil {
+		http.Error(rw, "client not found", http.StatusNotFound)
+		return
+	}
+
+	// 更新插件配置
+	found := false
+	for i, p := range client.Plugins {
+		if p.Name == pluginName {
+			client.Plugins[i].Config = req.Config
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		http.Error(rw, "plugin not installed on client", http.StatusNotFound)
+		return
+	}
+
+	// 保存到数据库
+	if err := h.clientStore.UpdateClient(client); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 如果客户端在线，同步配置
+	online, _ := h.server.GetClientStatus(clientID)
+	if online {
+		if err := h.server.SyncPluginConfigToClient(clientID, pluginName, req.Config); err != nil {
+			// 配置已保存，但同步失败，返回警告
+			h.jsonResponse(rw, map[string]interface{}{
+				"status":  "partial",
+				"message": "config saved but sync failed: " + err.Error(),
+			})
+			return
+		}
+	}
+
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
 }

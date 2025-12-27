@@ -13,6 +13,25 @@ export interface ClientPlugin {
   name: string
   version: string
   enabled: boolean
+  config?: Record<string, string>
+}
+
+// 插件配置字段
+export interface ConfigField {
+  key: string
+  label: string
+  type: 'string' | 'number' | 'bool' | 'select' | 'password'
+  default?: string
+  required?: boolean
+  options?: string[]
+  description?: string
+}
+
+// 插件配置响应
+export interface PluginConfigResponse {
+  plugin_name: string
+  schema: ConfigField[]
+  config: Record<string, string>
 }
 
 // 客户端配置

@@ -15,12 +15,17 @@ func init() {
 }
 
 const (
-	socks5Version = 0x05
-	noAuth        = 0x00
-	cmdConnect    = 0x01
-	atypIPv4      = 0x01
-	atypDomain    = 0x03
-	atypIPv6      = 0x04
+	socks5Version     = 0x05
+	noAuth            = 0x00
+	userPassAuth      = 0x02
+	noAcceptable      = 0xFF
+	userPassAuthVer   = 0x01
+	authSuccess       = 0x00
+	authFailure       = 0x01
+	cmdConnect        = 0x01
+	atypIPv4          = 0x01
+	atypDomain        = 0x03
+	atypIPv6          = 0x04
 )
 
 // SOCKS5Plugin 将现有 SOCKS5 实现封装为 plugin
@@ -44,6 +49,28 @@ func (p *SOCKS5Plugin) Metadata() plugin.PluginMetadata {
 		Author:      "GoTunnel",
 		Capabilities: []string{
 			"dial", "read", "write", "close",
+		},
+		ConfigSchema: []plugin.ConfigField{
+			{
+				Key:         "auth",
+				Label:       "认证方式",
+				Type:        plugin.ConfigFieldSelect,
+				Default:     "none",
+				Options:     []string{"none", "password"},
+				Description: "SOCKS5 认证方式",
+			},
+			{
+				Key:         "username",
+				Label:       "用户名",
+				Type:        plugin.ConfigFieldString,
+				Description: "认证用户名（仅 password 认证时需要）",
+			},
+			{
+				Key:         "password",
+				Label:       "密码",
+				Type:        plugin.ConfigFieldPassword,
+				Description: "认证密码（仅 password 认证时需要）",
+			},
 		},
 	}
 }
@@ -110,7 +137,31 @@ func (p *SOCKS5Plugin) handshake(conn net.Conn) error {
 		return err
 	}
 
-	// 响应：使用无认证
+	// 检查是否需要密码认证
+	if p.config["auth"] == "password" {
+		// 检查客户端是否支持用户名密码认证
+		supported := false
+		for _, m := range methods {
+			if m == userPassAuth {
+				supported = true
+				break
+			}
+		}
+		if !supported {
+			conn.Write([]byte{socks5Version, noAcceptable})
+			return errors.New("client does not support password auth")
+		}
+
+		// 选择用户名密码认证
+		if _, err := conn.Write([]byte{socks5Version, userPassAuth}); err != nil {
+			return err
+		}
+
+		// 执行用户名密码认证
+		return p.authenticateUserPass(conn)
+	}
+
+	// 无认证
 	_, err := conn.Write([]byte{socks5Version, noAuth})
 	return err
 }
@@ -161,6 +212,48 @@ func (p *SOCKS5Plugin) readRequest(conn net.Conn) (string, error) {
 	port := binary.BigEndian.Uint16(portBuf)
 
 	return fmt.Sprintf("%s:%d", host, port), nil
+}
+
+// authenticateUserPass 用户名密码认证
+func (p *SOCKS5Plugin) authenticateUserPass(conn net.Conn) error {
+	// 读取认证版本
+	buf := make([]byte, 2)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		return err
+	}
+	if buf[0] != userPassAuthVer {
+		return errors.New("unsupported auth version")
+	}
+
+	// 读取用户名
+	ulen := int(buf[1])
+	username := make([]byte, ulen)
+	if _, err := io.ReadFull(conn, username); err != nil {
+		return err
+	}
+
+	// 读取密码长度和密码
+	plenBuf := make([]byte, 1)
+	if _, err := io.ReadFull(conn, plenBuf); err != nil {
+		return err
+	}
+	plen := int(plenBuf[0])
+	password := make([]byte, plen)
+	if _, err := io.ReadFull(conn, password); err != nil {
+		return err
+	}
+
+	// 验证用户名密码
+	expectedUser := p.config["username"]
+	expectedPass := p.config["password"]
+
+	if string(username) == expectedUser && string(password) == expectedPass {
+		conn.Write([]byte{userPassAuthVer, authSuccess})
+		return nil
+	}
+
+	conn.Write([]byte{userPassAuthVer, authFailure})
+	return errors.New("authentication failed")
 }
 
 // sendReply 发送响应

@@ -9,10 +9,13 @@ import {
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, PowerOutline, AddOutline, SaveOutline, CloseOutline,
-  DownloadOutline
+  DownloadOutline, SettingsOutline
 } from '@vicons/ionicons5'
-import { getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, getPlugins, installPluginsToClient } from '../api'
-import type { ProxyRule, PluginInfo, ClientPlugin } from '../types'
+import {
+  getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient,
+  getPlugins, installPluginsToClient, getClientPluginConfig, updateClientPluginConfig
+} from '../api'
+import type { ProxyRule, PluginInfo, ClientPlugin, ConfigField } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -41,6 +44,13 @@ const typeOptions = [
 const showInstallModal = ref(false)
 const availablePlugins = ref<PluginInfo[]>([])
 const selectedPlugins = ref<string[]>([])
+
+// 插件配置相关
+const showConfigModal = ref(false)
+const configPluginName = ref('')
+const configSchema = ref<ConfigField[]>([])
+const configValues = ref<Record<string, string>>({})
+const configLoading = ref(false)
 
 const loadPlugins = async () => {
   try {
@@ -189,6 +199,42 @@ const toggleClientPlugin = async (plugin: ClientPlugin) => {
     message.error('操作失败')
   }
 }
+
+// 打开插件配置模态框
+const openConfigModal = async (plugin: ClientPlugin) => {
+  configPluginName.value = plugin.name
+  configLoading.value = true
+  showConfigModal.value = true
+
+  try {
+    const { data } = await getClientPluginConfig(clientId, plugin.name)
+    configSchema.value = data.schema || []
+    configValues.value = { ...data.config }
+    // 填充默认值
+    for (const field of configSchema.value) {
+      if (field.default && !configValues.value[field.key]) {
+        configValues.value[field.key] = field.default
+      }
+    }
+  } catch (e: any) {
+    message.error(e.response?.data || '加载配置失败')
+    showConfigModal.value = false
+  } finally {
+    configLoading.value = false
+  }
+}
+
+// 保存插件配置
+const savePluginConfig = async () => {
+  try {
+    await updateClientPluginConfig(clientId, configPluginName.value, configValues.value)
+    message.success('配置已保存')
+    showConfigModal.value = false
+    loadClient()
+  } catch (e: any) {
+    message.error(e.response?.data || '保存失败')
+  }
+}
 </script>
 
 <template>
@@ -331,6 +377,7 @@ const toggleClientPlugin = async (plugin: ClientPlugin) => {
             <th>名称</th>
             <th>版本</th>
             <th>状态</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -339,6 +386,12 @@ const toggleClientPlugin = async (plugin: ClientPlugin) => {
             <td>v{{ plugin.version }}</td>
             <td>
               <n-switch :value="plugin.enabled" @update:value="toggleClientPlugin(plugin)" />
+            </td>
+            <td>
+              <n-button size="small" quaternary @click="openConfigModal(plugin)">
+                <template #icon><n-icon><SettingsOutline /></n-icon></template>
+                配置
+              </n-button>
             </td>
           </tr>
         </tbody>
@@ -373,6 +426,61 @@ const toggleClientPlugin = async (plugin: ClientPlugin) => {
           <n-button @click="showInstallModal = false">取消</n-button>
           <n-button type="primary" @click="installPlugins" :disabled="selectedPlugins.length === 0">
             安装 ({{ selectedPlugins.length }})
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 插件配置模态框 -->
+    <n-modal v-model:show="showConfigModal" preset="card" :title="`${configPluginName} 配置`" style="width: 500px;">
+      <n-empty v-if="configLoading" description="加载中..." />
+      <n-empty v-else-if="configSchema.length === 0" description="该插件暂无可配置项" />
+      <n-space v-else vertical :size="16">
+        <n-form-item v-for="field in configSchema" :key="field.key" :label="field.label">
+          <!-- 字符串输入 -->
+          <n-input
+            v-if="field.type === 'string'"
+            v-model:value="configValues[field.key]"
+            :placeholder="field.description || field.label"
+          />
+          <!-- 密码输入 -->
+          <n-input
+            v-else-if="field.type === 'password'"
+            v-model:value="configValues[field.key]"
+            type="password"
+            show-password-on="click"
+            :placeholder="field.description || field.label"
+          />
+          <!-- 数字输入 -->
+          <n-input-number
+            v-else-if="field.type === 'number'"
+            :value="configValues[field.key] ? Number(configValues[field.key]) : undefined"
+            @update:value="(v: number | null) => configValues[field.key] = v !== null ? String(v) : ''"
+            :placeholder="field.description"
+            style="width: 100%;"
+          />
+          <!-- 下拉选择 -->
+          <n-select
+            v-else-if="field.type === 'select'"
+            v-model:value="configValues[field.key]"
+            :options="(field.options || []).map(o => ({ label: o, value: o }))"
+          />
+          <!-- 布尔开关 -->
+          <n-switch
+            v-else-if="field.type === 'bool'"
+            :value="configValues[field.key] === 'true'"
+            @update:value="(v: boolean) => configValues[field.key] = String(v)"
+          />
+          <template #feedback v-if="field.description && field.type !== 'string' && field.type !== 'password'">
+            <span style="color: #999; font-size: 12px;">{{ field.description }}</span>
+          </template>
+        </n-form-item>
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showConfigModal = false">取消</n-button>
+          <n-button type="primary" @click="savePluginConfig" :disabled="configSchema.length === 0">
+            保存
           </n-button>
         </n-space>
       </template>

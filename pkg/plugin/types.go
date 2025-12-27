@@ -23,6 +23,28 @@ const (
 	PluginSourceWASM    PluginSource = "wasm"    // WASM 模块
 )
 
+// ConfigFieldType 配置字段类型
+type ConfigFieldType string
+
+const (
+	ConfigFieldString   ConfigFieldType = "string"
+	ConfigFieldNumber   ConfigFieldType = "number"
+	ConfigFieldBool     ConfigFieldType = "bool"
+	ConfigFieldSelect   ConfigFieldType = "select"   // 下拉选择
+	ConfigFieldPassword ConfigFieldType = "password" // 密码输入
+)
+
+// ConfigField 配置字段定义
+type ConfigField struct {
+	Key         string          `json:"key"`                   // 配置键名
+	Label       string          `json:"label"`                 // 显示标签
+	Type        ConfigFieldType `json:"type"`                  // 字段类型
+	Default     string          `json:"default,omitempty"`     // 默认值
+	Required    bool            `json:"required,omitempty"`    // 是否必填
+	Options     []string        `json:"options,omitempty"`     // select 类型的选项
+	Description string          `json:"description,omitempty"` // 字段描述
+}
+
 // PluginMetadata 描述一个 plugin
 type PluginMetadata struct {
 	Name         string            `json:"name"`                   // 唯一标识符 (如 "socks5")
@@ -35,7 +57,7 @@ type PluginMetadata struct {
 	Checksum     string            `json:"checksum,omitempty"`     // WASM 二进制的 SHA256
 	Size         int64             `json:"size,omitempty"`         // WASM 二进制大小
 	Capabilities []string          `json:"capabilities,omitempty"` // 所需 host functions
-	ConfigSchema map[string]string `json:"config_schema,omitempty"`
+	ConfigSchema []ConfigField     `json:"config_schema,omitempty"`// 配置模式定义
 }
 
 // PluginInfo 组合元数据和运行时状态
