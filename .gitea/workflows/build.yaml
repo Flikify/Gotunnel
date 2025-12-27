@@ -1,5 +1,4 @@
 name: Build Multi-Platform Binaries
-
 on:
   push:
     paths:
@@ -10,21 +9,19 @@ on:
       - '.gitea/workflows/**'
 
 jobs:
-  # =======================
-  # Frontend Build
-  # =======================
+  # --- 任务 1: 构建前端 ---
   build-frontend:
     runs-on: node-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Build Frontend
         run: |
           cd web
           npm ci
           npm run build
-
+      
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v3
         with:
@@ -32,103 +29,53 @@ jobs:
           path: web/dist
           retention-days: 1
 
-  # =======================
-  # Backend Build Matrix
-  # =======================
+  # --- 任务 2: 构建多平台二进制文件 ---
   build-binaries:
     needs: build-frontend
     runs-on: golang-latest
-
     strategy:
-      fail-fast: false
+      fail-fast: false # 即使某个平台失败，也继续构建其他平台
       matrix:
         include:
-          # ---------- Linux amd64 ----------
-          - goos: linux
-            goarch: amd64
-            target: server
-            upx: true
-
-          - goos: linux
-            goarch: amd64
-            target: client
-            upx: true
-
-          # ---------- Linux arm64 ----------
-          - goos: linux
-            goarch: arm64
-            target: server
-            upx: true
-
-          - goos: linux
-            goarch: arm64
-            target: client
-            upx: true
-
-          # ---------- Linux ARMv7 / ARMv8l ----------
-          - goos: linux
-            goarch: arm
-            goarm: 7
-            target: server
-            upx: false
-
-          - goos: linux
-            goarch: arm
-            goarm: 7
-            target: client
-            upx: false
-
-          # ---------- (Optional) ARMv6 ----------
-          - goos: linux
-            goarch: arm
-            goarm: 6
-            target: client
-            upx: false
-
-          # ---------- macOS ----------
-          - goos: darwin
-            goarch: amd64
-            target: server
-            upx: false
-
-          - goos: darwin
-            goarch: arm64
-            target: server
-            upx: false
-
-          # ---------- Windows ----------
-          - goos: windows
-            goarch: amd64
-            target: server
-            upx: true
-
-          - goos: windows
-            goarch: amd64
-            target: client
-            upx: true
-
-          - goos: windows
-            goarch: arm64
-            target: server
-            upx: true
-
-          - goos: windows
-            goarch: arm64
-            target: client
-            upx: true
+          # Linux 平台
+          - { goos: linux, goarch: amd64, target: server, upx: true }
+          - { goos: linux, goarch: amd64, target: client, upx: true }
+          - { goos: linux, goarch: arm64, target: server, upx: true } # ARMv8 64-bit
+          - { goos: linux, goarch: arm64, target: client, upx: true }
+          # 针对 ARMv8 (v8l) 32位模式，使用 GOARM=7 确保最大兼容性
+          - { goos: linux, goarch: arm, goarm: 7, target: server, upx: true }
+          - { goos: linux, goarch: arm, goarm: 7, target: client, upx: true }
+          
+          # Windows 平台
+          - { goos: windows, goarch: amd64, target: server, upx: true }
+          - { goos: windows, goarch: amd64, target: client, upx: true }
+          - { goos: windows, goarch: arm64, target: server, upx: false }
+          
+          # Darwin (macOS) 平台
+          - { goos: darwin, goarch: amd64, target: server, upx: false }
+          - { goos: darwin, goarch: arm64, target: server, upx: false }
 
     steps:
+      # 关键步骤：在 checkout 之前安装 Node.js，否则 checkout@v4 会报错
+      - name: Install Node.js & UPX
+        run: |
+          if command -v apk > /dev/null; then
+            apk add --no-cache nodejs upx
+          elif command -v apt-get > /dev/null; then
+            apt-get update && apt-get install -y nodejs upx-ucl
+          else
+            echo "Unsupported package manager" && exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ---------- Download frontend ----------
       - name: Download Frontend Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: frontend-dist
           path: internal/server/app/dist
 
-      # ---------- Build ----------
       - name: Build Binary
         env:
           GOOS: ${{ matrix.goos }}
@@ -136,43 +83,33 @@ jobs:
           GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
         run: |
-          set -e
-
-          OUTPUT_NAME="${{ matrix.target }}-${{ matrix.goos }}-${{ matrix.goarch }}"
-
+          # 处理文件名后缀
+          ARM_VAL=""
           if [ "${{ matrix.goarch }}" = "arm" ]; then
-            OUTPUT_NAME="${OUTPUT_NAME}v${{ matrix.goarm }}"
+            ARM_VAL="v${{ matrix.goarm }}"
           fi
-
+          
+          EXT=""
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            OUTPUT_NAME="${OUTPUT_NAME}.exe"
+            EXT=".exe"
           fi
+          
+          FILENAME="${{ matrix.target }}-${{ matrix.goos }}-${{ matrix.goarch }}${ARM_VAL}${EXT}"
+          
+          # 执行编译
+          go build -ldflags="-s -w" -o "${FILENAME}" ./cmd/${{ matrix.target }}
+          
+          # 记录文件名供后续步骤使用
+          echo "CURRENT_FILENAME=${FILENAME}" >> $GITHUB_ENV
 
-          echo "Building $OUTPUT_NAME"
-
-          go build \
-            -trimpath \
-            -ldflags="-s -w" \
-            -o "$OUTPUT_NAME" \
-            ./cmd/${{ matrix.target }}
-
-          echo "BINARY_NAME=$OUTPUT_NAME" >> $GITHUB_ENV
-
-      # ---------- UPX (safe only) ----------
-      - name: Install and Run UPX
-        if: matrix.upx == true && matrix.goarch != 'arm'
+      - name: Run UPX Compression
+        if: matrix.upx == true
         run: |
-          if command -v apk >/dev/null; then
-            apk add --no-cache upx
-          else
-            apt-get update && apt-get install -y upx-ucl
-          fi
+          # 尝试压缩，即使失败也不中断工作流（某些架构不支持 UPX）
+          upx -9 "${{ env.CURRENT_FILENAME }}" || echo "UPX skipped for this platform"
 
-          upx -9 "${{ env.BINARY_NAME }}" || true
-
-      # ---------- Upload ----------
       - name: Upload Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.BINARY_NAME }}
-          path: ${{ env.BINARY_NAME }}
+          name: ${{ env.CURRENT_FILENAME }}
+          path: ${{ env.CURRENT_FILENAME }}
