@@ -1,5 +1,4 @@
 name: Build Multi-Platform Binaries
-
 on:
   push:
     paths:
@@ -10,85 +9,107 @@ on:
       - '.gitea/workflows/**'
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  # --- 任务 1: 构建前端 ---
+  build-frontend:
+    runs-on: node-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-          cache: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
-
+      
       - name: Build Frontend
         run: |
           cd web
           npm ci
           npm run build
-
-      - name: Copy Frontend to Embed Path
-        run: cp -r web/dist internal/server/app/dist
-
-      - name: Install UPX
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y upx-ucl
-
-      - name: Build all platforms
-        run: |
-          mkdir -p dist
-
-          # Linux amd64
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
-            -o dist/server-linux-amd64 ./cmd/server
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
-            -o dist/client-linux-amd64 ./cmd/client
-
-          # Linux arm64
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" \
-            -o dist/server-linux-arm64 ./cmd/server
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" \
-            -o dist/client-linux-arm64 ./cmd/client
-
-          # Darwin amd64
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
-            -o dist/server-darwin-amd64 ./cmd/server
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
-            -o dist/client-darwin-amd64 ./cmd/client
-
-          # Darwin arm64
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
-            -o dist/server-darwin-arm64 ./cmd/server
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
-            -o dist/client-darwin-arm64 ./cmd/client
-
-          # Windows amd64
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
-            -o dist/server-windows-amd64.exe ./cmd/server
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
-            -o dist/client-windows-amd64.exe ./cmd/client
-
-      - name: Compress with UPX
-        run: |
-          # UPX 压缩 Linux 和 Windows 二进制 (macOS 不支持)
-          upx -9 dist/server-linux-amd64 dist/client-linux-amd64 || true
-          upx -9 dist/server-linux-arm64 dist/client-linux-arm64 || true
-          upx -9 dist/server-windows-amd64.exe dist/client-windows-amd64.exe || true
-
-      - name: List artifacts
-        run: ls -lah dist/
-
-      - name: Upload artifacts
+      
+      - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: gotunnel-binaries
-          path: dist/
+          name: frontend-dist
+          path: web/dist
+          retention-days: 1
+
+  # --- 任务 2: 构建多平台二进制文件 ---
+  build-binaries:
+    needs: build-frontend
+    runs-on: golang-latest
+    strategy:
+      fail-fast: false # 即使某个平台失败，也继续构建其他平台
+      matrix:
+        include:
+          # Linux 平台
+          - { goos: linux, goarch: amd64, target: server, upx: true }
+          - { goos: linux, goarch: amd64, target: client, upx: true }
+          - { goos: linux, goarch: arm64, target: server, upx: true } # ARMv8 64-bit
+          - { goos: linux, goarch: arm64, target: client, upx: true }
+          # 针对 ARMv8 (v8l) 32位模式，使用 GOARM=7 确保最大兼容性
+          - { goos: linux, goarch: arm, goarm: 7, target: server, upx: true }
+          - { goos: linux, goarch: arm, goarm: 7, target: client, upx: true }
+          
+          # Windows 平台
+          - { goos: windows, goarch: amd64, target: server, upx: true }
+          - { goos: windows, goarch: amd64, target: client, upx: true }
+          - { goos: windows, goarch: arm64, target: server, upx: false }
+          
+          # Darwin (macOS) 平台
+          - { goos: darwin, goarch: amd64, target: server, upx: false }
+          - { goos: darwin, goarch: arm64, target: server, upx: false }
+
+    steps:
+      # 关键步骤：在 checkout 之前安装 Node.js，否则 checkout@v4 会报错
+      - name: Install Node.js & UPX
+        run: |
+          if command -v apk > /dev/null; then
+            apk add --no-cache nodejs upx
+          elif command -v apt-get > /dev/null; then
+            apt-get update && apt-get install -y nodejs upx-ucl
+          else
+            echo "Unsupported package manager" && exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-dist
+          path: internal/server/app/dist
+
+      - name: Build Binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: 0
+        run: |
+          # 处理文件名后缀
+          ARM_VAL=""
+          if [ "${{ matrix.goarch }}" = "arm" ]; then
+            ARM_VAL="v${{ matrix.goarm }}"
+          fi
+          
+          EXT=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            EXT=".exe"
+          fi
+          
+          FILENAME="${{ matrix.target }}-${{ matrix.goos }}-${{ matrix.goarch }}${ARM_VAL}${EXT}"
+          
+          # 执行编译
+          go build -ldflags="-s -w" -o "${FILENAME}" ./cmd/${{ matrix.target }}
+          
+          # 记录文件名供后续步骤使用
+          echo "CURRENT_FILENAME=${FILENAME}" >> $GITHUB_ENV
+
+      - name: Run UPX Compression
+        if: matrix.upx == true
+        run: |
+          # 尝试压缩，即使失败也不中断工作流（某些架构不支持 UPX）
+          upx -9 "${{ env.CURRENT_FILENAME }}" || echo "UPX skipped for this platform"
+
+      - name: Upload Binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.CURRENT_FILENAME }}
+          path: ${{ env.CURRENT_FILENAME }}
