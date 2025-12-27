@@ -2,8 +2,10 @@ package router
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
@@ -53,6 +55,7 @@ type PluginInfo struct {
 	Type        string `json:"type"`
 	Description string `json:"description"`
 	Source      string `json:"source"`
+	Icon        string `json:"icon,omitempty"`
 	Enabled     bool   `json:"enabled"`
 }
 
@@ -88,6 +91,7 @@ func RegisterRoutes(r *Router, app AppInterface) {
 	api.HandleFunc("/config/reload", h.handleReload)
 	api.HandleFunc("/plugins", h.handlePlugins)
 	api.HandleFunc("/plugin/", h.handlePlugin)
+	api.HandleFunc("/store/plugins", h.handleStorePlugins)
 }
 
 func (h *APIHandler) handleStatus(rw http.ResponseWriter, r *http.Request) {
@@ -233,7 +237,7 @@ func (h *APIHandler) getClient(rw http.ResponseWriter, clientID string) {
 	online, lastPing := h.server.GetClientStatus(clientID)
 	h.jsonResponse(rw, map[string]interface{}{
 		"id": client.ID, "nickname": client.Nickname, "rules": client.Rules,
-		"online": online, "last_ping": lastPing,
+		"plugins": client.Plugins, "online": online, "last_ping": lastPing,
 	})
 }
 
@@ -241,6 +245,7 @@ func (h *APIHandler) updateClient(rw http.ResponseWriter, r *http.Request, clien
 	var req struct {
 		Nickname string               `json:"nickname"`
 		Rules    []protocol.ProxyRule `json:"rules"`
+		Plugins  []db.ClientPlugin    `json:"plugins"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
@@ -255,6 +260,9 @@ func (h *APIHandler) updateClient(rw http.ResponseWriter, r *http.Request, clien
 
 	client.Nickname = req.Nickname
 	client.Rules = req.Rules
+	if req.Plugins != nil {
+		client.Plugins = req.Plugins
+	}
 	if err := h.clientStore.UpdateClient(client); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -517,4 +525,64 @@ func (h *APIHandler) installPluginsToClient(rw http.ResponseWriter, r *http.Requ
 		return
 	}
 	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+// StorePluginInfo 扩展商店插件信息
+type StorePluginInfo struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	Author      string `json:"author"`
+	Icon        string `json:"icon,omitempty"`
+	DownloadURL string `json:"download_url,omitempty"`
+}
+
+// handleStorePlugins 处理扩展商店插件列表
+func (h *APIHandler) handleStorePlugins(rw http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cfg := h.app.GetConfig()
+	storeURL := cfg.PluginStore.URL
+	if storeURL == "" {
+		h.jsonResponse(rw, map[string]interface{}{
+			"plugins":   []StorePluginInfo{},
+			"store_url": "",
+		})
+		return
+	}
+
+	// 从远程URL获取插件列表
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(storeURL)
+	if err != nil {
+		http.Error(rw, "Failed to fetch store: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(rw, "Store returned error", http.StatusBadGateway)
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(rw, "Failed to read response", http.StatusInternalServerError)
+		return
+	}
+
+	var plugins []StorePluginInfo
+	if err := json.Unmarshal(body, &plugins); err != nil {
+		http.Error(rw, "Invalid store format", http.StatusBadGateway)
+		return
+	}
+
+	h.jsonResponse(rw, map[string]interface{}{
+		"plugins":   plugins,
+		"store_url": storeURL,
+	})
 }

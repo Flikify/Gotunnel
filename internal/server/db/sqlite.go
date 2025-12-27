@@ -39,7 +39,8 @@ func (s *SQLiteStore) init() error {
 		CREATE TABLE IF NOT EXISTS clients (
 			id TEXT PRIMARY KEY,
 			nickname TEXT NOT NULL DEFAULT '',
-			rules TEXT NOT NULL DEFAULT '[]'
+			rules TEXT NOT NULL DEFAULT '[]',
+			plugins TEXT NOT NULL DEFAULT '[]'
 		)
 	`)
 	if err != nil {
@@ -48,6 +49,8 @@ func (s *SQLiteStore) init() error {
 
 	// 迁移：添加 nickname 列
 	s.db.Exec(`ALTER TABLE clients ADD COLUMN nickname TEXT NOT NULL DEFAULT ''`)
+	// 迁移：添加 plugins 列
+	s.db.Exec(`ALTER TABLE clients ADD COLUMN plugins TEXT NOT NULL DEFAULT '[]'`)
 
 	// 创建插件表
 	_, err = s.db.Exec(`
@@ -58,13 +61,21 @@ func (s *SQLiteStore) init() error {
 			source TEXT NOT NULL DEFAULT 'wasm',
 			description TEXT,
 			author TEXT,
+			icon TEXT,
 			checksum TEXT,
 			size INTEGER DEFAULT 0,
 			enabled INTEGER DEFAULT 1,
 			wasm_data BLOB
 		)
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// 迁移：添加 icon 列
+	s.db.Exec(`ALTER TABLE plugins ADD COLUMN icon TEXT`)
+
+	return nil
 }
 
 // Close 关闭数据库连接
@@ -77,7 +88,7 @@ func (s *SQLiteStore) GetAllClients() ([]Client, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT id, nickname, rules FROM clients`)
+	rows, err := s.db.Query(`SELECT id, nickname, rules, plugins FROM clients`)
 	if err != nil {
 		return nil, err
 	}
@@ -86,12 +97,15 @@ func (s *SQLiteStore) GetAllClients() ([]Client, error) {
 	var clients []Client
 	for rows.Next() {
 		var c Client
-		var rulesJSON string
-		if err := rows.Scan(&c.ID, &c.Nickname, &rulesJSON); err != nil {
+		var rulesJSON, pluginsJSON string
+		if err := rows.Scan(&c.ID, &c.Nickname, &rulesJSON, &pluginsJSON); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(rulesJSON), &c.Rules); err != nil {
 			c.Rules = []protocol.ProxyRule{}
+		}
+		if err := json.Unmarshal([]byte(pluginsJSON), &c.Plugins); err != nil {
+			c.Plugins = []ClientPlugin{}
 		}
 		clients = append(clients, c)
 	}
@@ -104,13 +118,16 @@ func (s *SQLiteStore) GetClient(id string) (*Client, error) {
 	defer s.mu.RUnlock()
 
 	var c Client
-	var rulesJSON string
-	err := s.db.QueryRow(`SELECT id, nickname, rules FROM clients WHERE id = ?`, id).Scan(&c.ID, &c.Nickname, &rulesJSON)
+	var rulesJSON, pluginsJSON string
+	err := s.db.QueryRow(`SELECT id, nickname, rules, plugins FROM clients WHERE id = ?`, id).Scan(&c.ID, &c.Nickname, &rulesJSON, &pluginsJSON)
 	if err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(rulesJSON), &c.Rules); err != nil {
 		c.Rules = []protocol.ProxyRule{}
+	}
+	if err := json.Unmarshal([]byte(pluginsJSON), &c.Plugins); err != nil {
+		c.Plugins = []ClientPlugin{}
 	}
 	return &c, nil
 }
@@ -124,7 +141,12 @@ func (s *SQLiteStore) CreateClient(c *Client) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`INSERT INTO clients (id, nickname, rules) VALUES (?, ?, ?)`, c.ID, c.Nickname, string(rulesJSON))
+	pluginsJSON, err := json.Marshal(c.Plugins)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO clients (id, nickname, rules, plugins) VALUES (?, ?, ?, ?)`,
+		c.ID, c.Nickname, string(rulesJSON), string(pluginsJSON))
 	return err
 }
 
@@ -137,7 +159,12 @@ func (s *SQLiteStore) UpdateClient(c *Client) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`UPDATE clients SET nickname = ?, rules = ? WHERE id = ?`, c.Nickname, string(rulesJSON), c.ID)
+	pluginsJSON, err := json.Marshal(c.Plugins)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE clients SET nickname = ?, rules = ?, plugins = ? WHERE id = ?`,
+		c.Nickname, string(rulesJSON), string(pluginsJSON), c.ID)
 	return err
 }
 
@@ -177,7 +204,7 @@ func (s *SQLiteStore) GetAllPlugins() ([]PluginData, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT name, version, type, source, description, author, checksum, size, enabled
+		SELECT name, version, type, source, description, author, icon, checksum, size, enabled
 		FROM plugins
 	`)
 	if err != nil {
@@ -189,12 +216,14 @@ func (s *SQLiteStore) GetAllPlugins() ([]PluginData, error) {
 	for rows.Next() {
 		var p PluginData
 		var enabled int
+		var icon sql.NullString
 		err := rows.Scan(&p.Name, &p.Version, &p.Type, &p.Source,
-			&p.Description, &p.Author, &p.Checksum, &p.Size, &enabled)
+			&p.Description, &p.Author, &icon, &p.Checksum, &p.Size, &enabled)
 		if err != nil {
 			return nil, err
 		}
 		p.Enabled = enabled == 1
+		p.Icon = icon.String
 		plugins = append(plugins, p)
 	}
 	return plugins, nil
@@ -207,15 +236,17 @@ func (s *SQLiteStore) GetPlugin(name string) (*PluginData, error) {
 
 	var p PluginData
 	var enabled int
+	var icon sql.NullString
 	err := s.db.QueryRow(`
-		SELECT name, version, type, source, description, author, checksum, size, enabled
+		SELECT name, version, type, source, description, author, icon, checksum, size, enabled
 		FROM plugins WHERE name = ?
 	`, name).Scan(&p.Name, &p.Version, &p.Type, &p.Source,
-		&p.Description, &p.Author, &p.Checksum, &p.Size, &enabled)
+		&p.Description, &p.Author, &icon, &p.Checksum, &p.Size, &enabled)
 	if err != nil {
 		return nil, err
 	}
 	p.Enabled = enabled == 1
+	p.Icon = icon.String
 	return &p, nil
 }
 
@@ -230,10 +261,10 @@ func (s *SQLiteStore) SavePlugin(p *PluginData) error {
 	}
 	_, err := s.db.Exec(`
 		INSERT OR REPLACE INTO plugins
-		(name, version, type, source, description, author, checksum, size, enabled, wasm_data)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(name, version, type, source, description, author, icon, checksum, size, enabled, wasm_data)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, p.Name, p.Version, p.Type, p.Source, p.Description, p.Author,
-		p.Checksum, p.Size, enabled, p.WASMData)
+		p.Icon, p.Checksum, p.Size, enabled, p.WASMData)
 	return err
 }
 

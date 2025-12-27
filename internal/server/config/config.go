@@ -10,8 +10,14 @@ import (
 
 // ServerConfig 服务端配置
 type ServerConfig struct {
-	Server ServerSettings `yaml:"server"`
-	Web    WebSettings    `yaml:"web"`
+	Server      ServerSettings      `yaml:"server"`
+	Web         WebSettings         `yaml:"web"`
+	PluginStore PluginStoreSettings `yaml:"plugin_store"`
+}
+
+// PluginStoreSettings 扩展商店设置
+type PluginStoreSettings struct {
+	URL string `yaml:"url"` // 扩展商店URL，例如 GitHub 仓库的 raw URL
 }
 
 // ServerSettings 服务端设置

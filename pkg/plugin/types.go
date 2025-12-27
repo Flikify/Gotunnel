@@ -31,6 +31,7 @@ type PluginMetadata struct {
 	Source       PluginSource      `json:"source"`                 // builtin 或 wasm
 	Description  string            `json:"description"`            // 人类可读描述
 	Author       string            `json:"author"`                 // Plugin 作者
+	Icon         string            `json:"icon,omitempty"`         // 图标文件名 (如 "socks5.png")
 	Checksum     string            `json:"checksum,omitempty"`     // WASM 二进制的 SHA256
 	Size         int64             `json:"size,omitempty"`         // WASM 二进制大小
 	Capabilities []string          `json:"capabilities,omitempty"` // 所需 host functions

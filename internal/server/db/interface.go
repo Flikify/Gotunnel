@@ -2,25 +2,34 @@ package db
 
 import "github.com/gotunnel/pkg/protocol"
 
+// ClientPlugin 客户端已安装的插件
+type ClientPlugin struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Enabled bool   `json:"enabled"`
+}
+
 // Client 客户端数据
 type Client struct {
 	ID       string               `json:"id"`
 	Nickname string               `json:"nickname,omitempty"`
 	Rules    []protocol.ProxyRule `json:"rules"`
+	Plugins  []ClientPlugin       `json:"plugins,omitempty"` // 已安装的插件
 }
 
 // PluginData 插件数据
 type PluginData struct {
-	Name        string            `json:"name"`
-	Version     string            `json:"version"`
-	Type        string            `json:"type"`
-	Source      string            `json:"source"`
-	Description string            `json:"description"`
-	Author      string            `json:"author"`
-	Checksum    string            `json:"checksum"`
-	Size        int64             `json:"size"`
-	Enabled     bool              `json:"enabled"`
-	WASMData    []byte            `json:"-"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Type        string `json:"type"`
+	Source      string `json:"source"`
+	Description string `json:"description"`
+	Author      string `json:"author"`
+	Icon        string `json:"icon"`
+	Checksum    string `json:"checksum"`
+	Size        int64  `json:"size"`
+	Enabled     bool   `json:"enabled"`
+	WASMData    []byte `json:"-"`
 }
 
 // ClientStore 客户端存储接口

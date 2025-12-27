@@ -5,6 +5,14 @@ export interface ProxyRule {
   local_port: number
   remote_port: number
   type?: string
+  enabled?: boolean
+}
+
+// 客户端已安装的插件
+export interface ClientPlugin {
+  name: string
+  version: string
+  enabled: boolean
 }
 
 // 客户端配置
@@ -12,6 +20,7 @@ export interface ClientConfig {
   id: string
   nickname?: string
   rules: ProxyRule[]
+  plugins?: ClientPlugin[]
 }
 
 // 客户端状态
@@ -28,6 +37,7 @@ export interface ClientDetail {
   id: string
   nickname?: string
   rules: ProxyRule[]
+  plugins?: ClientPlugin[]
   online: boolean
   last_ping?: string
 }
@@ -58,5 +68,17 @@ export interface PluginInfo {
   type: string
   description: string
   source: string
+  icon?: string
   enabled: boolean
+}
+
+// 扩展商店插件信息
+export interface StorePluginInfo {
+  name: string
+  version: string
+  type: string
+  description: string
+  author: string
+  icon?: string
+  download_url?: string
 }

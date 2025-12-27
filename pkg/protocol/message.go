@@ -65,10 +65,19 @@ type ProxyRule struct {
 	LocalIP    string `json:"local_ip" yaml:"local_ip"`       // tcp/udp 模式使用
 	LocalPort  int    `json:"local_port" yaml:"local_port"`   // tcp/udp 模式使用
 	RemotePort int    `json:"remote_port" yaml:"remote_port"` // 服务端监听端口
+	Enabled    *bool  `json:"enabled,omitempty" yaml:"enabled"` // 是否启用，默认为 true
 	// Plugin 支持字段
 	PluginName    string            `json:"plugin_name,omitempty" yaml:"plugin_name"`
 	PluginVersion string            `json:"plugin_version,omitempty" yaml:"plugin_version"`
 	PluginConfig  map[string]string `json:"plugin_config,omitempty" yaml:"plugin_config"`
+}
+
+// IsEnabled 检查规则是否启用，默认为 true
+func (r *ProxyRule) IsEnabled() bool {
+	if r.Enabled == nil {
+		return true
+	}
+	return *r.Enabled
 }
 
 // ProxyConfig 代理配置下发

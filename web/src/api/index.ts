@@ -1,5 +1,5 @@
 import { get, post, put, del } from '../config/axios'
-import type { ClientConfig, ClientStatus, ClientDetail, ServerStatus, PluginInfo } from '../types'
+import type { ClientConfig, ClientStatus, ClientDetail, ServerStatus, PluginInfo, StorePluginInfo } from '../types'
 
 // 重新导出 token 管理方法
 export { getToken, setToken, removeToken } from '../config/axios'
@@ -30,3 +30,6 @@ export const installPluginsToClient = (id: string, plugins: string[]) =>
 export const getPlugins = () => get<PluginInfo[]>('/plugins')
 export const enablePlugin = (name: string) => post(`/plugin/${name}/enable`)
 export const disablePlugin = (name: string) => post(`/plugin/${name}/disable`)
+
+// 扩展商店
+export const getStorePlugins = () => get<{ plugins: StorePluginInfo[], store_url: string }>('/store/plugins')

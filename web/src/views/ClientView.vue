@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NTable, NEmpty,
-  NFormItem, NInput, NInputNumber, NSelect, NModal, NCheckbox,
+  NFormItem, NInput, NInputNumber, NSelect, NModal, NCheckbox, NSwitch,
   NIcon, useMessage, useDialog
 } from 'naive-ui'
 import {
@@ -12,7 +12,7 @@ import {
   DownloadOutline
 } from '@vicons/ionicons5'
 import { getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, getPlugins, installPluginsToClient } from '../api'
-import type { ProxyRule, PluginInfo } from '../types'
+import type { ProxyRule, PluginInfo, ClientPlugin } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,6 +24,7 @@ const online = ref(false)
 const lastPing = ref('')
 const nickname = ref('')
 const rules = ref<ProxyRule[]>([])
+const clientPlugins = ref<ClientPlugin[]>([])
 const editing = ref(false)
 const editNickname = ref('')
 const editRules = ref<ProxyRule[]>([])
@@ -68,6 +69,7 @@ const loadClient = async () => {
     lastPing.value = data.last_ping || ''
     nickname.value = data.nickname || ''
     rules.value = data.rules || []
+    clientPlugins.value = data.plugins || []
   } catch (e) {
     console.error('Failed to load client', e)
   }
@@ -79,7 +81,8 @@ const startEdit = () => {
   editNickname.value = nickname.value
   editRules.value = rules.value.map(rule => ({
     ...rule,
-    type: rule.type || 'tcp'
+    type: rule.type || 'tcp',
+    enabled: rule.enabled !== false
   }))
   editing.value = true
 }
@@ -90,7 +93,7 @@ const cancelEdit = () => {
 
 const addRule = () => {
   editRules.value.push({
-    name: '', local_ip: '127.0.0.1', local_port: 80, remote_port: 8080, type: 'tcp'
+    name: '', local_ip: '127.0.0.1', local_port: 80, remote_port: 8080, type: 'tcp', enabled: true
   })
 }
 
@@ -165,6 +168,25 @@ const installPlugins = async () => {
     showInstallModal.value = false
   } catch (e: any) {
     message.error(e.response?.data || '安装失败')
+  }
+}
+
+const toggleClientPlugin = async (plugin: ClientPlugin) => {
+  const newEnabled = !plugin.enabled
+  const updatedPlugins = clientPlugins.value.map(p =>
+    p.name === plugin.name ? { ...p, enabled: newEnabled } : p
+  )
+  try {
+    await updateClient(clientId, {
+      id: clientId,
+      nickname: nickname.value,
+      rules: rules.value,
+      plugins: updatedPlugins
+    })
+    plugin.enabled = newEnabled
+    message.success(newEnabled ? `已启用 ${plugin.name}` : `已禁用 ${plugin.name}`)
+  } catch (e) {
+    message.error('操作失败')
   }
 }
 </script>
@@ -242,6 +264,7 @@ const installPlugins = async () => {
               <th>本地地址</th>
               <th>远程端口</th>
               <th>类型</th>
+              <th>状态</th>
             </tr>
           </thead>
           <tbody>
@@ -250,6 +273,11 @@ const installPlugins = async () => {
               <td>{{ rule.local_ip }}:{{ rule.local_port }}</td>
               <td>{{ rule.remote_port }}</td>
               <td><n-tag size="small">{{ rule.type || 'tcp' }}</n-tag></td>
+              <td>
+                <n-tag size="small" :type="rule.enabled !== false ? 'success' : 'default'">
+                  {{ rule.enabled !== false ? '启用' : '禁用' }}
+                </n-tag>
+              </td>
             </tr>
           </tbody>
         </n-table>
@@ -263,6 +291,9 @@ const installPlugins = async () => {
           </n-form-item>
           <n-card v-for="(rule, i) in editRules" :key="i" size="small">
             <n-space align="center">
+              <n-form-item label="启用" :show-feedback="false">
+                <n-switch v-model:value="rule.enabled" />
+              </n-form-item>
               <n-form-item label="名称" :show-feedback="false">
                 <n-input v-model:value="rule.name" placeholder="规则名称" />
               </n-form-item>
@@ -289,6 +320,29 @@ const installPlugins = async () => {
           </n-button>
         </n-space>
       </template>
+    </n-card>
+
+    <!-- 已安装插件卡片 -->
+    <n-card title="已安装扩展" style="margin-top: 16px;">
+      <n-empty v-if="clientPlugins.length === 0" description="暂无已安装扩展" />
+      <n-table v-else :bordered="false" :single-line="false">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>版本</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="plugin in clientPlugins" :key="plugin.name">
+            <td>{{ plugin.name }}</td>
+            <td>v{{ plugin.version }}</td>
+            <td>
+              <n-switch :value="plugin.enabled" @update:value="toggleClientPlugin(plugin)" />
+            </td>
+          </tr>
+        </tbody>
+      </n-table>
     </n-card>
 
     <!-- 安装插件模态框 -->
