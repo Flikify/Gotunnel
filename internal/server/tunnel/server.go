@@ -261,6 +261,26 @@ func (s *Server) unregisterClient(cs *ClientSession) {
 	delete(s.clients, cs.ID)
 }
 
+// stopProxyListeners 停止代理监听
+func (s *Server) stopProxyListeners(cs *ClientSession) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// 关闭 TCP 监听器
+	for port, ln := range cs.Listeners {
+		ln.Close()
+		s.portManager.Release(port)
+	}
+	cs.Listeners = make(map[int]net.Listener)
+
+	// 关闭 UDP 连接
+	for port, conn := range cs.UDPConns {
+		conn.Close()
+		s.portManager.Release(port)
+	}
+	cs.UDPConns = make(map[int]*net.UDPConn)
+}
+
 // startProxyListeners 启动代理监听
 func (s *Server) startProxyListeners(cs *ClientSession) {
 	for _, rule := range cs.Rules {
@@ -500,6 +520,18 @@ func (s *Server) PushConfigToClient(clientID string) error {
 		return err
 	}
 
+	// 停止旧的监听器
+	s.stopProxyListeners(cs)
+
+	// 更新规则
+	cs.mu.Lock()
+	cs.Rules = rules
+	cs.mu.Unlock()
+
+	// 启动新的监听器
+	s.startProxyListeners(cs)
+
+	// 发送配置到客户端
 	return s.sendProxyConfig(cs.Session, rules)
 }
 

@@ -29,8 +29,11 @@ const nickname = ref('')
 const rules = ref<ProxyRule[]>([])
 const clientPlugins = ref<ClientPlugin[]>([])
 const editing = ref(false)
-const editNickname = ref('')
 const editRules = ref<ProxyRule[]>([])
+
+// 重命名相关
+const showRenameModal = ref(false)
+const renameValue = ref('')
 
 // 内置类型
 const builtinTypes = [
@@ -129,8 +132,29 @@ onMounted(() => {
   loadPlugins()
 })
 
+// 打开重命名弹窗
+const openRenameModal = () => {
+  renameValue.value = nickname.value
+  showRenameModal.value = true
+}
+
+// 保存重命名
+const saveRename = async () => {
+  try {
+    await updateClient(clientId, {
+      id: clientId,
+      nickname: renameValue.value,
+      rules: rules.value
+    })
+    nickname.value = renameValue.value
+    showRenameModal.value = false
+    message.success('重命名成功')
+  } catch (e) {
+    message.error('重命名失败')
+  }
+}
+
 const startEdit = () => {
-  editNickname.value = nickname.value
   editRules.value = rules.value.map(rule => ({
     ...rule,
     type: rule.type || 'tcp',
@@ -155,7 +179,7 @@ const removeRule = (index: number) => {
 
 const saveEdit = async () => {
   try {
-    await updateClient(clientId, { id: clientId, nickname: editNickname.value, rules: editRules.value })
+    await updateClient(clientId, { id: clientId, nickname: nickname.value, rules: editRules.value })
     editing.value = false
     message.success('保存成功')
     loadClient()
@@ -218,6 +242,7 @@ const installPlugins = async () => {
     await installPluginsToClient(clientId, selectedPlugins.value)
     message.success(`已推送 ${selectedPlugins.value.length} 个插件到客户端`)
     showInstallModal.value = false
+    await loadClient() // 刷新客户端数据
   } catch (e: any) {
     message.error(e.response?.data || '安装失败')
   }
@@ -289,7 +314,10 @@ const savePluginConfig = async () => {
             <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
             返回
           </n-button>
-          <h2 style="margin: 0;">{{ nickname || clientId }}</h2>
+          <h2 style="margin: 0; cursor: pointer;" @click="openRenameModal" title="点击重命名">
+            {{ nickname || clientId }}
+            <n-icon size="16" style="margin-left: 4px; opacity: 0.5;"><CreateOutline /></n-icon>
+          </h2>
           <span v-if="nickname" style="color: #999; font-size: 12px;">{{ clientId }}</span>
           <n-tag :type="online ? 'success' : 'default'">
             {{ online ? '在线' : '离线' }}
@@ -379,9 +407,6 @@ const savePluginConfig = async () => {
       <!-- 编辑模式 -->
       <template v-else>
         <n-space vertical :size="12">
-          <n-form-item label="昵称" :show-feedback="false">
-            <n-input v-model:value="editNickname" placeholder="给客户端起个名字（可选）" style="max-width: 300px;" />
-          </n-form-item>
           <n-card v-for="(rule, i) in editRules" :key="i" size="small">
             <n-space align="center" wrap>
               <n-form-item label="启用" :show-feedback="false">
@@ -543,6 +568,19 @@ const savePluginConfig = async () => {
           <n-button type="primary" @click="savePluginConfig" :disabled="configSchema.length === 0">
             保存
           </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 重命名模态框 -->
+    <n-modal v-model:show="showRenameModal" preset="card" title="重命名客户端" style="width: 400px;">
+      <n-form-item label="昵称" :show-feedback="false">
+        <n-input v-model:value="renameValue" placeholder="给客户端起个名字（可选）" />
+      </n-form-item>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showRenameModal = false">取消</n-button>
+          <n-button type="primary" @click="saveRename">保存</n-button>
         </n-space>
       </template>
     </n-modal>
