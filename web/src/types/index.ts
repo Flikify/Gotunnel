@@ -6,6 +6,7 @@ export interface ProxyRule {
   remote_port: number
   type?: string
   enabled?: boolean
+  plugin_config?: Record<string, string>
 }
 
 // 客户端已安装的插件
@@ -25,6 +26,12 @@ export interface ConfigField {
   required?: boolean
   options?: string[]
   description?: string
+}
+
+// 规则表单模式
+export interface RuleSchema {
+  needs_local_addr: boolean
+  extra_fields?: ConfigField[]
 }
 
 // 插件配置响应
@@ -89,6 +96,7 @@ export interface PluginInfo {
   source: string
   icon?: string
   enabled: boolean
+  rule_schema?: RuleSchema
 }
 
 // 扩展商店插件信息

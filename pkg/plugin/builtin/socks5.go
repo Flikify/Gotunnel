@@ -50,6 +50,9 @@ func (p *SOCKS5Plugin) Metadata() plugin.PluginMetadata {
 		Capabilities: []string{
 			"dial", "read", "write", "close",
 		},
+		RuleSchema: &plugin.RuleSchema{
+			NeedsLocalAddr: false, // SOCKS5 不需要本地地址
+		},
 		ConfigSchema: []plugin.ConfigField{
 			{
 				Key:         "auth",

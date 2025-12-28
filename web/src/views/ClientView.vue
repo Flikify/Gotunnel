@@ -15,7 +15,7 @@ import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient,
   getPlugins, installPluginsToClient, getClientPluginConfig, updateClientPluginConfig
 } from '../api'
-import type { ProxyRule, PluginInfo, ClientPlugin, ConfigField } from '../types'
+import type { ProxyRule, PluginInfo, ClientPlugin, ConfigField, RuleSchema } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,13 +32,34 @@ const editing = ref(false)
 const editNickname = ref('')
 const editRules = ref<ProxyRule[]>([])
 
-const typeOptions = [
+// 内置类型
+const builtinTypes = [
   { label: 'TCP', value: 'tcp' },
   { label: 'UDP', value: 'udp' },
   { label: 'HTTP', value: 'http' },
-  { label: 'HTTPS', value: 'https' },
-  { label: 'SOCKS5', value: 'socks5' }
+  { label: 'HTTPS', value: 'https' }
 ]
+
+// 规则类型选项（内置 + 插件）
+const typeOptions = ref([...builtinTypes])
+
+// 插件 RuleSchema 映射
+const pluginRuleSchemas = ref<Record<string, RuleSchema>>({})
+
+// 判断类型是否需要本地地址
+const needsLocalAddr = (type: string) => {
+  // 内置类型
+  if (['tcp', 'udp'].includes(type)) return true
+  // 插件类型：查询 RuleSchema
+  const schema = pluginRuleSchemas.value[type]
+  return schema?.needs_local_addr ?? false
+}
+
+// 获取类型的额外字段
+const getExtraFields = (type: string): ConfigField[] => {
+  const schema = pluginRuleSchemas.value[type]
+  return schema?.extra_fields || []
+}
 
 // 插件安装相关
 const showInstallModal = ref(false)
@@ -56,6 +77,21 @@ const loadPlugins = async () => {
   try {
     const { data } = await getPlugins()
     availablePlugins.value = (data || []).filter(p => p.enabled)
+
+    // 更新类型选项：内置类型 + proxy 类型插件
+    const proxyPlugins = availablePlugins.value
+      .filter(p => p.type === 'proxy')
+      .map(p => ({ label: `${p.name.toUpperCase()} (插件)`, value: p.name }))
+    typeOptions.value = [...builtinTypes, ...proxyPlugins]
+
+    // 保存插件的 RuleSchema
+    const schemas: Record<string, RuleSchema> = {}
+    for (const p of availablePlugins.value) {
+      if (p.rule_schema) {
+        schemas[p.name] = p.rule_schema
+      }
+    }
+    pluginRuleSchemas.value = schemas
   } catch (e) {
     console.error('Failed to load plugins', e)
   }
@@ -63,6 +99,9 @@ const loadPlugins = async () => {
 
 const openInstallModal = async () => {
   await loadPlugins()
+  // 过滤掉已安装的插件
+  const installedNames = clientPlugins.value.map(p => p.name)
+  availablePlugins.value = availablePlugins.value.filter(p => !installedNames.includes(p.name))
   selectedPlugins.value = []
   showInstallModal.value = true
 }
@@ -85,7 +124,10 @@ const loadClient = async () => {
   }
 }
 
-onMounted(loadClient)
+onMounted(() => {
+  loadClient()
+  loadPlugins()
+})
 
 const startEdit = () => {
   editNickname.value = nickname.value
@@ -316,9 +358,14 @@ const savePluginConfig = async () => {
           <tbody>
             <tr v-for="rule in rules" :key="rule.name">
               <td>{{ rule.name || '未命名' }}</td>
-              <td>{{ rule.local_ip }}:{{ rule.local_port }}</td>
+              <td>
+                <template v-if="needsLocalAddr(rule.type || 'tcp')">
+                  {{ rule.local_ip }}:{{ rule.local_port }}
+                </template>
+                <span v-else style="color: #999;">-</span>
+              </td>
               <td>{{ rule.remote_port }}</td>
-              <td><n-tag size="small">{{ rule.type || 'tcp' }}</n-tag></td>
+              <td><n-tag size="small">{{ (rule.type || 'tcp').toUpperCase() }}</n-tag></td>
               <td>
                 <n-tag size="small" :type="rule.enabled !== false ? 'success' : 'default'">
                   {{ rule.enabled !== false ? '启用' : '禁用' }}
@@ -336,7 +383,7 @@ const savePluginConfig = async () => {
             <n-input v-model:value="editNickname" placeholder="给客户端起个名字（可选）" style="max-width: 300px;" />
           </n-form-item>
           <n-card v-for="(rule, i) in editRules" :key="i" size="small">
-            <n-space align="center">
+            <n-space align="center" wrap>
               <n-form-item label="启用" :show-feedback="false">
                 <n-switch v-model:value="rule.enabled" />
               </n-form-item>
@@ -344,17 +391,31 @@ const savePluginConfig = async () => {
                 <n-input v-model:value="rule.name" placeholder="规则名称" />
               </n-form-item>
               <n-form-item label="类型" :show-feedback="false">
-                <n-select v-model:value="rule.type" :options="typeOptions" style="width: 100px;" />
+                <n-select v-model:value="rule.type" :options="typeOptions" style="width: 140px;" />
               </n-form-item>
-              <n-form-item label="本地IP" :show-feedback="false">
-                <n-input v-model:value="rule.local_ip" placeholder="127.0.0.1" />
-              </n-form-item>
-              <n-form-item label="本地端口" :show-feedback="false">
-                <n-input-number v-model:value="rule.local_port" :show-button="false" />
-              </n-form-item>
+              <!-- 仅 tcp/udp 显示本地地址 -->
+              <template v-if="needsLocalAddr(rule.type || 'tcp')">
+                <n-form-item label="本地IP" :show-feedback="false">
+                  <n-input v-model:value="rule.local_ip" placeholder="127.0.0.1" />
+                </n-form-item>
+                <n-form-item label="本地端口" :show-feedback="false">
+                  <n-input-number v-model:value="rule.local_port" :show-button="false" />
+                </n-form-item>
+              </template>
               <n-form-item label="远程端口" :show-feedback="false">
                 <n-input-number v-model:value="rule.remote_port" :show-button="false" />
               </n-form-item>
+              <!-- 插件额外字段 -->
+              <template v-for="field in getExtraFields(rule.type || '')" :key="field.key">
+                <n-form-item :label="field.label" :show-feedback="false">
+                  <n-input
+                    v-if="field.type === 'string'"
+                    :value="rule.plugin_config?.[field.key] || field.default || ''"
+                    @update:value="(v: string) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v }"
+                    :placeholder="field.description"
+                  />
+                </n-form-item>
+              </template>
               <n-button v-if="editRules.length > 1" quaternary type="error" @click="removeRule(i)">
                 <template #icon><n-icon><TrashOutline /></n-icon></template>
               </n-button>

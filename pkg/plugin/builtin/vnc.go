@@ -34,6 +34,18 @@ func (p *VNCPlugin) Metadata() plugin.PluginMetadata {
 		Capabilities: []string{
 			"dial", "read", "write", "close",
 		},
+		RuleSchema: &plugin.RuleSchema{
+			NeedsLocalAddr: false,
+			ExtraFields: []plugin.ConfigField{
+				{
+					Key:         "vnc_addr",
+					Label:       "VNC 地址",
+					Type:        plugin.ConfigFieldString,
+					Default:     "127.0.0.1:5900",
+					Description: "客户端本地 VNC 服务地址",
+				},
+			},
+		},
 	}
 }
 

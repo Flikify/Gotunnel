@@ -525,14 +525,35 @@ func (s *Server) GetPluginList() []router.PluginInfo {
 	}
 
 	for _, info := range s.pluginRegistry.List() {
-		result = append(result, router.PluginInfo{
+		pi := router.PluginInfo{
 			Name:        info.Metadata.Name,
 			Version:     info.Metadata.Version,
 			Type:        string(info.Metadata.Type),
 			Description: info.Metadata.Description,
 			Source:      string(info.Metadata.Source),
 			Enabled:     info.Enabled,
-		})
+		}
+
+		// 转换 RuleSchema
+		if info.Metadata.RuleSchema != nil {
+			rs := &router.RuleSchema{
+				NeedsLocalAddr: info.Metadata.RuleSchema.NeedsLocalAddr,
+			}
+			for _, f := range info.Metadata.RuleSchema.ExtraFields {
+				rs.ExtraFields = append(rs.ExtraFields, router.ConfigField{
+					Key:         f.Key,
+					Label:       f.Label,
+					Type:        string(f.Type),
+					Default:     f.Default,
+					Required:    f.Required,
+					Options:     f.Options,
+					Description: f.Description,
+				})
+			}
+			pi.RuleSchema = rs
+		}
+
+		result = append(result, pi)
 	}
 	return result
 }

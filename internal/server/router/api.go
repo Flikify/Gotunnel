@@ -62,15 +62,22 @@ type ConfigField struct {
 	Description string   `json:"description,omitempty"`
 }
 
+// RuleSchema 规则表单模式
+type RuleSchema struct {
+	NeedsLocalAddr bool          `json:"needs_local_addr"`
+	ExtraFields    []ConfigField `json:"extra_fields,omitempty"`
+}
+
 // PluginInfo 插件信息
 type PluginInfo struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Type        string `json:"type"`
-	Description string `json:"description"`
-	Source      string `json:"source"`
-	Icon        string `json:"icon,omitempty"`
-	Enabled     bool   `json:"enabled"`
+	Name        string      `json:"name"`
+	Version     string      `json:"version"`
+	Type        string      `json:"type"`
+	Description string      `json:"description"`
+	Source      string      `json:"source"`
+	Icon        string      `json:"icon,omitempty"`
+	Enabled     bool        `json:"enabled"`
+	RuleSchema  *RuleSchema `json:"rule_schema,omitempty"`
 }
 
 // AppInterface 应用接口
