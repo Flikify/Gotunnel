@@ -33,6 +33,18 @@ type PluginData struct {
 	WASMData    []byte `json:"-"`
 }
 
+// JSPlugin JS 插件数据
+type JSPlugin struct {
+	Name        string            `json:"name"`
+	Source      string            `json:"source"`
+	Description string            `json:"description"`
+	Author      string            `json:"author"`
+	AutoPush    []string          `json:"auto_push"`
+	Config      map[string]string `json:"config"`
+	AutoStart   bool              `json:"auto_start"`
+	Enabled     bool              `json:"enabled"`
+}
+
 // ClientStore 客户端存储接口
 type ClientStore interface {
 	GetAllClients() ([]Client, error)
@@ -55,9 +67,19 @@ type PluginStore interface {
 	GetPluginWASM(name string) ([]byte, error)
 }
 
+// JSPluginStore JS 插件存储接口
+type JSPluginStore interface {
+	GetAllJSPlugins() ([]JSPlugin, error)
+	GetJSPlugin(name string) (*JSPlugin, error)
+	SaveJSPlugin(p *JSPlugin) error
+	DeleteJSPlugin(name string) error
+	SetJSPluginEnabled(name string, enabled bool) error
+}
+
 // Store 统一存储接口
 type Store interface {
 	ClientStore
 	PluginStore
+	JSPluginStore
 	Close() error
 }

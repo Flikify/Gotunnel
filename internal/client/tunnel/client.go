@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gotunnel/pkg/plugin"
+	"github.com/gotunnel/pkg/plugin/script"
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/relay"
 	"github.com/hashicorp/yamux"
@@ -38,7 +39,7 @@ type Client struct {
 	rules           []protocol.ProxyRule
 	mu              sync.RWMutex
 	pluginRegistry  *plugin.Registry
-	runningPlugins  map[string]plugin.ClientHandler // 运行中的客户端插件
+	runningPlugins  map[string]plugin.ClientPlugin // 运行中的客户端插件
 	pluginMu        sync.RWMutex
 }
 
@@ -51,7 +52,7 @@ func NewClient(serverAddr, token, id string) *Client {
 		ServerAddr:     serverAddr,
 		Token:          token,
 		ID:             id,
-		runningPlugins: make(map[string]plugin.ClientHandler),
+		runningPlugins: make(map[string]plugin.ClientPlugin),
 	}
 }
 
@@ -203,6 +204,8 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handleClientPluginStart(stream, msg)
 	case protocol.MsgTypeClientPluginConn:
 		c.handleClientPluginConn(stream, msg)
+	case protocol.MsgTypeJSPluginInstall:
+		c.handleJSPluginInstall(stream, msg)
 	}
 }
 
@@ -368,7 +371,7 @@ func (c *Client) handlePluginConfig(msg *protocol.Message) {
 
 	// 应用配置到插件
 	if c.pluginRegistry != nil {
-		handler, err := c.pluginRegistry.Get(cfg.PluginName)
+		handler, err := c.pluginRegistry.GetClient(cfg.PluginName)
 		if err != nil {
 			log.Printf("[Client] Plugin %s not found: %v", cfg.PluginName, err)
 			return
@@ -399,7 +402,7 @@ func (c *Client) handleClientPluginStart(stream net.Conn, msg *protocol.Message)
 		return
 	}
 
-	handler, err := c.pluginRegistry.GetClientPlugin(req.PluginName)
+	handler, err := c.pluginRegistry.GetClient(req.PluginName)
 	if err != nil {
 		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", err.Error())
 		return
@@ -461,4 +464,69 @@ func (c *Client) handleClientPluginConn(stream net.Conn, msg *protocol.Message) 
 
 	// 让插件处理连接
 	handler.HandleConn(stream)
+}
+
+// handleJSPluginInstall 处理 JS 插件安装请求
+func (c *Client) handleJSPluginInstall(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var req protocol.JSPluginInstallRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		c.sendJSPluginResult(stream, "", false, err.Error())
+		return
+	}
+
+	log.Printf("[Client] Installing JS plugin: %s", req.PluginName)
+
+	// 创建 JS 插件
+	jsPlugin, err := script.NewJSPlugin(req.PluginName, req.Source)
+	if err != nil {
+		c.sendJSPluginResult(stream, req.PluginName, false, err.Error())
+		return
+	}
+
+	// 注册到 registry
+	if c.pluginRegistry != nil {
+		c.pluginRegistry.RegisterClient(jsPlugin)
+	}
+
+	log.Printf("[Client] JS plugin %s installed", req.PluginName)
+	c.sendJSPluginResult(stream, req.PluginName, true, "")
+
+	// 自动启动
+	if req.AutoStart {
+		c.startJSPlugin(jsPlugin, req)
+	}
+}
+
+// sendJSPluginResult 发送 JS 插件安装结果
+func (c *Client) sendJSPluginResult(stream net.Conn, name string, success bool, errMsg string) {
+	result := protocol.JSPluginInstallResult{
+		PluginName: name,
+		Success:    success,
+		Error:      errMsg,
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeJSPluginResult, result)
+	protocol.WriteMessage(stream, msg)
+}
+
+// startJSPlugin 启动 JS 插件
+func (c *Client) startJSPlugin(handler plugin.ClientPlugin, req protocol.JSPluginInstallRequest) {
+	if err := handler.Init(req.Config); err != nil {
+		log.Printf("[Client] JS plugin %s init error: %v", req.PluginName, err)
+		return
+	}
+
+	localAddr, err := handler.Start()
+	if err != nil {
+		log.Printf("[Client] JS plugin %s start error: %v", req.PluginName, err)
+		return
+	}
+
+	key := req.PluginName + ":" + req.RuleName
+	c.pluginMu.Lock()
+	c.runningPlugins[key] = handler
+	c.pluginMu.Unlock()
+
+	log.Printf("[Client] JS plugin %s started at %s", req.PluginName, localAddr)
 }

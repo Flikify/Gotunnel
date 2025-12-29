@@ -111,3 +111,15 @@ export interface StorePluginInfo {
   icon?: string
   download_url?: string
 }
+
+// JS 插件信息
+export interface JSPlugin {
+  name: string
+  source: string
+  description: string
+  author: string
+  auto_push: string[]
+  config: Record<string, string>
+  auto_start: boolean
+  enabled: boolean
+}

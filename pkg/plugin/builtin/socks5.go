@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	Register(NewSOCKS5Plugin())
+	RegisterServer(NewSOCKS5Plugin())
 }
 
 const (
@@ -39,8 +39,8 @@ func NewSOCKS5Plugin() *SOCKS5Plugin {
 }
 
 // Metadata 返回 plugin 信息
-func (p *SOCKS5Plugin) Metadata() plugin.PluginMetadata {
-	return plugin.PluginMetadata{
+func (p *SOCKS5Plugin) Metadata() plugin.Metadata {
+	return plugin.Metadata{
 		Name:        "socks5",
 		Version:     "1.0.0",
 		Type:        plugin.PluginTypeProxy,

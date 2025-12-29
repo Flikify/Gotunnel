@@ -1,5 +1,5 @@
 import { get, post, put, del } from '../config/axios'
-import type { ClientConfig, ClientStatus, ClientDetail, ServerStatus, PluginInfo, StorePluginInfo, PluginConfigResponse } from '../types'
+import type { ClientConfig, ClientStatus, ClientDetail, ServerStatus, PluginInfo, StorePluginInfo, PluginConfigResponse, JSPlugin } from '../types'
 
 // 重新导出 token 管理方法
 export { getToken, setToken, removeToken } from '../config/axios'
@@ -39,3 +39,12 @@ export const getClientPluginConfig = (clientId: string, pluginName: string) =>
   get<PluginConfigResponse>(`/client-plugin/${clientId}/${pluginName}/config`)
 export const updateClientPluginConfig = (clientId: string, pluginName: string, config: Record<string, string>) =>
   put(`/client-plugin/${clientId}/${pluginName}/config`, { config })
+
+// JS 插件管理
+export const getJSPlugins = () => get<JSPlugin[]>('/js-plugins')
+export const createJSPlugin = (plugin: JSPlugin) => post('/js-plugins', plugin)
+export const getJSPlugin = (name: string) => get<JSPlugin>(`/js-plugin/${name}`)
+export const updateJSPlugin = (name: string, plugin: JSPlugin) => put(`/js-plugin/${name}`, plugin)
+export const deleteJSPlugin = (name: string) => del(`/js-plugin/${name}`)
+export const pushJSPluginToClient = (pluginName: string, clientId: string) =>
+  post(`/js-plugin/${pluginName}/push/${clientId}`)

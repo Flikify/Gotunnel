@@ -45,19 +45,21 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // WebServer Web控制台服务
 type WebServer struct {
-	ClientStore db.ClientStore
-	Server      router.ServerInterface
-	Config      *config.ServerConfig
-	ConfigPath  string
+	ClientStore   db.ClientStore
+	Server        router.ServerInterface
+	Config        *config.ServerConfig
+	ConfigPath    string
+	JSPluginStore db.JSPluginStore
 }
 
 // NewWebServer 创建Web服务
-func NewWebServer(cs db.ClientStore, srv router.ServerInterface, cfg *config.ServerConfig, cfgPath string) *WebServer {
+func NewWebServer(cs db.ClientStore, srv router.ServerInterface, cfg *config.ServerConfig, cfgPath string, jsStore db.JSPluginStore) *WebServer {
 	return &WebServer{
-		ClientStore: cs,
-		Server:      srv,
-		Config:      cfg,
-		ConfigPath:  cfgPath,
+		ClientStore:   cs,
+		Server:        srv,
+		Config:        cfg,
+		ConfigPath:    cfgPath,
+		JSPluginStore: jsStore,
 	}
 }
 
@@ -145,4 +147,9 @@ func (w *WebServer) GetConfigPath() string {
 // SaveConfig 保存配置
 func (w *WebServer) SaveConfig() error {
 	return config.SaveServerConfig(w.ConfigPath, w.Config)
+}
+
+// GetJSPluginStore 获取 JS 插件存储
+func (w *WebServer) GetJSPluginStore() db.JSPluginStore {
+	return w.JSPluginStore
 }

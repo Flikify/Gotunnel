@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	Register(NewVNCPlugin())
+	RegisterServer(NewVNCPlugin())
 }
 
 // VNCPlugin VNC 远程桌面插件
@@ -23,13 +23,13 @@ func NewVNCPlugin() *VNCPlugin {
 }
 
 // Metadata 返回 plugin 信息
-func (p *VNCPlugin) Metadata() plugin.PluginMetadata {
-	return plugin.PluginMetadata{
+func (p *VNCPlugin) Metadata() plugin.Metadata {
+	return plugin.Metadata{
 		Name:        "vnc",
 		Version:     "1.0.0",
 		Type:        plugin.PluginTypeApp,
 		Source:      plugin.PluginSourceBuiltin,
-		RunAt:       plugin.SideServer, // 当前为服务端中继模式
+		RunAt:       plugin.SideServer,
 		Description: "VNC remote desktop relay",
 		Author:      "GoTunnel",
 		RuleSchema: &plugin.RuleSchema{

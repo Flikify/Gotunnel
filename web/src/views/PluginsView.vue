@@ -3,19 +3,23 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NStatistic, NGrid, NGi,
-  NEmpty, NSpin, NIcon, NSwitch, NTabs, NTabPane, useMessage
+  NEmpty, NSpin, NIcon, NSwitch, NTabs, NTabPane, useMessage,
+  NSelect
 } from 'naive-ui'
-import { ArrowBackOutline, ExtensionPuzzleOutline, StorefrontOutline } from '@vicons/ionicons5'
-import { getPlugins, enablePlugin, disablePlugin, getStorePlugins } from '../api'
-import type { PluginInfo, StorePluginInfo } from '../types'
+import { ArrowBackOutline, ExtensionPuzzleOutline, StorefrontOutline, CodeSlashOutline } from '@vicons/ionicons5'
+import { getPlugins, enablePlugin, disablePlugin, getStorePlugins, getJSPlugins, pushJSPluginToClient, getClients } from '../api'
+import type { PluginInfo, StorePluginInfo, JSPlugin, ClientStatus } from '../types'
 
 const router = useRouter()
 const message = useMessage()
 const plugins = ref<PluginInfo[]>([])
 const storePlugins = ref<StorePluginInfo[]>([])
+const jsPlugins = ref<JSPlugin[]>([])
+const clients = ref<ClientStatus[]>([])
 const storeUrl = ref('')
 const loading = ref(true)
 const storeLoading = ref(false)
+const jsLoading = ref(false)
 const activeTab = ref('installed')
 
 const loadPlugins = async () => {
@@ -89,9 +93,58 @@ const handleTabChange = (tab: string) => {
   if (tab === 'store' && storePlugins.value.length === 0) {
     loadStorePlugins()
   }
+  if (tab === 'js' && jsPlugins.value.length === 0) {
+    loadJSPlugins()
+  }
 }
 
-onMounted(loadPlugins)
+// JS 插件相关
+/* 安全加固：暂时禁用创建/删除功能
+const showJSModal = ref(false)
+const jsForm = ref<JSPlugin>({...})
+const configItems = ref<Array<{ key: string; value: string }>>([])
+const configToObject = () => {...}
+const handleCreateJSPlugin = async () => {...}
+const handleDeleteJSPlugin = async (name: string) => {...}
+const resetJSForm = () => {...}
+*/
+
+const loadJSPlugins = async () => {
+  jsLoading.value = true
+  try {
+    const { data } = await getJSPlugins()
+    jsPlugins.value = data || []
+  } catch (e) {
+    console.error('Failed to load JS plugins', e)
+  } finally {
+    jsLoading.value = false
+  }
+}
+
+const loadClients = async () => {
+  try {
+    const { data } = await getClients()
+    clients.value = data || []
+  } catch (e) {
+    console.error('Failed to load clients', e)
+  }
+}
+
+const handlePushJSPlugin = async (pluginName: string, clientId: string) => {
+  try {
+    await pushJSPluginToClient(pluginName, clientId)
+    message.success(`已推送 ${pluginName} 到 ${clientId}`)
+  } catch (e) {
+    message.error('推送失败')
+  }
+}
+
+const onlineClients = computed(() => clients.value.filter(c => c.online))
+
+onMounted(() => {
+  loadPlugins()
+  loadClients()
+})
 </script>
 
 <template>
@@ -193,6 +246,69 @@ onMounted(loadPlugins)
           </n-grid>
         </n-spin>
       </n-tab-pane>
+
+      <!-- JS 插件 -->
+      <n-tab-pane name="js" tab="JS 插件">
+        <!-- 安全加固：暂时禁用 Web UI 创建功能
+        <n-space justify="end" style="margin-bottom: 16px;">
+          <n-button type="primary" @click="showJSModal = true">
+            <template #icon><n-icon><AddOutline /></n-icon></template>
+            新建 JS 插件
+          </n-button>
+        </n-space>
+        -->
+
+        <n-spin :show="jsLoading">
+          <n-empty v-if="!jsLoading && jsPlugins.length === 0" description="暂无 JS 插件" />
+
+          <n-grid v-else :cols="2" :x-gap="16" :y-gap="16" responsive="screen" cols-s="1">
+            <n-gi v-for="plugin in jsPlugins" :key="plugin.name">
+              <n-card hoverable>
+                <template #header>
+                  <n-space align="center">
+                    <n-icon size="24" color="#f0a020"><CodeSlashOutline /></n-icon>
+                    <span>{{ plugin.name }}</span>
+                  </n-space>
+                </template>
+                <template #header-extra>
+                  <n-space>
+                    <n-select
+                      v-if="onlineClients.length > 0"
+                      placeholder="推送到..."
+                      size="small"
+                      style="width: 120px;"
+                      :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))"
+                      @update:value="(v: string) => handlePushJSPlugin(plugin.name, v)"
+                    />
+                    <!-- 安全加固：暂时禁用删除功能
+                    <n-popconfirm @positive-click="handleDeleteJSPlugin(plugin.name)">
+                      <template #trigger>
+                        <n-button size="small" type="error" quaternary>删除</n-button>
+                      </template>
+                      确定删除此插件？
+                    </n-popconfirm>
+                    -->
+                  </n-space>
+                </template>
+                <n-space vertical :size="8">
+                  <n-space>
+                    <n-tag size="small" type="warning">JS</n-tag>
+                    <n-tag v-if="plugin.auto_start" size="small" type="success">自动启动</n-tag>
+                  </n-space>
+                  <p style="margin: 0; color: #666;">{{ plugin.description || '无描述' }}</p>
+                  <p v-if="plugin.author" style="margin: 0; color: #999; font-size: 12px;">作者: {{ plugin.author }}</p>
+                </n-space>
+              </n-card>
+            </n-gi>
+          </n-grid>
+        </n-spin>
+      </n-tab-pane>
     </n-tabs>
+
+    <!-- 安全加固：暂时禁用创建 JS 插件 Modal
+    <n-modal v-model:show="showJSModal" preset="card" title="新建 JS 插件" style="width: 600px;">
+      ... 已屏蔽 ...
+    </n-modal>
+    -->
   </div>
 </template>

@@ -75,6 +75,24 @@ func (s *SQLiteStore) init() error {
 	// 迁移：添加 icon 列
 	s.db.Exec(`ALTER TABLE plugins ADD COLUMN icon TEXT`)
 
+	// 创建 JS 插件表
+	_, err = s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS js_plugins (
+			name TEXT PRIMARY KEY,
+			source TEXT NOT NULL,
+			description TEXT,
+			author TEXT,
+			auto_push TEXT NOT NULL DEFAULT '[]',
+			config TEXT NOT NULL DEFAULT '',
+			auto_start INTEGER DEFAULT 1,
+			enabled INTEGER DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -295,4 +313,106 @@ func (s *SQLiteStore) GetPluginWASM(name string) ([]byte, error) {
 	var data []byte
 	err := s.db.QueryRow(`SELECT wasm_data FROM plugins WHERE name = ?`, name).Scan(&data)
 	return data, err
+}
+
+// ========== JS 插件存储方法 ==========
+
+// GetAllJSPlugins 获取所有 JS 插件
+func (s *SQLiteStore) GetAllJSPlugins() ([]JSPlugin, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rows, err := s.db.Query(`
+		SELECT name, source, description, author, auto_push, config, auto_start, enabled
+		FROM js_plugins
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var plugins []JSPlugin
+	for rows.Next() {
+		var p JSPlugin
+		var autoPushJSON, configJSON string
+		var autoStart, enabled int
+		err := rows.Scan(&p.Name, &p.Source, &p.Description, &p.Author,
+			&autoPushJSON, &configJSON, &autoStart, &enabled)
+		if err != nil {
+			return nil, err
+		}
+		json.Unmarshal([]byte(autoPushJSON), &p.AutoPush)
+		json.Unmarshal([]byte(configJSON), &p.Config)
+		p.AutoStart = autoStart == 1
+		p.Enabled = enabled == 1
+		plugins = append(plugins, p)
+	}
+	return plugins, nil
+}
+
+// GetJSPlugin 获取单个 JS 插件
+func (s *SQLiteStore) GetJSPlugin(name string) (*JSPlugin, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var p JSPlugin
+	var autoPushJSON, configJSON string
+	var autoStart, enabled int
+	err := s.db.QueryRow(`
+		SELECT name, source, description, author, auto_push, config, auto_start, enabled
+		FROM js_plugins WHERE name = ?
+	`, name).Scan(&p.Name, &p.Source, &p.Description, &p.Author,
+		&autoPushJSON, &configJSON, &autoStart, &enabled)
+	if err != nil {
+		return nil, err
+	}
+	json.Unmarshal([]byte(autoPushJSON), &p.AutoPush)
+	json.Unmarshal([]byte(configJSON), &p.Config)
+	p.AutoStart = autoStart == 1
+	p.Enabled = enabled == 1
+	return &p, nil
+}
+
+// SaveJSPlugin 保存 JS 插件
+func (s *SQLiteStore) SaveJSPlugin(p *JSPlugin) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	autoPushJSON, _ := json.Marshal(p.AutoPush)
+	configJSON, _ := json.Marshal(p.Config)
+	autoStart, enabled := 0, 0
+	if p.AutoStart {
+		autoStart = 1
+	}
+	if p.Enabled {
+		enabled = 1
+	}
+
+	_, err := s.db.Exec(`
+		INSERT OR REPLACE INTO js_plugins
+		(name, source, description, author, auto_push, config, auto_start, enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, p.Name, p.Source, p.Description, p.Author,
+		string(autoPushJSON), string(configJSON), autoStart, enabled)
+	return err
+}
+
+// DeleteJSPlugin 删除 JS 插件
+func (s *SQLiteStore) DeleteJSPlugin(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`DELETE FROM js_plugins WHERE name = ?`, name)
+	return err
+}
+
+// SetJSPluginEnabled 设置 JS 插件启用状态
+func (s *SQLiteStore) SetJSPluginEnabled(name string, enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	val := 0
+	if enabled {
+		val = 1
+	}
+	_, err := s.db.Exec(`UPDATE js_plugins SET enabled = ? WHERE name = ?`, val, name)
+	return err
 }

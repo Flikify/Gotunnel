@@ -8,23 +8,23 @@ import (
 
 // Registry 管理可用的 plugins
 type Registry struct {
-	serverPlugins map[string]ProxyHandler  // 服务端插件
-	clientPlugins map[string]ClientHandler // 客户端插件
-	enabled       map[string]bool          // 启用状态
+	serverPlugins map[string]ServerPlugin // 服务端插件
+	clientPlugins map[string]ClientPlugin // 客户端插件
+	enabled       map[string]bool         // 启用状态
 	mu            sync.RWMutex
 }
 
 // NewRegistry 创建 plugin 注册表
 func NewRegistry() *Registry {
 	return &Registry{
-		serverPlugins: make(map[string]ProxyHandler),
-		clientPlugins: make(map[string]ClientHandler),
+		serverPlugins: make(map[string]ServerPlugin),
+		clientPlugins: make(map[string]ClientPlugin),
 		enabled:       make(map[string]bool),
 	}
 }
 
-// RegisterBuiltin 注册服务端插件
-func (r *Registry) RegisterBuiltin(handler ProxyHandler) error {
+// RegisterServer 注册服务端插件
+func (r *Registry) RegisterServer(handler ServerPlugin) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -42,8 +42,8 @@ func (r *Registry) RegisterBuiltin(handler ProxyHandler) error {
 	return nil
 }
 
-// RegisterClientPlugin 注册客户端插件
-func (r *Registry) RegisterClientPlugin(handler ClientHandler) error {
+// RegisterClient 注册客户端插件
+func (r *Registry) RegisterClient(handler ClientPlugin) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -61,23 +61,22 @@ func (r *Registry) RegisterClientPlugin(handler ClientHandler) error {
 	return nil
 }
 
-// Get 返回指定代理类型的服务端 handler
-func (r *Registry) Get(proxyType string) (ProxyHandler, error) {
+// GetServer 返回服务端插件
+func (r *Registry) GetServer(name string) (ServerPlugin, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if handler, ok := r.serverPlugins[proxyType]; ok {
-		if !r.enabled[proxyType] {
-			return nil, fmt.Errorf("plugin %s is disabled", proxyType)
+	if handler, ok := r.serverPlugins[name]; ok {
+		if !r.enabled[name] {
+			return nil, fmt.Errorf("plugin %s is disabled", name)
 		}
 		return handler, nil
 	}
-
-	return nil, fmt.Errorf("plugin %s not found", proxyType)
+	return nil, fmt.Errorf("plugin %s not found", name)
 }
 
-// GetClientPlugin 返回指定类型的客户端 handler
-func (r *Registry) GetClientPlugin(name string) (ClientHandler, error) {
+// GetClient 返回客户端插件
+func (r *Registry) GetClient(name string) (ClientPlugin, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -87,29 +86,26 @@ func (r *Registry) GetClientPlugin(name string) (ClientHandler, error) {
 		}
 		return handler, nil
 	}
-
 	return nil, fmt.Errorf("client plugin %s not found", name)
 }
 
 // List 返回所有可用的 plugins
-func (r *Registry) List() []PluginInfo {
+func (r *Registry) List() []Info {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var plugins []PluginInfo
+	var plugins []Info
 
-	// 服务端插件
 	for name, handler := range r.serverPlugins {
-		plugins = append(plugins, PluginInfo{
+		plugins = append(plugins, Info{
 			Metadata: handler.Metadata(),
 			Loaded:   true,
 			Enabled:  r.enabled[name],
 		})
 	}
 
-	// 客户端插件
 	for name, handler := range r.clientPlugins {
-		plugins = append(plugins, PluginInfo{
+		plugins = append(plugins, Info{
 			Metadata: handler.Metadata(),
 			Loaded:   true,
 			Enabled:  r.enabled[name],
@@ -187,10 +183,10 @@ func (r *Registry) IsEnabled(name string) bool {
 	return r.enabled[name]
 }
 
-// RegisterAll 批量注册插件
-func (r *Registry) RegisterAll(handlers []ProxyHandler) error {
+// RegisterAllServer 批量注册服务端插件
+func (r *Registry) RegisterAllServer(handlers []ServerPlugin) error {
 	for _, handler := range handlers {
-		if err := r.RegisterBuiltin(handler); err != nil {
+		if err := r.RegisterServer(handler); err != nil {
 			return err
 		}
 	}

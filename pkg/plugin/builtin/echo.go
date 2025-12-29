@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	RegisterClientPlugin(NewEchoPlugin())
+	RegisterClient(NewEchoPlugin())
 }
 
 // EchoPlugin 回显插件 - 客户端插件示例
@@ -27,8 +27,8 @@ func NewEchoPlugin() *EchoPlugin {
 }
 
 // Metadata 返回插件信息
-func (p *EchoPlugin) Metadata() plugin.PluginMetadata {
-	return plugin.PluginMetadata{
+func (p *EchoPlugin) Metadata() plugin.Metadata {
+	return plugin.Metadata{
 		Name:        "echo",
 		Version:     "1.0.0",
 		Type:        plugin.PluginTypeApp,

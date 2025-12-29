@@ -2,28 +2,27 @@ package builtin
 
 import "github.com/gotunnel/pkg/plugin"
 
-// 全局插件注册表
 var (
-	serverPlugins []plugin.ProxyHandler
-	clientPlugins []plugin.ClientHandler
+	serverPlugins []plugin.ServerPlugin
+	clientPlugins []plugin.ClientPlugin
 )
 
-// Register 注册服务端插件
-func Register(handler plugin.ProxyHandler) {
+// RegisterServer 注册服务端插件
+func RegisterServer(handler plugin.ServerPlugin) {
 	serverPlugins = append(serverPlugins, handler)
 }
 
-// RegisterClientPlugin 注册客户端插件
-func RegisterClientPlugin(handler plugin.ClientHandler) {
+// RegisterClient 注册客户端插件
+func RegisterClient(handler plugin.ClientPlugin) {
 	clientPlugins = append(clientPlugins, handler)
 }
 
-// GetAll 返回所有服务端插件
-func GetAll() []plugin.ProxyHandler {
+// GetServerPlugins 返回所有服务端插件
+func GetServerPlugins() []plugin.ServerPlugin {
 	return serverPlugins
 }
 
-// GetAllClientPlugins 返回所有客户端插件
-func GetAllClientPlugins() []plugin.ClientHandler {
+// GetClientPlugins 返回所有客户端插件
+func GetClientPlugins() []plugin.ClientPlugin {
 	return clientPlugins
 }

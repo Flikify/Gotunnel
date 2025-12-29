@@ -44,6 +44,10 @@ const (
 	MsgTypeClientPluginStop   uint8 = 41 // 停止客户端插件
 	MsgTypeClientPluginStatus uint8 = 42 // 客户端插件状态
 	MsgTypeClientPluginConn   uint8 = 43 // 客户端插件连接请求
+
+	// JS 插件动态安装
+	MsgTypeJSPluginInstall uint8 = 50 // 安装 JS 插件
+	MsgTypeJSPluginResult  uint8 = 51 // 安装结果
 )
 
 // Message 基础消息结构
@@ -202,6 +206,23 @@ type ClientPluginStatusResponse struct {
 type ClientPluginConnRequest struct {
 	PluginName string `json:"plugin_name"` // 插件名称
 	RuleName   string `json:"rule_name"`   // 规则名称
+}
+
+// JSPluginInstallRequest JS 插件安装请求
+type JSPluginInstallRequest struct {
+	PluginName string            `json:"plugin_name"` // 插件名称
+	Source     string            `json:"source"`      // JS 源码
+	RuleName   string            `json:"rule_name"`   // 规则名称
+	RemotePort int               `json:"remote_port"` // 服务端监听端口
+	Config     map[string]string `json:"config"`      // 插件配置
+	AutoStart  bool              `json:"auto_start"`  // 是否自动启动
+}
+
+// JSPluginInstallResult JS 插件安装结果
+type JSPluginInstallResult struct {
+	PluginName string `json:"plugin_name"`
+	Success    bool   `json:"success"`
+	Error      string `json:"error,omitempty"`
 }
 
 // WriteMessage 写入消息到 writer

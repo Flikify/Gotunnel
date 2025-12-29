@@ -32,11 +32,13 @@ func main() {
 
 	// 初始化插件系统
 	registry := plugin.NewRegistry()
-	if err := registry.RegisterAll(builtin.GetAll()); err != nil {
-		log.Fatalf("[Plugin] Register error: %v", err)
+	for _, h := range builtin.GetClientPlugins() {
+		if err := registry.RegisterClient(h); err != nil {
+			log.Fatalf("[Plugin] Register error: %v", err)
+		}
 	}
 	client.SetPluginRegistry(registry)
-	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetAll()))
+	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetClientPlugins()))
 
 	client.Run()
 }

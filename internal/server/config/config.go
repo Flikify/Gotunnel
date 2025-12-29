@@ -13,6 +13,16 @@ type ServerConfig struct {
 	Server      ServerSettings      `yaml:"server"`
 	Web         WebSettings         `yaml:"web"`
 	PluginStore PluginStoreSettings `yaml:"plugin_store"`
+	JSPlugins   []JSPluginConfig    `yaml:"js_plugins,omitempty"`
+}
+
+// JSPluginConfig JS 插件配置
+type JSPluginConfig struct {
+	Name      string            `yaml:"name"`
+	Path      string            `yaml:"path"`                 // JS 文件路径
+	AutoPush  []string          `yaml:"auto_push,omitempty"`  // 自动推送到的客户端 ID 列表
+	Config    map[string]string `yaml:"config,omitempty"`     // 插件配置
+	AutoStart bool              `yaml:"auto_start,omitempty"` // 是否自动启动
 }
 
 // PluginStoreSettings 扩展商店设置

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/gotunnel/internal/server/app"
 	"github.com/gotunnel/internal/server/config"
@@ -56,15 +57,21 @@ func main() {
 
 	// 初始化插件系统
 	registry := plugin.NewRegistry()
-	if err := registry.RegisterAll(builtin.GetAll()); err != nil {
+	if err := registry.RegisterAllServer(builtin.GetServerPlugins()); err != nil {
 		log.Fatalf("[Plugin] Register error: %v", err)
 	}
 	server.SetPluginRegistry(registry)
-	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetAll()))
+	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetServerPlugins()))
+
+	// 加载 JS 插件配置
+	if len(cfg.JSPlugins) > 0 {
+		jsPlugins := loadJSPlugins(cfg.JSPlugins)
+		server.LoadJSPlugins(jsPlugins)
+	}
 
 	// 启动 Web 控制台
 	if cfg.Web.Enabled {
-		ws := app.NewWebServer(clientStore, server, cfg, *configPath)
+		ws := app.NewWebServer(clientStore, server, cfg, *configPath, clientStore)
 		addr := fmt.Sprintf("%s:%d", cfg.Web.BindAddr, cfg.Web.BindPort)
 
 		go func() {
@@ -81,4 +88,29 @@ func main() {
 	}
 
 	log.Fatal(server.Run())
+}
+
+// loadJSPlugins 加载 JS 插件文件
+func loadJSPlugins(configs []config.JSPluginConfig) []tunnel.JSPluginEntry {
+	var plugins []tunnel.JSPluginEntry
+
+	for _, cfg := range configs {
+		source, err := os.ReadFile(cfg.Path)
+		if err != nil {
+			log.Printf("[JSPlugin] Failed to load %s: %v", cfg.Path, err)
+			continue
+		}
+
+		plugins = append(plugins, tunnel.JSPluginEntry{
+			Name:      cfg.Name,
+			Source:    string(source),
+			AutoPush:  cfg.AutoPush,
+			Config:    cfg.Config,
+			AutoStart: cfg.AutoStart,
+		})
+
+		log.Printf("[JSPlugin] Loaded: %s from %s", cfg.Name, cfg.Path)
+	}
+
+	return plugins
 }

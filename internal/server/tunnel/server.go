@@ -47,6 +47,16 @@ type Server struct {
 	mu             sync.RWMutex
 	tlsConfig      *tls.Config
 	pluginRegistry *plugin.Registry
+	jsPlugins      []JSPluginEntry // 配置的 JS 插件
+}
+
+// JSPluginEntry JS 插件条目
+type JSPluginEntry struct {
+	Name      string
+	Source    string
+	AutoPush  []string
+	Config    map[string]string
+	AutoStart bool
 }
 
 // ClientSession 客户端会话
@@ -83,6 +93,12 @@ func (s *Server) SetTLSConfig(config *tls.Config) {
 // SetPluginRegistry 设置插件注册表
 func (s *Server) SetPluginRegistry(registry *plugin.Registry) {
 	s.pluginRegistry = registry
+}
+
+// LoadJSPlugins 加载 JS 插件配置
+func (s *Server) LoadJSPlugins(plugins []JSPluginEntry) {
+	s.jsPlugins = plugins
+	log.Printf("[Server] Loaded %d JS plugin configs", len(plugins))
 }
 
 // Run 启动服务端
@@ -209,6 +225,9 @@ func (s *Server) setupClientSession(conn net.Conn, clientID string, rules []prot
 		log.Printf("[Server] Send config error: %v", err)
 		return
 	}
+
+	// 自动推送 JS 插件
+	s.autoPushJSPlugins(cs)
 
 	s.startProxyListeners(cs)
 	go s.heartbeatLoop(cs)
@@ -362,7 +381,7 @@ func (s *Server) acceptProxyServerConns(cs *ClientSession, ln net.Listener, rule
 
 	// 优先使用插件系统
 	if s.pluginRegistry != nil {
-		if handler, err := s.pluginRegistry.Get(rule.Type); err == nil {
+		if handler, err := s.pluginRegistry.GetServer(rule.Type); err == nil {
 			handler.Init(rule.PluginConfig)
 			for {
 				conn, err := ln.Accept()
@@ -662,7 +681,7 @@ func (s *Server) InstallPluginsToClient(clientID string, plugins []string) error
 		if !found {
 			// 获取插件信息
 			version := "1.0.0"
-			if handler, err := s.pluginRegistry.Get(pluginName); err == nil && handler != nil {
+			if handler, err := s.pluginRegistry.GetServer(pluginName); err == nil && handler != nil {
 				version = handler.Metadata().Version
 			}
 			client.Plugins = append(client.Plugins, db.ClientPlugin{
@@ -782,7 +801,7 @@ func (s *Server) GetPluginConfigSchema(name string) ([]router.ConfigField, error
 		return nil, fmt.Errorf("plugin registry not initialized")
 	}
 
-	handler, err := s.pluginRegistry.Get(name)
+	handler, err := s.pluginRegistry.GetServer(name)
 	if err != nil {
 		return nil, fmt.Errorf("plugin %s not found", name)
 	}
@@ -835,12 +854,65 @@ func (s *Server) sendPluginConfig(session *yamux.Session, pluginName string, con
 	return protocol.WriteMessage(stream, msg)
 }
 
+// InstallJSPluginToClient 安装 JS 插件到客户端
+func (s *Server) InstallJSPluginToClient(clientID string, req router.JSPluginInstallRequest) error {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("client %s not online", clientID)
+	}
+
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	installReq := protocol.JSPluginInstallRequest{
+		PluginName: req.PluginName,
+		Source:     req.Source,
+		RuleName:   req.RuleName,
+		RemotePort: req.RemotePort,
+		Config:     req.Config,
+		AutoStart:  req.AutoStart,
+	}
+
+	msg, err := protocol.NewMessage(protocol.MsgTypeJSPluginInstall, installReq)
+	if err != nil {
+		return err
+	}
+
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return err
+	}
+
+	// 等待安装结果
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return err
+	}
+
+	var result protocol.JSPluginInstallResult
+	if err := resp.ParsePayload(&result); err != nil {
+		return err
+	}
+
+	if !result.Success {
+		return fmt.Errorf("install failed: %s", result.Error)
+	}
+
+	log.Printf("[Server] JS plugin %s installed on client %s", req.PluginName, clientID)
+	return nil
+}
+
 // isClientPlugin 检查是否为客户端插件
 func (s *Server) isClientPlugin(pluginType string) bool {
 	if s.pluginRegistry == nil {
 		return false
 	}
-	handler, err := s.pluginRegistry.GetClientPlugin(pluginType)
+	handler, err := s.pluginRegistry.GetClient(pluginType)
 	if err != nil {
 		return false
 	}
@@ -949,4 +1021,40 @@ func (s *Server) handleClientPluginConn(cs *ClientSession, conn net.Conn, rule p
 	}
 
 	relay.Relay(conn, stream)
+}
+
+// autoPushJSPlugins 自动推送 JS 插件到客户端
+func (s *Server) autoPushJSPlugins(cs *ClientSession) {
+	for _, jp := range s.jsPlugins {
+		if !s.shouldPushToClient(jp.AutoPush, cs.ID) {
+			continue
+		}
+
+		log.Printf("[Server] Auto-pushing JS plugin %s to client %s", jp.Name, cs.ID)
+
+		req := router.JSPluginInstallRequest{
+			PluginName: jp.Name,
+			Source:     jp.Source,
+			RuleName:   jp.Name,
+			Config:     jp.Config,
+			AutoStart:  jp.AutoStart,
+		}
+
+		if err := s.InstallJSPluginToClient(cs.ID, req); err != nil {
+			log.Printf("[Server] Failed to push JS plugin %s: %v", jp.Name, err)
+		}
+	}
+}
+
+// shouldPushToClient 检查是否应推送到指定客户端
+func (s *Server) shouldPushToClient(autoPush []string, clientID string) bool {
+	if len(autoPush) == 0 {
+		return true
+	}
+	for _, id := range autoPush {
+		if id == clientID || id == "*" {
+			return true
+		}
+	}
+	return false
 }

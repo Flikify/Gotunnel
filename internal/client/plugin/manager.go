@@ -22,7 +22,6 @@ func NewManager() (*Manager, error) {
 		registry: registry,
 	}
 
-	// 注册内置 plugins
 	if err := m.registerBuiltins(); err != nil {
 		return nil, err
 	}
@@ -32,22 +31,21 @@ func NewManager() (*Manager, error) {
 
 // registerBuiltins 注册内置 plugins
 func (m *Manager) registerBuiltins() error {
-	// 注册服务端插件
-	if err := m.registry.RegisterAll(builtin.GetAll()); err != nil {
-		return err
-	}
-	// 注册客户端插件
-	for _, h := range builtin.GetAllClientPlugins() {
-		if err := m.registry.RegisterClientPlugin(h); err != nil {
+	for _, h := range builtin.GetClientPlugins() {
+		if err := m.registry.RegisterClient(h); err != nil {
 			return err
 		}
 	}
-	log.Printf("[Plugin] Registered %d server plugins, %d client plugins",
-		len(builtin.GetAll()), len(builtin.GetAllClientPlugins()))
+	log.Printf("[Plugin] Registered %d client plugins", len(builtin.GetClientPlugins()))
 	return nil
 }
 
-// GetHandler 返回指定代理类型的 handler
-func (m *Manager) GetHandler(proxyType string) (plugin.ProxyHandler, error) {
-	return m.registry.Get(proxyType)
+// GetClient 返回客户端插件
+func (m *Manager) GetClient(name string) (plugin.ClientPlugin, error) {
+	return m.registry.GetClient(name)
+}
+
+// GetRegistry 返回插件注册表
+func (m *Manager) GetRegistry() *plugin.Registry {
+	return m.registry
 }

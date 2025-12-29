@@ -51,6 +51,18 @@ type ServerInterface interface {
 	// 插件配置
 	GetPluginConfigSchema(name string) ([]ConfigField, error)
 	SyncPluginConfigToClient(clientID string, pluginName string, config map[string]string) error
+	// JS 插件
+	InstallJSPluginToClient(clientID string, req JSPluginInstallRequest) error
+}
+
+// JSPluginInstallRequest JS 插件安装请求
+type JSPluginInstallRequest struct {
+	PluginName string            `json:"plugin_name"`
+	Source     string            `json:"source"`
+	RuleName   string            `json:"rule_name"`
+	RemotePort int               `json:"remote_port"`
+	Config     map[string]string `json:"config"`
+	AutoStart  bool              `json:"auto_start"`
 }
 
 // ConfigField 配置字段（从 plugin 包导出）
@@ -89,21 +101,24 @@ type AppInterface interface {
 	GetConfig() *config.ServerConfig
 	GetConfigPath() string
 	SaveConfig() error
+	GetJSPluginStore() db.JSPluginStore
 }
 
 // APIHandler API处理器
 type APIHandler struct {
-	clientStore db.ClientStore
-	server      ServerInterface
-	app         AppInterface
+	clientStore   db.ClientStore
+	server        ServerInterface
+	app           AppInterface
+	jsPluginStore db.JSPluginStore
 }
 
 // RegisterRoutes 注册所有 API 路由
 func RegisterRoutes(r *Router, app AppInterface) {
 	h := &APIHandler{
-		clientStore: app.GetClientStore(),
-		server:      app.GetServer(),
-		app:         app,
+		clientStore:   app.GetClientStore(),
+		server:        app.GetServer(),
+		app:           app,
+		jsPluginStore: app.GetJSPluginStore(),
 	}
 
 	api := r.Group("/api")
@@ -116,6 +131,8 @@ func RegisterRoutes(r *Router, app AppInterface) {
 	api.HandleFunc("/plugin/", h.handlePlugin)
 	api.HandleFunc("/store/plugins", h.handleStorePlugins)
 	api.HandleFunc("/client-plugin/", h.handleClientPlugin)
+	api.HandleFunc("/js-plugin/", h.handleJSPlugin)
+	api.HandleFunc("/js-plugins", h.handleJSPlugins)
 }
 
 func (h *APIHandler) handleStatus(rw http.ResponseWriter, r *http.Request) {
@@ -751,4 +768,186 @@ func (h *APIHandler) updateClientPluginConfig(rw http.ResponseWriter, r *http.Re
 	}
 
 	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+// handleJSPlugin 处理单个 JS 插件操作
+// GET/PUT/DELETE /api/js-plugin/{name}
+// POST /api/js-plugin/{name}/push/{clientID}
+func (h *APIHandler) handleJSPlugin(rw http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path[len("/api/js-plugin/"):]
+	if path == "" {
+		http.Error(rw, "plugin name required", http.StatusBadRequest)
+		return
+	}
+
+	parts := splitPathMulti(path)
+
+	// POST /api/js-plugin/{name}/push/{clientID}
+	if len(parts) == 3 && parts[1] == "push" {
+		if r.Method != http.MethodPost {
+			http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.pushJSPluginToClient(rw, parts[0], parts[2])
+		return
+	}
+
+	// GET/PUT/DELETE /api/js-plugin/{name}
+	pluginName := parts[0]
+	switch r.Method {
+	case http.MethodGet:
+		h.getJSPlugin(rw, pluginName)
+	case http.MethodPut:
+		h.updateJSPlugin(rw, r, pluginName)
+	case http.MethodDelete:
+		h.deleteJSPlugin(rw, pluginName)
+	default:
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// installJSPluginToClient 安装 JS 插件到客户端
+func (h *APIHandler) installJSPluginToClient(rw http.ResponseWriter, r *http.Request, clientID string) {
+	online, _, _ := h.server.GetClientStatus(clientID)
+	if !online {
+		http.Error(rw, "client not online", http.StatusBadRequest)
+		return
+	}
+
+	var req JSPluginInstallRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.PluginName == "" || req.Source == "" {
+		http.Error(rw, "plugin_name and source required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.server.InstallJSPluginToClient(clientID, req); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonResponse(rw, map[string]interface{}{
+		"status": "ok",
+		"plugin": req.PluginName,
+	})
+}
+
+// handleJSPlugins 处理 JS 插件列表和创建
+// GET /api/js-plugins - 获取所有 JS 插件
+// POST /api/js-plugins - 创建新 JS 插件
+func (h *APIHandler) handleJSPlugins(rw http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		h.getJSPlugins(rw)
+	case http.MethodPost:
+		h.createJSPlugin(rw, r)
+	default:
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *APIHandler) getJSPlugins(rw http.ResponseWriter) {
+	plugins, err := h.jsPluginStore.GetAllJSPlugins()
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if plugins == nil {
+		plugins = []db.JSPlugin{}
+	}
+	h.jsonResponse(rw, plugins)
+}
+
+func (h *APIHandler) createJSPlugin(rw http.ResponseWriter, r *http.Request) {
+	var req db.JSPlugin
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" || req.Source == "" {
+		http.Error(rw, "name and source required", http.StatusBadRequest)
+		return
+	}
+
+	req.Enabled = true
+	if err := h.jsPluginStore.SaveJSPlugin(&req); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+func (h *APIHandler) getJSPlugin(rw http.ResponseWriter, name string) {
+	p, err := h.jsPluginStore.GetJSPlugin(name)
+	if err != nil {
+		http.Error(rw, "plugin not found", http.StatusNotFound)
+		return
+	}
+	h.jsonResponse(rw, p)
+}
+
+func (h *APIHandler) updateJSPlugin(rw http.ResponseWriter, r *http.Request, name string) {
+	var req db.JSPlugin
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+	req.Name = name
+	if err := h.jsPluginStore.SaveJSPlugin(&req); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+func (h *APIHandler) deleteJSPlugin(rw http.ResponseWriter, name string) {
+	if err := h.jsPluginStore.DeleteJSPlugin(name); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.jsonResponse(rw, map[string]string{"status": "ok"})
+}
+
+// pushJSPluginToClient 推送 JS 插件到指定客户端
+func (h *APIHandler) pushJSPluginToClient(rw http.ResponseWriter, pluginName, clientID string) {
+	// 检查客户端是否在线
+	online, _, _ := h.server.GetClientStatus(clientID)
+	if !online {
+		http.Error(rw, "client not online", http.StatusBadRequest)
+		return
+	}
+
+	// 获取插件
+	p, err := h.jsPluginStore.GetJSPlugin(pluginName)
+	if err != nil {
+		http.Error(rw, "plugin not found", http.StatusNotFound)
+		return
+	}
+
+	if !p.Enabled {
+		http.Error(rw, "plugin is disabled", http.StatusBadRequest)
+		return
+	}
+
+	// 推送到客户端
+	req := JSPluginInstallRequest{
+		PluginName: p.Name,
+		Source:     p.Source,
+		RuleName:   p.Name,
+		Config:     p.Config,
+		AutoStart:  p.AutoStart,
+	}
+
+	if err := h.server.InstallJSPluginToClient(clientID, req); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonResponse(rw, map[string]string{"status": "ok", "plugin": pluginName, "client": clientID})
 }
