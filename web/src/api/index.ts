@@ -33,6 +33,8 @@ export const disablePlugin = (name: string) => post(`/plugin/${name}/disable`)
 
 // 扩展商店
 export const getStorePlugins = () => get<{ plugins: StorePluginInfo[], store_url: string }>('/store/plugins')
+export const installStorePlugin = (pluginName: string, downloadUrl: string, clientId: string) =>
+  post('/store/install', { plugin_name: pluginName, download_url: downloadUrl, client_id: clientId })
 
 // 客户端插件配置
 export const getClientPluginConfig = (clientId: string, pluginName: string) =>

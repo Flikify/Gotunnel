@@ -4,18 +4,19 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NTable, NEmpty,
   NFormItem, NInput, NInputNumber, NSelect, NModal, NCheckbox, NSwitch,
-  NIcon, useMessage, useDialog
+  NIcon, useMessage, useDialog, NSpin
 } from 'naive-ui'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, PowerOutline, AddOutline, SaveOutline, CloseOutline,
-  DownloadOutline, SettingsOutline
+  DownloadOutline, SettingsOutline, StorefrontOutline
 } from '@vicons/ionicons5'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient,
-  getPlugins, installPluginsToClient, getClientPluginConfig, updateClientPluginConfig
+  getPlugins, installPluginsToClient, getClientPluginConfig, updateClientPluginConfig,
+  getStorePlugins, installStorePlugin
 } from '../api'
-import type { ProxyRule, PluginInfo, ClientPlugin, ConfigField, RuleSchema } from '../types'
+import type { ProxyRule, PluginInfo, ClientPlugin, ConfigField, RuleSchema, StorePluginInfo } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -77,6 +78,13 @@ const configSchema = ref<ConfigField[]>([])
 const configValues = ref<Record<string, string>>({})
 const configLoading = ref(false)
 
+// 商店插件安装相关
+const showStoreModal = ref(false)
+const storePlugins = ref<StorePluginInfo[]>([])
+const storeLoading = ref(false)
+const selectedStorePlugin = ref<StorePluginInfo | null>(null)
+const storeInstalling = ref(false)
+
 const loadPlugins = async () => {
   try {
     const { data } = await getPlugins()
@@ -108,6 +116,42 @@ const openInstallModal = async () => {
   availablePlugins.value = availablePlugins.value.filter(p => !installedNames.includes(p.name))
   selectedPlugins.value = []
   showInstallModal.value = true
+}
+
+// 商店插件相关函数
+const openStoreModal = async () => {
+  showStoreModal.value = true
+  storeLoading.value = true
+  selectedStorePlugin.value = null
+  try {
+    const { data } = await getStorePlugins()
+    storePlugins.value = (data.plugins || []).filter(p => p.download_url)
+  } catch (e) {
+    console.error('Failed to load store plugins', e)
+    message.error('加载商店插件失败')
+  } finally {
+    storeLoading.value = false
+  }
+}
+
+const handleInstallStorePlugin = async (plugin: StorePluginInfo) => {
+  if (!plugin.download_url) {
+    message.error('该插件没有下载地址')
+    return
+  }
+  storeInstalling.value = true
+  selectedStorePlugin.value = plugin
+  try {
+    await installStorePlugin(plugin.name, plugin.download_url, clientId)
+    message.success(`已安装 ${plugin.name}`)
+    showStoreModal.value = false
+    await loadClient()
+  } catch (e: any) {
+    message.error(e.response?.data || '安装失败')
+  } finally {
+    storeInstalling.value = false
+    selectedStorePlugin.value = null
+  }
 }
 
 const getTypeLabel = (type: string) => {
@@ -349,6 +393,10 @@ const savePluginConfig = async () => {
             <n-button type="success" @click="openInstallModal">
               <template #icon><n-icon><DownloadOutline /></n-icon></template>
               安装插件
+            </n-button>
+            <n-button @click="openStoreModal">
+              <template #icon><n-icon><StorefrontOutline /></n-icon></template>
+              从商店安装
             </n-button>
             <n-button type="warning" @click="disconnect">
               <template #icon><n-icon><PowerOutline /></n-icon></template>
@@ -595,6 +643,40 @@ const savePluginConfig = async () => {
         <n-space justify="end">
           <n-button @click="showRenameModal = false">取消</n-button>
           <n-button type="primary" @click="saveRename">保存</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 商店插件安装模态框 -->
+    <n-modal v-model:show="showStoreModal" preset="card" title="从商店安装插件" style="width: 500px;">
+      <n-spin :show="storeLoading">
+        <n-empty v-if="!storeLoading && storePlugins.length === 0" description="商店暂无可用插件" />
+        <n-space v-else vertical :size="12">
+          <n-card v-for="plugin in storePlugins" :key="plugin.name" size="small">
+            <n-space justify="space-between" align="center">
+              <n-space vertical :size="4">
+                <n-space align="center">
+                  <span style="font-weight: 500;">{{ plugin.name }}</span>
+                  <n-tag size="small">v{{ plugin.version }}</n-tag>
+                </n-space>
+                <span style="color: #666; font-size: 12px;">{{ plugin.description }}</span>
+                <span style="color: #999; font-size: 12px;">作者: {{ plugin.author }}</span>
+              </n-space>
+              <n-button
+                size="small"
+                type="primary"
+                :loading="storeInstalling && selectedStorePlugin?.name === plugin.name"
+                @click="handleInstallStorePlugin(plugin)"
+              >
+                安装
+              </n-button>
+            </n-space>
+          </n-card>
+        </n-space>
+      </n-spin>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showStoreModal = false">关闭</n-button>
         </n-space>
       </template>
     </n-modal>

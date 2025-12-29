@@ -131,6 +131,7 @@ func RegisterRoutes(r *Router, app AppInterface) {
 	api.HandleFunc("/plugins", h.handlePlugins)
 	api.HandleFunc("/plugin/", h.handlePlugin)
 	api.HandleFunc("/store/plugins", h.handleStorePlugins)
+	api.HandleFunc("/store/install", h.handleStoreInstall)
 	api.HandleFunc("/client-plugin/", h.handleClientPlugin)
 	api.HandleFunc("/js-plugin/", h.handleJSPlugin)
 	api.HandleFunc("/js-plugins", h.handleJSPlugins)
@@ -582,6 +583,13 @@ type StorePluginInfo struct {
 	DownloadURL string `json:"download_url,omitempty"`
 }
 
+// StorePluginInstallRequest 从商店安装插件的请求
+type StorePluginInstallRequest struct {
+	PluginName  string `json:"plugin_name"`
+	DownloadURL string `json:"download_url"`
+	ClientID    string `json:"client_id"`
+}
+
 // handleStorePlugins 处理扩展商店插件列表
 func (h *APIHandler) handleStorePlugins(rw http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -622,6 +630,71 @@ func (h *APIHandler) handleStorePlugins(rw http.ResponseWriter, r *http.Request)
 	h.jsonResponse(rw, map[string]interface{}{
 		"plugins":   plugins,
 		"store_url": storeURL,
+	})
+}
+
+// handleStoreInstall 从商店安装插件到客户端
+func (h *APIHandler) handleStoreInstall(rw http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req StorePluginInstallRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.PluginName == "" || req.DownloadURL == "" || req.ClientID == "" {
+		http.Error(rw, "plugin_name, download_url and client_id required", http.StatusBadRequest)
+		return
+	}
+
+	// 检查客户端是否在线
+	online, _, _ := h.server.GetClientStatus(req.ClientID)
+	if !online {
+		http.Error(rw, "client not online", http.StatusBadRequest)
+		return
+	}
+
+	// 下载插件
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(req.DownloadURL)
+	if err != nil {
+		http.Error(rw, "Failed to download plugin: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(rw, "Plugin download failed with status: "+resp.Status, http.StatusBadGateway)
+		return
+	}
+
+	source, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(rw, "Failed to read plugin: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 安装到客户端
+	installReq := JSPluginInstallRequest{
+		PluginName: req.PluginName,
+		Source:     string(source),
+		RuleName:   req.PluginName,
+		AutoStart:  true,
+	}
+
+	if err := h.server.InstallJSPluginToClient(req.ClientID, installReq); err != nil {
+		http.Error(rw, "Failed to install plugin: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonResponse(rw, map[string]interface{}{
+		"status": "ok",
+		"plugin": req.PluginName,
+		"client": req.ClientID,
 	})
 }
 

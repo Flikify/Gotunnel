@@ -4,10 +4,13 @@ import { useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NStatistic, NGrid, NGi,
   NEmpty, NSpin, NIcon, NSwitch, NTabs, NTabPane, useMessage,
-  NSelect
+  NSelect, NModal
 } from 'naive-ui'
 import { ArrowBackOutline, ExtensionPuzzleOutline, StorefrontOutline, CodeSlashOutline } from '@vicons/ionicons5'
-import { getPlugins, enablePlugin, disablePlugin, getStorePlugins, getJSPlugins, pushJSPluginToClient, getClients } from '../api'
+import {
+  getPlugins, enablePlugin, disablePlugin, getStorePlugins, getJSPlugins,
+  pushJSPluginToClient, getClients, installStorePlugin
+} from '../api'
 import type { PluginInfo, StorePluginInfo, JSPlugin, ClientStatus } from '../types'
 
 const router = useRouter()
@@ -141,6 +144,43 @@ const handlePushJSPlugin = async (pluginName: string, clientId: string) => {
 
 const onlineClients = computed(() => clients.value.filter(c => c.online))
 
+// 商店插件安装相关
+const showInstallModal = ref(false)
+const selectedStorePlugin = ref<StorePluginInfo | null>(null)
+const selectedClientId = ref('')
+const installing = ref(false)
+
+const openInstallModal = (plugin: StorePluginInfo) => {
+  selectedStorePlugin.value = plugin
+  selectedClientId.value = ''
+  showInstallModal.value = true
+}
+
+const handleInstallStorePlugin = async () => {
+  if (!selectedStorePlugin.value || !selectedClientId.value) {
+    message.warning('请选择要安装到的客户端')
+    return
+  }
+  if (!selectedStorePlugin.value.download_url) {
+    message.error('该插件没有下载地址')
+    return
+  }
+  installing.value = true
+  try {
+    await installStorePlugin(
+      selectedStorePlugin.value.name,
+      selectedStorePlugin.value.download_url,
+      selectedClientId.value
+    )
+    message.success(`已安装 ${selectedStorePlugin.value.name} 到客户端`)
+    showInstallModal.value = false
+  } catch (e: any) {
+    message.error(e.response?.data || '安装失败')
+  } finally {
+    installing.value = false
+  }
+}
+
 onMounted(() => {
   loadPlugins()
   loadClients()
@@ -231,6 +271,16 @@ onMounted(() => {
                     <span>{{ plugin.name }}</span>
                   </n-space>
                 </template>
+                <template #header-extra>
+                  <n-button
+                    v-if="plugin.download_url && onlineClients.length > 0"
+                    size="small"
+                    type="primary"
+                    @click="openInstallModal(plugin)"
+                  >
+                    安装
+                  </n-button>
+                </template>
                 <n-space vertical :size="8">
                   <n-space>
                     <n-tag size="small">v{{ plugin.version }}</n-tag>
@@ -310,5 +360,33 @@ onMounted(() => {
       ... 已屏蔽 ...
     </n-modal>
     -->
+
+    <!-- 安装商店插件模态框 -->
+    <n-modal v-model:show="showInstallModal" preset="card" title="安装插件" style="width: 400px;">
+      <n-space vertical :size="16">
+        <div v-if="selectedStorePlugin">
+          <p style="margin: 0 0 8px 0;"><strong>插件:</strong> {{ selectedStorePlugin.name }}</p>
+          <p style="margin: 0; color: #666;">{{ selectedStorePlugin.description }}</p>
+        </div>
+        <n-select
+          v-model:value="selectedClientId"
+          placeholder="选择要安装到的客户端"
+          :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))"
+        />
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showInstallModal = false">取消</n-button>
+          <n-button
+            type="primary"
+            :loading="installing"
+            :disabled="!selectedClientId"
+            @click="handleInstallStorePlugin"
+          >
+            安装
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
