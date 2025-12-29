@@ -54,6 +54,7 @@ type Server struct {
 type JSPluginEntry struct {
 	Name      string
 	Source    string
+	Signature string
 	AutoPush  []string
 	Config    map[string]string
 	AutoStart bool
@@ -873,6 +874,7 @@ func (s *Server) InstallJSPluginToClient(clientID string, req router.JSPluginIns
 	installReq := protocol.JSPluginInstallRequest{
 		PluginName: req.PluginName,
 		Source:     req.Source,
+		Signature:  req.Signature,
 		RuleName:   req.RuleName,
 		RemotePort: req.RemotePort,
 		Config:     req.Config,
@@ -1035,6 +1037,7 @@ func (s *Server) autoPushJSPlugins(cs *ClientSession) {
 		req := router.JSPluginInstallRequest{
 			PluginName: jp.Name,
 			Source:     jp.Source,
+			Signature:  jp.Signature,
 			RuleName:   jp.Name,
 			Config:     jp.Config,
 			AutoStart:  jp.AutoStart,

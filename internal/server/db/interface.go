@@ -37,6 +37,7 @@ type PluginData struct {
 type JSPlugin struct {
 	Name        string            `json:"name"`
 	Source      string            `json:"source"`
+	Signature   string            `json:"signature"` // 官方签名 (Base64)
 	Description string            `json:"description"`
 	Author      string            `json:"author"`
 	AutoPush    []string          `json:"auto_push"`

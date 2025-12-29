@@ -212,6 +212,7 @@ type ClientPluginConnRequest struct {
 type JSPluginInstallRequest struct {
 	PluginName string            `json:"plugin_name"` // 插件名称
 	Source     string            `json:"source"`      // JS 源码
+	Signature  string            `json:"signature"`   // 官方签名 (Base64)
 	RuleName   string            `json:"rule_name"`   // 规则名称
 	RemotePort int               `json:"remote_port"` // 服务端监听端口
 	Config     map[string]string `json:"config"`      // 插件配置

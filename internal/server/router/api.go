@@ -59,6 +59,7 @@ type ServerInterface interface {
 type JSPluginInstallRequest struct {
 	PluginName string            `json:"plugin_name"`
 	Source     string            `json:"source"`
+	Signature  string            `json:"signature"`
 	RuleName   string            `json:"rule_name"`
 	RemotePort int               `json:"remote_port"`
 	Config     map[string]string `json:"config"`
@@ -589,14 +590,8 @@ func (h *APIHandler) handleStorePlugins(rw http.ResponseWriter, r *http.Request)
 	}
 
 	cfg := h.app.GetConfig()
-	storeURL := cfg.PluginStore.URL
-	if storeURL == "" {
-		h.jsonResponse(rw, map[string]interface{}{
-			"plugins":   []StorePluginInfo{},
-			"store_url": "",
-		})
-		return
-	}
+	storeURL := config.OfficialPluginStoreURL
+	_ = cfg // 保留以便未来扩展
 
 	// 从远程URL获取插件列表
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -939,6 +934,7 @@ func (h *APIHandler) pushJSPluginToClient(rw http.ResponseWriter, pluginName, cl
 	req := JSPluginInstallRequest{
 		PluginName: p.Name,
 		Source:     p.Source,
+		Signature:  p.Signature,
 		RuleName:   p.Name,
 		Config:     p.Config,
 		AutoStart:  p.AutoStart,

@@ -13,6 +13,7 @@ import (
 	"github.com/gotunnel/pkg/crypto"
 	"github.com/gotunnel/pkg/plugin"
 	"github.com/gotunnel/pkg/plugin/builtin"
+	"github.com/gotunnel/pkg/plugin/sign"
 )
 
 func main() {
@@ -101,16 +102,67 @@ func loadJSPlugins(configs []config.JSPluginConfig) []tunnel.JSPluginEntry {
 			continue
 		}
 
+		// 加载签名文件
+		sigPath := cfg.SigPath
+		if sigPath == "" {
+			sigPath = cfg.Path + ".sig"
+		}
+		signature, err := os.ReadFile(sigPath)
+		if err != nil {
+			log.Printf("[JSPlugin] Failed to load signature for %s: %v", cfg.Name, err)
+			continue
+		}
+
+		// 服务端也验证签名，防止配置文件被篡改
+		if err := verifyPluginSignature(cfg.Name, string(source), string(signature)); err != nil {
+			log.Printf("[JSPlugin] Signature verification failed for %s: %v", cfg.Name, err)
+			continue
+		}
+
 		plugins = append(plugins, tunnel.JSPluginEntry{
 			Name:      cfg.Name,
 			Source:    string(source),
+			Signature: string(signature),
 			AutoPush:  cfg.AutoPush,
 			Config:    cfg.Config,
 			AutoStart: cfg.AutoStart,
 		})
 
-		log.Printf("[JSPlugin] Loaded: %s from %s", cfg.Name, cfg.Path)
+		log.Printf("[JSPlugin] Loaded: %s from %s (verified)", cfg.Name, cfg.Path)
 	}
 
 	return plugins
+}
+
+// verifyPluginSignature 验证插件签名
+func verifyPluginSignature(name, source, signature string) error {
+	// 解码签名
+	signed, err := sign.DecodeSignedPlugin(signature)
+	if err != nil {
+		return fmt.Errorf("decode signature: %w", err)
+	}
+
+	// 检查插件是否被撤销
+	if revoked, reason := sign.IsPluginRevoked(name, signed.Payload.Version); revoked {
+		return fmt.Errorf("plugin revoked: %s", reason)
+	}
+
+	// 检查密钥是否已吊销
+	if sign.IsKeyRevoked(signed.Payload.KeyID) {
+		return fmt.Errorf("signing key revoked: %s", signed.Payload.KeyID)
+	}
+
+	// 获取公钥
+	pubKey, err := sign.GetPublicKeyByID(signed.Payload.KeyID)
+	if err != nil {
+		return err
+	}
+
+	// 验证插件名称
+	if signed.Payload.Name != name {
+		return fmt.Errorf("name mismatch: %s vs %s", signed.Payload.Name, name)
+	}
+
+	// 验证签名
+	return sign.VerifyPlugin(pubKey, signed, source)
 }

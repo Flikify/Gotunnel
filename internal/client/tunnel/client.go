@@ -12,6 +12,7 @@ import (
 
 	"github.com/gotunnel/pkg/plugin"
 	"github.com/gotunnel/pkg/plugin/script"
+	"github.com/gotunnel/pkg/plugin/sign"
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/relay"
 	"github.com/hashicorp/yamux"
@@ -35,11 +36,13 @@ type Client struct {
 	ID              string
 	TLSEnabled      bool
 	TLSConfig       *tls.Config
+	DataDir         string // 数据目录
 	session         *yamux.Session
 	rules           []protocol.ProxyRule
 	mu              sync.RWMutex
 	pluginRegistry  *plugin.Registry
-	runningPlugins  map[string]plugin.ClientPlugin // 运行中的客户端插件
+	runningPlugins  map[string]plugin.ClientPlugin
+	versionStore    *PluginVersionStore
 	pluginMu        sync.RWMutex
 }
 
@@ -48,12 +51,28 @@ func NewClient(serverAddr, token, id string) *Client {
 	if id == "" {
 		id = loadClientID()
 	}
+
+	// 默认数据目录
+	home, _ := os.UserHomeDir()
+	dataDir := filepath.Join(home, ".gotunnel")
+
 	return &Client{
 		ServerAddr:     serverAddr,
 		Token:          token,
 		ID:             id,
+		DataDir:        dataDir,
 		runningPlugins: make(map[string]plugin.ClientPlugin),
 	}
+}
+
+// InitVersionStore 初始化版本存储
+func (c *Client) InitVersionStore() error {
+	store, err := NewPluginVersionStore(c.DataDir)
+	if err != nil {
+		return err
+	}
+	c.versionStore = store
+	return nil
 }
 
 // getIDFilePath 获取 ID 文件路径
@@ -478,6 +497,14 @@ func (c *Client) handleJSPluginInstall(stream net.Conn, msg *protocol.Message) {
 
 	log.Printf("[Client] Installing JS plugin: %s", req.PluginName)
 
+	// 验证官方签名
+	if err := c.verifyJSPluginSignature(req.PluginName, req.Source, req.Signature); err != nil {
+		log.Printf("[Client] JS plugin %s signature verification failed: %v", req.PluginName, err)
+		c.sendJSPluginResult(stream, req.PluginName, false, "signature verification failed: "+err.Error())
+		return
+	}
+	log.Printf("[Client] JS plugin %s signature verified", req.PluginName)
+
 	// 创建 JS 插件
 	jsPlugin, err := script.NewJSPlugin(req.PluginName, req.Source)
 	if err != nil {
@@ -492,6 +519,14 @@ func (c *Client) handleJSPluginInstall(stream net.Conn, msg *protocol.Message) {
 
 	log.Printf("[Client] JS plugin %s installed", req.PluginName)
 	c.sendJSPluginResult(stream, req.PluginName, true, "")
+
+	// 保存版本信息（防止降级攻击）
+	if c.versionStore != nil {
+		signed, _ := sign.DecodeSignedPlugin(req.Signature)
+		if signed != nil {
+			c.versionStore.SetVersion(req.PluginName, signed.Payload.Version)
+		}
+	}
 
 	// 自动启动
 	if req.AutoStart {
@@ -529,4 +564,59 @@ func (c *Client) startJSPlugin(handler plugin.ClientPlugin, req protocol.JSPlugi
 	c.pluginMu.Unlock()
 
 	log.Printf("[Client] JS plugin %s started at %s", req.PluginName, localAddr)
+}
+
+// verifyJSPluginSignature 验证 JS 插件签名
+func (c *Client) verifyJSPluginSignature(pluginName, source, signature string) error {
+	if signature == "" {
+		return fmt.Errorf("missing signature")
+	}
+
+	// 解码签名
+	signed, err := sign.DecodeSignedPlugin(signature)
+	if err != nil {
+		return fmt.Errorf("decode signature: %w", err)
+	}
+
+	// 检查插件是否被撤销
+	if revoked, reason := sign.IsPluginRevoked(pluginName, signed.Payload.Version); revoked {
+		return fmt.Errorf("plugin %s v%s has been revoked: %s",
+			pluginName, signed.Payload.Version, reason)
+	}
+
+	// 检查密钥是否已吊销
+	if sign.IsKeyRevoked(signed.Payload.KeyID) {
+		return fmt.Errorf("signing key %s has been revoked", signed.Payload.KeyID)
+	}
+
+	// 根据 KeyID 获取对应公钥
+	pubKey, err := sign.GetPublicKeyByID(signed.Payload.KeyID)
+	if err != nil {
+		return fmt.Errorf("get public key: %w", err)
+	}
+
+	// 验证插件名称匹配
+	if signed.Payload.Name != pluginName {
+		return fmt.Errorf("plugin name mismatch: expected %s, got %s",
+			pluginName, signed.Payload.Name)
+	}
+
+	// 验证签名和源码哈希
+	if err := sign.VerifyPlugin(pubKey, signed, source); err != nil {
+		return err
+	}
+
+	// 检查版本降级攻击
+	if c.versionStore != nil {
+		currentVer := c.versionStore.GetVersion(pluginName)
+		if currentVer != "" {
+			cmp := sign.CompareVersions(signed.Payload.Version, currentVer)
+			if cmp < 0 {
+				return fmt.Errorf("version downgrade rejected: %s < %s",
+					signed.Payload.Version, currentVer)
+			}
+		}
+	}
+
+	return nil
 }

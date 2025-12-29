@@ -93,6 +93,9 @@ func (s *SQLiteStore) init() error {
 		return err
 	}
 
+	// 迁移：添加 signature 列
+	s.db.Exec(`ALTER TABLE js_plugins ADD COLUMN signature TEXT NOT NULL DEFAULT ''`)
+
 	return nil
 }
 
@@ -323,7 +326,7 @@ func (s *SQLiteStore) GetAllJSPlugins() ([]JSPlugin, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT name, source, description, author, auto_push, config, auto_start, enabled
+		SELECT name, source, signature, description, author, auto_push, config, auto_start, enabled
 		FROM js_plugins
 	`)
 	if err != nil {
@@ -336,7 +339,7 @@ func (s *SQLiteStore) GetAllJSPlugins() ([]JSPlugin, error) {
 		var p JSPlugin
 		var autoPushJSON, configJSON string
 		var autoStart, enabled int
-		err := rows.Scan(&p.Name, &p.Source, &p.Description, &p.Author,
+		err := rows.Scan(&p.Name, &p.Source, &p.Signature, &p.Description, &p.Author,
 			&autoPushJSON, &configJSON, &autoStart, &enabled)
 		if err != nil {
 			return nil, err
@@ -359,9 +362,9 @@ func (s *SQLiteStore) GetJSPlugin(name string) (*JSPlugin, error) {
 	var autoPushJSON, configJSON string
 	var autoStart, enabled int
 	err := s.db.QueryRow(`
-		SELECT name, source, description, author, auto_push, config, auto_start, enabled
+		SELECT name, source, signature, description, author, auto_push, config, auto_start, enabled
 		FROM js_plugins WHERE name = ?
-	`, name).Scan(&p.Name, &p.Source, &p.Description, &p.Author,
+	`, name).Scan(&p.Name, &p.Source, &p.Signature, &p.Description, &p.Author,
 		&autoPushJSON, &configJSON, &autoStart, &enabled)
 	if err != nil {
 		return nil, err
@@ -390,9 +393,9 @@ func (s *SQLiteStore) SaveJSPlugin(p *JSPlugin) error {
 
 	_, err := s.db.Exec(`
 		INSERT OR REPLACE INTO js_plugins
-		(name, source, description, author, auto_push, config, auto_start, enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.Name, p.Source, p.Description, p.Author,
+		(name, source, signature, description, author, auto_push, config, auto_start, enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, p.Name, p.Source, p.Signature, p.Description, p.Author,
 		string(autoPushJSON), string(configJSON), autoStart, enabled)
 	return err
 }

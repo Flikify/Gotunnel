@@ -20,6 +20,7 @@ type ServerConfig struct {
 type JSPluginConfig struct {
 	Name      string            `yaml:"name"`
 	Path      string            `yaml:"path"`                 // JS 文件路径
+	SigPath   string            `yaml:"sig_path,omitempty"`   // 签名文件路径 (默认为 path + ".sig")
 	AutoPush  []string          `yaml:"auto_push,omitempty"`  // 自动推送到的客户端 ID 列表
 	Config    map[string]string `yaml:"config,omitempty"`     // 插件配置
 	AutoStart bool              `yaml:"auto_start,omitempty"` // 是否自动启动
@@ -27,8 +28,11 @@ type JSPluginConfig struct {
 
 // PluginStoreSettings 扩展商店设置
 type PluginStoreSettings struct {
-	URL string `yaml:"url"` // 扩展商店URL，例如 GitHub 仓库的 raw URL
+	// 保留结构体以便未来扩展，但不暴露 URL 配置
 }
+
+// 官方插件商店（不可配置）
+const OfficialPluginStoreURL = "https://git.92coco.cn:8443/flik/GoTunnel-Plugins/raw/branch/main/store.json"
 
 // ServerSettings 服务端设置
 type ServerSettings struct {

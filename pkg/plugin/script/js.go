@@ -20,6 +20,7 @@ type JSPlugin struct {
 	vm       *goja.Runtime
 	metadata plugin.Metadata
 	config   map[string]string
+	sandbox  *Sandbox
 	running  bool
 	mu       sync.Mutex
 }
@@ -27,9 +28,10 @@ type JSPlugin struct {
 // NewJSPlugin 从 JS 源码创建插件
 func NewJSPlugin(name, source string) (*JSPlugin, error) {
 	p := &JSPlugin{
-		name:   name,
-		source: source,
-		vm:     goja.New(),
+		name:    name,
+		source:  source,
+		vm:      goja.New(),
+		sandbox: DefaultSandbox(),
 	}
 
 	if err := p.init(); err != nil {
@@ -37,6 +39,11 @@ func NewJSPlugin(name, source string) (*JSPlugin, error) {
 	}
 
 	return p, nil
+}
+
+// SetSandbox 设置沙箱配置
+func (p *JSPlugin) SetSandbox(sandbox *Sandbox) {
+	p.sandbox = sandbox
 }
 
 // init 初始化 JS 运行时
@@ -231,22 +238,50 @@ func (p *JSPlugin) createFsAPI() map[string]interface{} {
 	}
 }
 
-func (p *JSPlugin) fsReadFile(path string) string {
+func (p *JSPlugin) fsReadFile(path string) map[string]interface{} {
+	if err := p.sandbox.ValidateReadPath(path); err != nil {
+		return map[string]interface{}{"error": err.Error(), "data": ""}
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error(), "data": ""}
+	}
+	if info.Size() > p.sandbox.MaxReadSize {
+		return map[string]interface{}{"error": "file too large", "data": ""}
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return ""
+		return map[string]interface{}{"error": err.Error(), "data": ""}
 	}
-	return string(data)
+	return map[string]interface{}{"error": "", "data": string(data)}
 }
 
-func (p *JSPlugin) fsWriteFile(path, content string) bool {
-	return os.WriteFile(path, []byte(content), 0644) == nil
+func (p *JSPlugin) fsWriteFile(path, content string) map[string]interface{} {
+	if err := p.sandbox.ValidateWritePath(path); err != nil {
+		return map[string]interface{}{"error": err.Error(), "ok": false}
+	}
+
+	if int64(len(content)) > p.sandbox.MaxWriteSize {
+		return map[string]interface{}{"error": "content too large", "ok": false}
+	}
+
+	err := os.WriteFile(path, []byte(content), 0644)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error(), "ok": false}
+	}
+	return map[string]interface{}{"error": "", "ok": true}
 }
 
-func (p *JSPlugin) fsReadDir(path string) []map[string]interface{} {
+func (p *JSPlugin) fsReadDir(path string) map[string]interface{} {
+	if err := p.sandbox.ValidateReadPath(path); err != nil {
+		return map[string]interface{}{"error": err.Error(), "entries": nil}
+	}
+
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return nil
+		return map[string]interface{}{"error": err.Error(), "entries": nil}
 	}
 	var result []map[string]interface{}
 	for _, e := range entries {
@@ -257,15 +292,20 @@ func (p *JSPlugin) fsReadDir(path string) []map[string]interface{} {
 			"size":  info.Size(),
 		})
 	}
-	return result
+	return map[string]interface{}{"error": "", "entries": result}
 }
 
 func (p *JSPlugin) fsStat(path string) map[string]interface{} {
+	if err := p.sandbox.ValidateReadPath(path); err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
-		return nil
+		return map[string]interface{}{"error": err.Error()}
 	}
 	return map[string]interface{}{
+		"error":   "",
 		"name":    info.Name(),
 		"size":    info.Size(),
 		"isDir":   info.IsDir(),
@@ -273,17 +313,34 @@ func (p *JSPlugin) fsStat(path string) map[string]interface{} {
 	}
 }
 
-func (p *JSPlugin) fsExists(path string) bool {
+func (p *JSPlugin) fsExists(path string) map[string]interface{} {
+	if err := p.sandbox.ValidateReadPath(path); err != nil {
+		return map[string]interface{}{"error": err.Error(), "exists": false}
+	}
 	_, err := os.Stat(path)
-	return err == nil
+	return map[string]interface{}{"error": "", "exists": err == nil}
 }
 
-func (p *JSPlugin) fsMkdir(path string) bool {
-	return os.MkdirAll(path, 0755) == nil
+func (p *JSPlugin) fsMkdir(path string) map[string]interface{} {
+	if err := p.sandbox.ValidateWritePath(path); err != nil {
+		return map[string]interface{}{"error": err.Error(), "ok": false}
+	}
+	err := os.MkdirAll(path, 0755)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error(), "ok": false}
+	}
+	return map[string]interface{}{"error": "", "ok": true}
 }
 
-func (p *JSPlugin) fsRemove(path string) bool {
-	return os.RemoveAll(path) == nil
+func (p *JSPlugin) fsRemove(path string) map[string]interface{} {
+	if err := p.sandbox.ValidateWritePath(path); err != nil {
+		return map[string]interface{}{"error": err.Error(), "ok": false}
+	}
+	err := os.RemoveAll(path)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error(), "ok": false}
+	}
+	return map[string]interface{}{"error": "", "ok": true}
 }
 
 // =============================================================================
