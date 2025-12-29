@@ -29,27 +29,29 @@ const (
 
 // Client 隧道客户端
 type Client struct {
-	ServerAddr     string
-	Token          string
-	ID             string
-	TLSEnabled     bool
-	TLSConfig      *tls.Config
-	session        *yamux.Session
-	rules          []protocol.ProxyRule
-	mu             sync.RWMutex
-	pluginRegistry *plugin.Registry
+	ServerAddr      string
+	Token           string
+	ID              string
+	TLSEnabled      bool
+	TLSConfig       *tls.Config
+	session         *yamux.Session
+	rules           []protocol.ProxyRule
+	mu              sync.RWMutex
+	pluginRegistry  *plugin.Registry
+	runningPlugins  map[string]plugin.ClientHandler // 运行中的客户端插件
+	pluginMu        sync.RWMutex
 }
 
 // NewClient 创建客户端
 func NewClient(serverAddr, token, id string) *Client {
-	// 如果未指定 ID，尝试从本地文件加载
 	if id == "" {
 		id = loadClientID()
 	}
 	return &Client{
-		ServerAddr: serverAddr,
-		Token:      token,
-		ID:         id,
+		ServerAddr:     serverAddr,
+		Token:          token,
+		ID:             id,
+		runningPlugins: make(map[string]plugin.ClientHandler),
 	}
 }
 
@@ -197,6 +199,10 @@ func (c *Client) handleStream(stream net.Conn) {
 	case protocol.MsgTypePluginConfig:
 		defer stream.Close()
 		c.handlePluginConfig(msg)
+	case protocol.MsgTypeClientPluginStart:
+		c.handleClientPluginStart(stream, msg)
+	case protocol.MsgTypeClientPluginConn:
+		c.handleClientPluginConn(stream, msg)
 	}
 }
 
@@ -373,4 +379,86 @@ func (c *Client) handlePluginConfig(msg *protocol.Message) {
 		}
 		log.Printf("[Client] Plugin %s config applied", cfg.PluginName)
 	}
+}
+
+// handleClientPluginStart 处理客户端插件启动请求
+func (c *Client) handleClientPluginStart(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var req protocol.ClientPluginStartRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", err.Error())
+		return
+	}
+
+	log.Printf("[Client] Starting plugin %s for rule %s", req.PluginName, req.RuleName)
+
+	// 获取插件
+	if c.pluginRegistry == nil {
+		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", "plugin registry not set")
+		return
+	}
+
+	handler, err := c.pluginRegistry.GetClientPlugin(req.PluginName)
+	if err != nil {
+		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", err.Error())
+		return
+	}
+
+	// 初始化并启动
+	if err := handler.Init(req.Config); err != nil {
+		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", err.Error())
+		return
+	}
+
+	localAddr, err := handler.Start()
+	if err != nil {
+		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", err.Error())
+		return
+	}
+
+	// 保存运行中的插件
+	key := req.PluginName + ":" + req.RuleName
+	c.pluginMu.Lock()
+	c.runningPlugins[key] = handler
+	c.pluginMu.Unlock()
+
+	log.Printf("[Client] Plugin %s started at %s", req.PluginName, localAddr)
+	c.sendPluginStatus(stream, req.PluginName, req.RuleName, true, localAddr, "")
+}
+
+// sendPluginStatus 发送插件状态响应
+func (c *Client) sendPluginStatus(stream net.Conn, pluginName, ruleName string, running bool, localAddr, errMsg string) {
+	resp := protocol.ClientPluginStatusResponse{
+		PluginName: pluginName,
+		RuleName:   ruleName,
+		Running:    running,
+		LocalAddr:  localAddr,
+		Error:      errMsg,
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeClientPluginStatus, resp)
+	protocol.WriteMessage(stream, msg)
+}
+
+// handleClientPluginConn 处理客户端插件连接
+func (c *Client) handleClientPluginConn(stream net.Conn, msg *protocol.Message) {
+	var req protocol.ClientPluginConnRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		stream.Close()
+		return
+	}
+
+	key := req.PluginName + ":" + req.RuleName
+	c.pluginMu.RLock()
+	handler, ok := c.runningPlugins[key]
+	c.pluginMu.RUnlock()
+
+	if !ok {
+		log.Printf("[Client] Plugin %s not running", key)
+		stream.Close()
+		return
+	}
+
+	// 让插件处理连接
+	handler.HandleConn(stream)
 }

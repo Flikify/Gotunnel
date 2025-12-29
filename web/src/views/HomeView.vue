@@ -66,7 +66,8 @@ const viewClient = (id: string) => {
           <n-space justify="space-between" align="center">
             <div>
               <h3 style="margin: 0 0 4px 0;">{{ client.nickname || client.id }}</h3>
-              <p v-if="client.nickname" style="margin: 0 0 8px 0; color: #999; font-size: 12px;">{{ client.id }}</p>
+              <p v-if="client.nickname" style="margin: 0 0 4px 0; color: #999; font-size: 12px;">{{ client.id }}</p>
+              <p v-if="client.remote_addr && client.online" style="margin: 0 0 8px 0; color: #666; font-size: 12px;">IP: {{ client.remote_addr }}</p>
               <n-space>
                 <n-tag :type="client.online ? 'success' : 'default'" size="small">
                   {{ client.online ? '在线' : '离线' }}

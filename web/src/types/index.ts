@@ -55,6 +55,7 @@ export interface ClientStatus {
   nickname?: string
   online: boolean
   last_ping?: string
+  remote_addr?: string
   rule_count: number
 }
 
@@ -66,6 +67,7 @@ export interface ClientDetail {
   plugins?: ClientPlugin[]
   online: boolean
   last_ping?: string
+  remote_addr?: string
 }
 
 // 服务器状态

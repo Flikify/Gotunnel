@@ -25,6 +25,7 @@ const clientId = route.params.id as string
 
 const online = ref(false)
 const lastPing = ref('')
+const remoteAddr = ref('')
 const nickname = ref('')
 const rules = ref<ProxyRule[]>([])
 const clientPlugins = ref<ClientPlugin[]>([])
@@ -119,6 +120,7 @@ const loadClient = async () => {
     const { data } = await getClient(clientId)
     online.value = data.online
     lastPing.value = data.last_ping || ''
+    remoteAddr.value = data.remote_addr || ''
     nickname.value = data.nickname || ''
     rules.value = data.rules || []
     clientPlugins.value = data.plugins || []
@@ -182,7 +184,16 @@ const saveEdit = async () => {
     await updateClient(clientId, { id: clientId, nickname: nickname.value, rules: editRules.value })
     editing.value = false
     message.success('保存成功')
-    loadClient()
+    await loadClient()
+    // 如果客户端在线，自动推送配置
+    if (online.value) {
+      try {
+        await pushConfigToClient(clientId)
+        message.success('配置已自动推送到客户端')
+      } catch (e: any) {
+        message.warning('配置已保存，但推送失败: ' + (e.response?.data || '未知错误'))
+      }
+    }
   } catch (e) {
     message.error('保存失败')
   }
@@ -322,6 +333,9 @@ const savePluginConfig = async () => {
           <n-tag :type="online ? 'success' : 'default'">
             {{ online ? '在线' : '离线' }}
           </n-tag>
+          <span v-if="remoteAddr && online" style="color: #666; font-size: 14px;">
+            IP: {{ remoteAddr }}
+          </span>
           <span v-if="lastPing" style="color: #666; font-size: 14px;">
             最后心跳: {{ lastPing }}
           </span>

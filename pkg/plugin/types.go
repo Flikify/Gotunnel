@@ -20,7 +20,6 @@ type PluginSource string
 
 const (
 	PluginSourceBuiltin PluginSource = "builtin" // 内置编译
-	PluginSourceWASM    PluginSource = "wasm"    // WASM 模块
 )
 
 // ConfigFieldType 配置字段类型
@@ -53,18 +52,17 @@ type RuleSchema struct {
 
 // PluginMetadata 描述一个 plugin
 type PluginMetadata struct {
-	Name         string            `json:"name"`                   // 唯一标识符 (如 "socks5")
-	Version      string            `json:"version"`                // 语义化版本
-	Type         PluginType        `json:"type"`                   // Plugin 类别
-	Source       PluginSource      `json:"source"`                 // builtin 或 wasm
-	Description  string            `json:"description"`            // 人类可读描述
-	Author       string            `json:"author"`                 // Plugin 作者
-	Icon         string            `json:"icon,omitempty"`         // 图标文件名 (如 "socks5.png")
-	Checksum     string            `json:"checksum,omitempty"`     // WASM 二进制的 SHA256
-	Size         int64             `json:"size,omitempty"`         // WASM 二进制大小
-	Capabilities []string          `json:"capabilities,omitempty"` // 所需 host functions
-	ConfigSchema []ConfigField     `json:"config_schema,omitempty"`// 插件配置模式
-	RuleSchema   *RuleSchema       `json:"rule_schema,omitempty"`  // 规则表单模式
+	Name         string        `json:"name"`                    // 唯一标识符
+	Version      string        `json:"version"`                 // 语义化版本
+	Type         PluginType    `json:"type"`                    // Plugin 类别
+	Source       PluginSource  `json:"source"`                  // builtin
+	RunAt        Side          `json:"run_at"`                  // 运行位置: server 或 client
+	Description  string        `json:"description"`             // 人类可读描述
+	Author       string        `json:"author"`                  // Plugin 作者
+	Icon         string        `json:"icon,omitempty"`          // 图标文件名
+	Capabilities []string      `json:"capabilities,omitempty"`  // 所需能力
+	ConfigSchema []ConfigField `json:"config_schema,omitempty"` // 插件配置模式
+	RuleSchema   *RuleSchema   `json:"rule_schema,omitempty"`   // 规则表单模式
 }
 
 // PluginInfo 组合元数据和运行时状态
@@ -82,6 +80,7 @@ type Dialer interface {
 }
 
 // ProxyHandler 是所有 proxy plugin 必须实现的接口
+// 运行在服务端，处理外部连接并通过隧道转发
 type ProxyHandler interface {
 	// Metadata 返回 plugin 信息
 	Metadata() PluginMetadata
@@ -95,6 +94,26 @@ type ProxyHandler interface {
 
 	// Close 释放 plugin 资源
 	Close() error
+}
+
+// ClientHandler 客户端插件接口
+// 运行在客户端，提供本地服务（如 VNC 服务器、文件管理等）
+type ClientHandler interface {
+	// Metadata 返回 plugin 信息
+	Metadata() PluginMetadata
+
+	// Init 使用配置初始化 plugin
+	Init(config map[string]string) error
+
+	// Start 启动客户端服务
+	// 返回服务监听的本地地址（如 "127.0.0.1:5900"）
+	Start() (localAddr string, err error)
+
+	// HandleConn 处理来自隧道的连接
+	HandleConn(conn net.Conn) error
+
+	// Stop 停止客户端服务
+	Stop() error
 }
 
 // ExtendedProxyHandler 扩展的代理处理器接口
@@ -211,27 +230,3 @@ var (
 	ErrInvalidConfig  = &APIError{Code: 7, Message: "invalid configuration"}
 )
 
-// ConnHandle WASM 连接句柄
-type ConnHandle uint32
-
-// HostContext 提供给 WASM plugin 的 host functions
-type HostContext interface {
-	// 网络操作
-	Dial(network, address string) (ConnHandle, error)
-	Read(handle ConnHandle, buf []byte) (int, error)
-	Write(handle ConnHandle, buf []byte) (int, error)
-	CloseConn(handle ConnHandle) error
-
-	// 客户端连接操作
-	ClientRead(buf []byte) (int, error)
-	ClientWrite(buf []byte) (int, error)
-
-	// 日志
-	Log(level LogLevel, message string)
-
-	// 时间
-	Now() int64
-
-	// 配置
-	GetConfig(key string) string
-}

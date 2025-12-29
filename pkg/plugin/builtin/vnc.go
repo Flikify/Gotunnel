@@ -29,20 +29,17 @@ func (p *VNCPlugin) Metadata() plugin.PluginMetadata {
 		Version:     "1.0.0",
 		Type:        plugin.PluginTypeApp,
 		Source:      plugin.PluginSourceBuiltin,
-		Description: "VNC remote desktop relay (connects to client's local VNC server)",
+		RunAt:       plugin.SideServer, // 当前为服务端中继模式
+		Description: "VNC remote desktop relay",
 		Author:      "GoTunnel",
-		Capabilities: []string{
-			"dial", "read", "write", "close",
-		},
 		RuleSchema: &plugin.RuleSchema{
 			NeedsLocalAddr: false,
 			ExtraFields: []plugin.ConfigField{
 				{
-					Key:         "vnc_addr",
-					Label:       "VNC 地址",
-					Type:        plugin.ConfigFieldString,
-					Default:     "127.0.0.1:5900",
-					Description: "客户端本地 VNC 服务地址",
+					Key:     "vnc_addr",
+					Label:   "VNC 地址",
+					Type:    plugin.ConfigFieldString,
+					Default: "127.0.0.1:5900",
 				},
 			},
 		},

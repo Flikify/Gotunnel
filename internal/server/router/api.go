@@ -22,19 +22,21 @@ func validateClientID(id string) bool {
 
 // ClientStatus 客户端状态
 type ClientStatus struct {
-	ID        string `json:"id"`
-	Nickname  string `json:"nickname,omitempty"`
-	Online    bool   `json:"online"`
-	LastPing  string `json:"last_ping,omitempty"`
-	RuleCount int    `json:"rule_count"`
+	ID         string `json:"id"`
+	Nickname   string `json:"nickname,omitempty"`
+	Online     bool   `json:"online"`
+	LastPing   string `json:"last_ping,omitempty"`
+	RemoteAddr string `json:"remote_addr,omitempty"`
+	RuleCount  int    `json:"rule_count"`
 }
 
 // ServerInterface 服务端接口
 type ServerInterface interface {
-	GetClientStatus(clientID string) (online bool, lastPing string)
+	GetClientStatus(clientID string) (online bool, lastPing string, remoteAddr string)
 	GetAllClientStatus() map[string]struct {
-		Online   bool
-		LastPing string
+		Online     bool
+		LastPing   string
+		RemoteAddr string
 	}
 	ReloadConfig() error
 	GetBindAddr() string
@@ -158,6 +160,7 @@ func (h *APIHandler) getClients(rw http.ResponseWriter) {
 		if s, ok := statusMap[c.ID]; ok {
 			cs.Online = s.Online
 			cs.LastPing = s.LastPing
+			cs.RemoteAddr = s.RemoteAddr
 		}
 		result = append(result, cs)
 	}
@@ -256,10 +259,11 @@ func (h *APIHandler) getClient(rw http.ResponseWriter, clientID string) {
 		http.Error(rw, "client not found", http.StatusNotFound)
 		return
 	}
-	online, lastPing := h.server.GetClientStatus(clientID)
+	online, lastPing, remoteAddr := h.server.GetClientStatus(clientID)
 	h.jsonResponse(rw, map[string]interface{}{
 		"id": client.ID, "nickname": client.Nickname, "rules": client.Rules,
 		"plugins": client.Plugins, "online": online, "last_ping": lastPing,
+		"remote_addr": remoteAddr,
 	})
 }
 
@@ -429,7 +433,7 @@ func (h *APIHandler) pushConfigToClient(rw http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	online, _ := h.server.GetClientStatus(clientID)
+	online, _, _ := h.server.GetClientStatus(clientID)
 	if !online {
 		http.Error(rw, "client not online", http.StatusBadRequest)
 		return
@@ -523,7 +527,7 @@ func (h *APIHandler) installPluginsToClient(rw http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	online, _ := h.server.GetClientStatus(clientID)
+	online, _, _ := h.server.GetClientStatus(clientID)
 	if !online {
 		http.Error(rw, "client not online", http.StatusBadRequest)
 		return
@@ -734,7 +738,7 @@ func (h *APIHandler) updateClientPluginConfig(rw http.ResponseWriter, r *http.Re
 	}
 
 	// 如果客户端在线，同步配置
-	online, _ := h.server.GetClientStatus(clientID)
+	online, _, _ := h.server.GetClientStatus(clientID)
 	if online {
 		if err := h.server.SyncPluginConfigToClient(clientID, pluginName, req.Config); err != nil {
 			// 配置已保存，但同步失败，返回警告

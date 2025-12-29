@@ -45,34 +45,29 @@ func (p *SOCKS5Plugin) Metadata() plugin.PluginMetadata {
 		Version:     "1.0.0",
 		Type:        plugin.PluginTypeProxy,
 		Source:      plugin.PluginSourceBuiltin,
-		Description: "SOCKS5 proxy protocol handler (official plugin)",
+		RunAt:       plugin.SideServer,
+		Description: "SOCKS5 proxy protocol handler",
 		Author:      "GoTunnel",
-		Capabilities: []string{
-			"dial", "read", "write", "close",
-		},
 		RuleSchema: &plugin.RuleSchema{
-			NeedsLocalAddr: false, // SOCKS5 不需要本地地址
+			NeedsLocalAddr: false,
 		},
 		ConfigSchema: []plugin.ConfigField{
 			{
-				Key:         "auth",
-				Label:       "认证方式",
-				Type:        plugin.ConfigFieldSelect,
-				Default:     "none",
-				Options:     []string{"none", "password"},
-				Description: "SOCKS5 认证方式",
+				Key:     "auth",
+				Label:   "认证方式",
+				Type:    plugin.ConfigFieldSelect,
+				Default: "none",
+				Options: []string{"none", "password"},
 			},
 			{
-				Key:         "username",
-				Label:       "用户名",
-				Type:        plugin.ConfigFieldString,
-				Description: "认证用户名（仅 password 认证时需要）",
+				Key:   "username",
+				Label: "用户名",
+				Type:  plugin.ConfigFieldString,
 			},
 			{
-				Key:         "password",
-				Label:       "密码",
-				Type:        plugin.ConfigFieldPassword,
-				Description: "认证密码（仅 password 认证时需要）",
+				Key:   "password",
+				Label: "密码",
+				Type:  plugin.ConfigFieldPassword,
 			},
 		},
 	}

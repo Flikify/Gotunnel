@@ -52,6 +52,7 @@ type Server struct {
 // ClientSession 客户端会话
 type ClientSession struct {
 	ID          string
+	RemoteAddr  string // 客户端 IP 地址
 	Session     *yamux.Session
 	Rules       []protocol.ProxyRule
 	Listeners   map[int]net.Listener
@@ -185,13 +186,20 @@ func (s *Server) setupClientSession(conn net.Conn, clientID string, rules []prot
 		return
 	}
 
+	// 提取客户端 IP（去掉端口）
+	remoteAddr := conn.RemoteAddr().String()
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		remoteAddr = host
+	}
+
 	cs := &ClientSession{
-		ID:        clientID,
-		Session:   session,
-		Rules:     rules,
-		Listeners: make(map[int]net.Listener),
-		UDPConns:  make(map[int]*net.UDPConn),
-		LastPing:  time.Now(),
+		ID:         clientID,
+		RemoteAddr: remoteAddr,
+		Session:    session,
+		Rules:      rules,
+		Listeners:  make(map[int]net.Listener),
+		UDPConns:   make(map[int]*net.UDPConn),
+		LastPing:   time.Now(),
 	}
 
 	s.registerClient(cs)
@@ -284,6 +292,10 @@ func (s *Server) stopProxyListeners(cs *ClientSession) {
 // startProxyListeners 启动代理监听
 func (s *Server) startProxyListeners(cs *ClientSession) {
 	for _, rule := range cs.Rules {
+		if !rule.IsEnabled() {
+			continue
+		}
+
 		ruleType := rule.Type
 		if ruleType == "" {
 			ruleType = "tcp"
@@ -292,6 +304,12 @@ func (s *Server) startProxyListeners(cs *ClientSession) {
 		// UDP 单独处理
 		if ruleType == "udp" {
 			s.startUDPListener(cs, rule)
+			continue
+		}
+
+		// 检查是否为客户端插件
+		if s.isClientPlugin(ruleType) {
+			s.startClientPluginListener(cs, rule)
 			continue
 		}
 
@@ -445,22 +463,23 @@ func (s *Server) sendHeartbeat(cs *ClientSession) bool {
 }
 
 // GetClientStatus 获取客户端状态
-func (s *Server) GetClientStatus(clientID string) (online bool, lastPing string) {
+func (s *Server) GetClientStatus(clientID string) (online bool, lastPing string, remoteAddr string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if cs, ok := s.clients[clientID]; ok {
 		cs.mu.Lock()
 		defer cs.mu.Unlock()
-		return true, cs.LastPing.Format(time.RFC3339)
+		return true, cs.LastPing.Format(time.RFC3339), cs.RemoteAddr
 	}
-	return false, ""
+	return false, "", ""
 }
 
 // GetAllClientStatus 获取所有客户端状态
 func (s *Server) GetAllClientStatus() map[string]struct {
-	Online   bool
-	LastPing string
+	Online     bool
+	LastPing   string
+	RemoteAddr string
 } {
 	// 先复制客户端引用，避免嵌套锁
 	s.mu.RLock()
@@ -471,18 +490,21 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 	s.mu.RUnlock()
 
 	result := make(map[string]struct {
-		Online   bool
-		LastPing string
+		Online     bool
+		LastPing   string
+		RemoteAddr string
 	})
 
 	for _, cs := range clients {
 		cs.mu.Lock()
 		result[cs.ID] = struct {
-			Online   bool
-			LastPing string
+			Online     bool
+			LastPing   string
+			RemoteAddr string
 		}{
-			Online:   true,
-			LastPing: cs.LastPing.Format(time.RFC3339),
+			Online:     true,
+			LastPing:   cs.LastPing.Format(time.RFC3339),
+			RemoteAddr: cs.RemoteAddr,
 		}
 		cs.mu.Unlock()
 	}
@@ -811,4 +833,120 @@ func (s *Server) sendPluginConfig(session *yamux.Session, pluginName string, con
 		return err
 	}
 	return protocol.WriteMessage(stream, msg)
+}
+
+// isClientPlugin 检查是否为客户端插件
+func (s *Server) isClientPlugin(pluginType string) bool {
+	if s.pluginRegistry == nil {
+		return false
+	}
+	handler, err := s.pluginRegistry.GetClientPlugin(pluginType)
+	if err != nil {
+		return false
+	}
+	return handler != nil
+}
+
+// startClientPluginListener 启动客户端插件监听
+func (s *Server) startClientPluginListener(cs *ClientSession, rule protocol.ProxyRule) {
+	if err := s.portManager.Reserve(rule.RemotePort, cs.ID); err != nil {
+		log.Printf("[Server] Port %d error: %v", rule.RemotePort, err)
+		return
+	}
+
+	// 发送启动命令到客户端
+	if err := s.sendClientPluginStart(cs.Session, rule); err != nil {
+		log.Printf("[Server] Failed to start client plugin %s: %v", rule.Type, err)
+		s.portManager.Release(rule.RemotePort)
+		return
+	}
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", rule.RemotePort))
+	if err != nil {
+		log.Printf("[Server] Listen %d error: %v", rule.RemotePort, err)
+		s.portManager.Release(rule.RemotePort)
+		return
+	}
+
+	cs.mu.Lock()
+	cs.Listeners[rule.RemotePort] = ln
+	cs.mu.Unlock()
+
+	log.Printf("[Server] Client plugin %s on :%d", rule.Type, rule.RemotePort)
+	go s.acceptClientPluginConns(cs, ln, rule)
+}
+
+// sendClientPluginStart 发送客户端插件启动命令
+func (s *Server) sendClientPluginStart(session *yamux.Session, rule protocol.ProxyRule) error {
+	stream, err := session.Open()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	req := protocol.ClientPluginStartRequest{
+		PluginName: rule.Type,
+		RuleName:   rule.Name,
+		RemotePort: rule.RemotePort,
+		Config:     rule.PluginConfig,
+	}
+	msg, err := protocol.NewMessage(protocol.MsgTypeClientPluginStart, req)
+	if err != nil {
+		return err
+	}
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return err
+	}
+
+	// 等待响应
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return err
+	}
+	if resp.Type != protocol.MsgTypeClientPluginStatus {
+		return fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+
+	var status protocol.ClientPluginStatusResponse
+	if err := resp.ParsePayload(&status); err != nil {
+		return err
+	}
+	if !status.Running {
+		return fmt.Errorf("plugin failed: %s", status.Error)
+	}
+	return nil
+}
+
+// acceptClientPluginConns 接受客户端插件连接
+func (s *Server) acceptClientPluginConns(cs *ClientSession, ln net.Listener, rule protocol.ProxyRule) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go s.handleClientPluginConn(cs, conn, rule)
+	}
+}
+
+// handleClientPluginConn 处理客户端插件连接
+func (s *Server) handleClientPluginConn(cs *ClientSession, conn net.Conn, rule protocol.ProxyRule) {
+	defer conn.Close()
+
+	stream, err := cs.Session.Open()
+	if err != nil {
+		log.Printf("[Server] Open stream error: %v", err)
+		return
+	}
+	defer stream.Close()
+
+	req := protocol.ClientPluginConnRequest{
+		PluginName: rule.Type,
+		RuleName:   rule.Name,
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeClientPluginConn, req)
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return
+	}
+
+	relay.Relay(conn, stream)
 }

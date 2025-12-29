@@ -38,6 +38,12 @@ const (
 	// 插件安装消息
 	MsgTypeInstallPlugins uint8 = 24 // 服务端推送安装插件列表
 	MsgTypePluginConfig   uint8 = 25 // 插件配置同步
+
+	// 客户端插件消息
+	MsgTypeClientPluginStart  uint8 = 40 // 启动客户端插件
+	MsgTypeClientPluginStop   uint8 = 41 // 停止客户端插件
+	MsgTypeClientPluginStatus uint8 = 42 // 客户端插件状态
+	MsgTypeClientPluginConn   uint8 = 43 // 客户端插件连接请求
 )
 
 // Message 基础消息结构
@@ -167,6 +173,35 @@ type UDPPacket struct {
 	RemotePort int    `json:"remote_port"` // 服务端监听端口
 	ClientAddr string `json:"client_addr"` // 客户端地址 (用于回复)
 	Data       []byte `json:"data"`        // UDP 数据
+}
+
+// ClientPluginStartRequest 启动客户端插件请求
+type ClientPluginStartRequest struct {
+	PluginName string            `json:"plugin_name"` // 插件名称
+	RuleName   string            `json:"rule_name"`   // 规则名称
+	RemotePort int               `json:"remote_port"` // 服务端监听端口
+	Config     map[string]string `json:"config"`      // 插件配置
+}
+
+// ClientPluginStopRequest 停止客户端插件请求
+type ClientPluginStopRequest struct {
+	PluginName string `json:"plugin_name"` // 插件名称
+	RuleName   string `json:"rule_name"`   // 规则名称
+}
+
+// ClientPluginStatusResponse 客户端插件状态响应
+type ClientPluginStatusResponse struct {
+	PluginName string `json:"plugin_name"` // 插件名称
+	RuleName   string `json:"rule_name"`   // 规则名称
+	Running    bool   `json:"running"`     // 是否运行中
+	LocalAddr  string `json:"local_addr"`  // 本地监听地址
+	Error      string `json:"error"`       // 错误信息
+}
+
+// ClientPluginConnRequest 客户端插件连接请求
+type ClientPluginConnRequest struct {
+	PluginName string `json:"plugin_name"` // 插件名称
+	RuleName   string `json:"rule_name"`   // 规则名称
 }
 
 // WriteMessage 写入消息到 writer
