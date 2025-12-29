@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gotunnel/internal/server/app"
 	"github.com/gotunnel/internal/server/config"
@@ -72,21 +75,40 @@ func main() {
 
 	// 启动 Web 控制台
 	if cfg.Web.Enabled {
+		// 强制生成 Web 凭据（如果未配置）
+		if config.GenerateWebCredentials(cfg) {
+			log.Printf("[Web] Auto-generated credentials - Username: %s, Password: %s",
+				cfg.Web.Username, cfg.Web.Password)
+			log.Printf("[Web] Please save these credentials and update your config file")
+			// 保存配置以持久化凭据
+			if err := config.SaveServerConfig(*configPath, cfg); err != nil {
+				log.Printf("[Web] Warning: failed to save config: %v", err)
+			}
+		}
+
 		ws := app.NewWebServer(clientStore, server, cfg, *configPath, clientStore)
 		addr := fmt.Sprintf("%s:%d", cfg.Web.BindAddr, cfg.Web.BindPort)
 
 		go func() {
-			var err error
-			if cfg.Web.Username != "" && cfg.Web.Password != "" {
-				err = ws.RunWithJWT(addr, cfg.Web.Username, cfg.Web.Password, cfg.Server.Token)
-			} else {
-				err = ws.Run(addr)
-			}
+			// 始终使用 JWT 认证
+			err := ws.RunWithJWT(addr, cfg.Web.Username, cfg.Web.Password, cfg.Server.Token)
 			if err != nil {
 				log.Printf("[Web] Server error: %v", err)
 			}
 		}()
+		log.Printf("[Web] Console running at http://%s (authentication required)", addr)
 	}
+
+	// 优雅关闭信号处理
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		log.Printf("[Server] Received shutdown signal")
+		server.Shutdown(30 * time.Second)
+		os.Exit(0)
+	}()
 
 	log.Fatal(server.Run())
 }

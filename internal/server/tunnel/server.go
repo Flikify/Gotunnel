@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"regexp"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/proxy"
 	"github.com/gotunnel/pkg/relay"
+	"github.com/gotunnel/pkg/security"
 	"github.com/gotunnel/pkg/utils"
 	"github.com/hashicorp/yamux"
 )
@@ -25,7 +27,16 @@ const (
 	authTimeout      = 10 * time.Second
 	heartbeatTimeout = 10 * time.Second
 	udpBufferSize    = 65535
+	maxConnections   = 10000 // 最大连接数
 )
+
+// 客户端 ID 验证正则
+var clientIDRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+
+// isValidClientID 验证客户端 ID 格式
+func isValidClientID(id string) bool {
+	return clientIDRegex.MatchString(id)
+}
 
 // generateClientID 生成随机客户端 ID
 func generateClientID() string {
@@ -48,6 +59,11 @@ type Server struct {
 	tlsConfig      *tls.Config
 	pluginRegistry *plugin.Registry
 	jsPlugins      []JSPluginEntry // 配置的 JS 插件
+	connSem        chan struct{}   // 连接数信号量
+	activeConns    int64           // 当前活跃连接数
+	listener       net.Listener    // 主监听器
+	shutdown       chan struct{}   // 关闭信号
+	wg             sync.WaitGroup  // 等待所有连接关闭
 }
 
 // JSPluginEntry JS 插件条目
@@ -83,12 +99,47 @@ func NewServer(cs db.ClientStore, bindAddr string, bindPort int, token string, h
 		hbTimeout:   hbTimeout,
 		portManager: utils.NewPortManager(),
 		clients:     make(map[string]*ClientSession),
+		connSem:     make(chan struct{}, maxConnections),
+		shutdown:    make(chan struct{}),
 	}
 }
 
 // SetTLSConfig 设置 TLS 配置
 func (s *Server) SetTLSConfig(config *tls.Config) {
 	s.tlsConfig = config
+}
+
+// Shutdown 优雅关闭服务端
+func (s *Server) Shutdown(timeout time.Duration) error {
+	log.Printf("[Server] Initiating graceful shutdown...")
+	close(s.shutdown)
+
+	if s.listener != nil {
+		s.listener.Close()
+	}
+
+	// 关闭所有客户端会话
+	s.mu.Lock()
+	for _, cs := range s.clients {
+		cs.Session.Close()
+	}
+	s.mu.Unlock()
+
+	// 等待所有连接关闭，带超时
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Printf("[Server] All connections closed gracefully")
+		return nil
+	case <-time.After(timeout):
+		log.Printf("[Server] Shutdown timeout, forcing close")
+		return fmt.Errorf("shutdown timeout")
+	}
 }
 
 // SetPluginRegistry 设置插件注册表
@@ -122,20 +173,49 @@ func (s *Server) Run() error {
 		}
 		log.Printf("[Server] Listening on %s (no TLS)", addr)
 	}
-	defer ln.Close()
+	s.listener = ln
 
 	for {
+		select {
+		case <-s.shutdown:
+			log.Printf("[Server] Shutdown signal received, stopping accept loop")
+			ln.Close()
+			return nil
+		default:
+		}
+
 		conn, err := ln.Accept()
 		if err != nil {
-			log.Printf("[Server] Accept error: %v", err)
-			continue
+			select {
+			case <-s.shutdown:
+				return nil
+			default:
+				log.Printf("[Server] Accept error: %v", err)
+				continue
+			}
 		}
-		go s.handleConnection(conn)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.handleConnection(conn)
+		}()
 	}
 }
 
 // handleConnection 处理客户端连接
 func (s *Server) handleConnection(conn net.Conn) {
+	clientIP := conn.RemoteAddr().String()
+
+	// 连接数限制检查
+	select {
+	case s.connSem <- struct{}{}:
+		defer func() { <-s.connSem }()
+	default:
+		security.LogConnRejected(clientIP, "max connections reached")
+		conn.Close()
+		return
+	}
+
 	defer conn.Close()
 
 	conn.SetReadDeadline(time.Now().Add(authTimeout))
@@ -158,6 +238,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	if authReq.Token != s.token {
+		security.LogInvalidToken(clientIP)
 		s.sendAuthResponse(conn, false, "invalid token", "")
 		return
 	}
@@ -166,6 +247,10 @@ func (s *Server) handleConnection(conn net.Conn) {
 	clientID := authReq.ClientID
 	if clientID == "" {
 		clientID = generateClientID()
+	} else if !isValidClientID(clientID) {
+		security.LogInvalidClientID(clientIP, clientID)
+		s.sendAuthResponse(conn, false, "invalid client id format", "")
+		return
 	}
 
 	// 检查客户端是否存在，不存在则自动创建
@@ -191,7 +276,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	log.Printf("[Server] Client %s authenticated", clientID)
+	security.LogAuthSuccess(clientIP, clientID)
 	s.setupClientSession(conn, clientID, rules)
 }
 

@@ -108,8 +108,24 @@ func setDefaults(cfg *ServerConfig) {
 // generateToken 生成随机 token
 func generateToken(length int) string {
 	bytes := make([]byte, length/2)
-	rand.Read(bytes)
+	n, err := rand.Read(bytes)
+	if err != nil || n != len(bytes) {
+		// 安全关键：随机数生成失败时 panic
+		panic("crypto/rand failed: unable to generate secure token")
+	}
 	return hex.EncodeToString(bytes)
+}
+
+// GenerateWebCredentials 生成 Web 控制台凭据
+func GenerateWebCredentials(cfg *ServerConfig) bool {
+	if cfg.Web.Username == "" {
+		cfg.Web.Username = "admin"
+	}
+	if cfg.Web.Password == "" {
+		cfg.Web.Password = generateToken(16)
+		return true // 表示生成了新密码
+	}
+	return false
 }
 
 // SaveServerConfig 保存服务端配置

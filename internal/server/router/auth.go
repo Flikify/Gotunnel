@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gotunnel/pkg/auth"
+	"github.com/gotunnel/pkg/security"
 )
 
 // AuthHandler 认证处理器
@@ -51,6 +52,7 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	passMatch := subtle.ConstantTimeCompare([]byte(req.Password), []byte(h.password)) == 1
 
 	if !userMatch || !passMatch {
+		security.LogWebLogin(r.RemoteAddr, req.Username, false)
 		http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
 		return
 	}
@@ -62,6 +64,7 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	security.LogWebLogin(r.RemoteAddr, req.Username, true)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"token": token,
@@ -75,6 +78,31 @@ func (h *AuthHandler) handleCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 从 Authorization header 获取 token
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, `{"error":"missing authorization header"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// 解析 Bearer token
+	const prefix = "Bearer "
+	if len(authHeader) < len(prefix) || authHeader[:len(prefix)] != prefix {
+		http.Error(w, `{"error":"invalid authorization format"}`, http.StatusUnauthorized)
+		return
+	}
+	tokenStr := authHeader[len(prefix):]
+
+	// 验证 token
+	claims, err := h.jwtAuth.ValidateToken(tokenStr)
+	if err != nil {
+		http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"valid": true})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"valid":    true,
+		"username": claims.Username,
+	})
 }
