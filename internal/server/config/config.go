@@ -34,6 +34,12 @@ type PluginStoreSettings struct {
 // 官方插件商店（不可配置）
 const OfficialPluginStoreURL = "https://git.92coco.cn:8443/flik/GoTunnel-Plugins/raw/branch/main/store.json"
 
+// 官方安全配置 URL
+const (
+	OfficialRevocationURL = "https://git.92coco.cn:8443/flik/GoTunnel-Plugins/raw/branch/main/security/revocation.json"
+	OfficialKeyListURL    = "https://git.92coco.cn:8443/flik/GoTunnel-Plugins/raw/branch/main/security/keys.json"
+)
+
 // ServerSettings 服务端设置
 type ServerSettings struct {
 	BindAddr         string `yaml:"bind_addr"`

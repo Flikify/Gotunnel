@@ -574,20 +574,22 @@ func (h *APIHandler) installPluginsToClient(rw http.ResponseWriter, r *http.Requ
 
 // StorePluginInfo 扩展商店插件信息
 type StorePluginInfo struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Type        string `json:"type"`
-	Description string `json:"description"`
-	Author      string `json:"author"`
-	Icon        string `json:"icon,omitempty"`
-	DownloadURL string `json:"download_url,omitempty"`
+	Name         string `json:"name"`
+	Version      string `json:"version"`
+	Type         string `json:"type"`
+	Description  string `json:"description"`
+	Author       string `json:"author"`
+	Icon         string `json:"icon,omitempty"`
+	DownloadURL  string `json:"download_url,omitempty"`
+	SignatureURL string `json:"signature_url,omitempty"`
 }
 
 // StorePluginInstallRequest 从商店安装插件的请求
 type StorePluginInstallRequest struct {
-	PluginName  string `json:"plugin_name"`
-	DownloadURL string `json:"download_url"`
-	ClientID    string `json:"client_id"`
+	PluginName   string `json:"plugin_name"`
+	DownloadURL  string `json:"download_url"`
+	SignatureURL string `json:"signature_url"`
+	ClientID     string `json:"client_id"`
 }
 
 // handleStorePlugins 处理扩展商店插件列表
@@ -628,8 +630,7 @@ func (h *APIHandler) handleStorePlugins(rw http.ResponseWriter, r *http.Request)
 	}
 
 	h.jsonResponse(rw, map[string]interface{}{
-		"plugins":   plugins,
-		"store_url": storeURL,
+		"plugins": plugins,
 	})
 }
 
@@ -646,8 +647,8 @@ func (h *APIHandler) handleStoreInstall(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.PluginName == "" || req.DownloadURL == "" || req.ClientID == "" {
-		http.Error(rw, "plugin_name, download_url and client_id required", http.StatusBadRequest)
+	if req.PluginName == "" || req.DownloadURL == "" || req.ClientID == "" || req.SignatureURL == "" {
+		http.Error(rw, "plugin_name, download_url, signature_url and client_id required", http.StatusBadRequest)
 		return
 	}
 
@@ -678,10 +679,30 @@ func (h *APIHandler) handleStoreInstall(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// 下载签名文件
+	sigResp, err := client.Get(req.SignatureURL)
+	if err != nil {
+		http.Error(rw, "Failed to download signature: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer sigResp.Body.Close()
+
+	if sigResp.StatusCode != http.StatusOK {
+		http.Error(rw, "Signature download failed with status: "+sigResp.Status, http.StatusBadGateway)
+		return
+	}
+
+	signature, err := io.ReadAll(sigResp.Body)
+	if err != nil {
+		http.Error(rw, "Failed to read signature: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	// 安装到客户端
 	installReq := JSPluginInstallRequest{
 		PluginName: req.PluginName,
 		Source:     string(source),
+		Signature:  string(signature),
 		RuleName:   req.PluginName,
 		AutoStart:  true,
 	}

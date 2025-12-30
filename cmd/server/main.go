@@ -59,6 +59,9 @@ func main() {
 		log.Printf("[Server] TLS enabled")
 	}
 
+	// 初始化安全配置（撤销列表和公钥列表）
+	initSecurityConfig()
+
 	// 初始化插件系统
 	registry := plugin.NewRegistry()
 	if err := registry.RegisterAllServer(builtin.GetServerPlugins()); err != nil {
@@ -187,4 +190,33 @@ func verifyPluginSignature(name, source, signature string) error {
 
 	// 验证签名
 	return sign.VerifyPlugin(pubKey, signed, source)
+}
+
+// initSecurityConfig 初始化安全配置
+func initSecurityConfig() {
+	// 配置撤销列表
+	sign.SetRevocationConfig(sign.RevocationConfig{
+		RemoteURL:       config.OfficialRevocationURL,
+		FetchInterval:   1 * time.Hour,
+		RequestTimeout:  10 * time.Second,
+		VerifySignature: true,
+	})
+
+	// 配置公钥列表
+	sign.SetKeyListConfig(sign.KeyListConfig{
+		RemoteURL:      config.OfficialKeyListURL,
+		FetchInterval:  24 * time.Hour,
+		RequestTimeout: 10 * time.Second,
+	})
+
+	// 启动后台刷新
+	stopCh := make(chan struct{})
+	go sign.StartRevocationRefresher(stopCh)
+
+	// 立即拉取一次公钥列表
+	if err := sign.FetchRemoteKeyList(); err != nil {
+		log.Printf("[Security] Fetch key list failed: %v", err)
+	}
+
+	log.Printf("[Security] Initialized with remote revocation and key list")
 }

@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gotunnel/internal/client/tunnel"
 	"github.com/gotunnel/pkg/crypto"
 	"github.com/gotunnel/pkg/plugin"
 	"github.com/gotunnel/pkg/plugin/builtin"
+	"github.com/gotunnel/pkg/plugin/sign"
 )
 
 func main() {
@@ -40,6 +42,9 @@ func main() {
 		}
 	}
 
+	// 初始化安全配置
+	initSecurityConfig()
+
 	// 初始化插件系统
 	registry := plugin.NewRegistry()
 	for _, h := range builtin.GetClientPlugins() {
@@ -51,4 +56,39 @@ func main() {
 	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetClientPlugins()))
 
 	client.Run()
+}
+
+// 官方安全配置 URL（与服务端保持一致）
+const (
+	officialRevocationURL = "https://git.92coco.cn:8443/flik/GoTunnel-Plugins/raw/branch/main/security/revocation.json"
+	officialKeyListURL    = "https://git.92coco.cn:8443/flik/GoTunnel-Plugins/raw/branch/main/security/keys.json"
+)
+
+// initSecurityConfig 初始化安全配置
+func initSecurityConfig() {
+	// 配置撤销列表
+	sign.SetRevocationConfig(sign.RevocationConfig{
+		RemoteURL:       officialRevocationURL,
+		FetchInterval:   1 * time.Hour,
+		RequestTimeout:  10 * time.Second,
+		VerifySignature: true,
+	})
+
+	// 配置公钥列表
+	sign.SetKeyListConfig(sign.KeyListConfig{
+		RemoteURL:      officialKeyListURL,
+		FetchInterval:  24 * time.Hour,
+		RequestTimeout: 10 * time.Second,
+	})
+
+	// 启动后台刷新
+	stopCh := make(chan struct{})
+	go sign.StartRevocationRefresher(stopCh)
+
+	// 立即拉取一次
+	if err := sign.FetchRemoteKeyList(); err != nil {
+		log.Printf("[Security] Fetch key list failed: %v", err)
+	}
+
+	log.Printf("[Security] Initialized")
 }

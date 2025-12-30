@@ -110,6 +110,7 @@ export interface StorePluginInfo {
   author: string
   icon?: string
   download_url?: string
+  signature_url?: string
 }
 
 // JS 插件信息
