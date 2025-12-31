@@ -600,8 +600,7 @@ func (h *APIHandler) handleStorePlugins(rw http.ResponseWriter, r *http.Request)
 	}
 
 	cfg := h.app.GetConfig()
-	storeURL := config.OfficialPluginStoreURL
-	_ = cfg // 保留以便未来扩展
+	storeURL := cfg.PluginStore.GetPluginStoreURL()
 
 	// 从远程URL获取插件列表
 	client := &http.Client{Timeout: 10 * time.Second}
