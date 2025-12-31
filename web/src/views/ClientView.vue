@@ -42,7 +42,8 @@ const builtinTypes = [
   { label: 'TCP', value: 'tcp' },
   { label: 'UDP', value: 'udp' },
   { label: 'HTTP', value: 'http' },
-  { label: 'HTTPS', value: 'https' }
+  { label: 'HTTPS', value: 'https' },
+  { label: 'SOCKS5', value: 'socks5' }
 ]
 
 // 规则类型选项（内置 + 插件）

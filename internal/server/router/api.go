@@ -711,6 +711,30 @@ func (h *APIHandler) handleStoreInstall(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// 将插件信息保存到数据库
+	dbClient, err := h.clientStore.GetClient(req.ClientID)
+	if err == nil {
+		// 检查插件是否已存在
+		exists := false
+		for i, p := range dbClient.Plugins {
+			if p.Name == req.PluginName {
+				// 更新已存在的插件
+				dbClient.Plugins[i].Enabled = true
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			// 添加新插件
+			dbClient.Plugins = append(dbClient.Plugins, db.ClientPlugin{
+				Name:    req.PluginName,
+				Version: "1.0.0",
+				Enabled: true,
+			})
+		}
+		_ = h.clientStore.UpdateClient(dbClient)
+	}
+
 	h.jsonResponse(rw, map[string]interface{}{
 		"status": "ok",
 		"plugin": req.PluginName,
