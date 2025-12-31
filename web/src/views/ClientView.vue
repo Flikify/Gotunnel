@@ -142,7 +142,7 @@ const handleInstallStorePlugin = async (plugin: StorePluginInfo) => {
   storeInstalling.value = true
   selectedStorePlugin.value = plugin
   try {
-    await installStorePlugin(plugin.name, plugin.download_url, clientId)
+    await installStorePlugin(plugin.name, plugin.download_url, plugin.signature_url || '', clientId)
     message.success(`已安装 ${plugin.name}`)
     showStoreModal.value = false
     await loadClient()
