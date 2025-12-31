@@ -21,6 +21,10 @@ type Sandbox struct {
 	MaxReadSize int64
 	// 最大文件写入大小 (bytes)
 	MaxWriteSize int64
+	// 最大内存使用量 (bytes)，0 表示不限制
+	MaxMemory int64
+	// 最大调用栈深度
+	MaxStackDepth int
 }
 
 // DefaultSandbox 返回默认沙箱配置（最小权限）
@@ -30,8 +34,10 @@ func DefaultSandbox() *Sandbox {
 		WritablePaths: []string{},
 		DeniedPaths:   defaultDeniedPaths(),
 		AllowNetwork:  false,
-		MaxReadSize:   10 * 1024 * 1024,  // 10MB
-		MaxWriteSize:  1 * 1024 * 1024,   // 1MB
+		MaxReadSize:   10 * 1024 * 1024, // 10MB
+		MaxWriteSize:  1 * 1024 * 1024,  // 1MB
+		MaxMemory:     64 * 1024 * 1024, // 64MB
+		MaxStackDepth: 1000,             // 最大调用栈深度
 	}
 }
 

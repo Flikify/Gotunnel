@@ -164,16 +164,6 @@ func verifyPluginSignature(name, source, signature string) error {
 		return fmt.Errorf("decode signature: %w", err)
 	}
 
-	// 检查插件是否被撤销
-	if revoked, reason := sign.IsPluginRevoked(name, signed.Payload.Version); revoked {
-		return fmt.Errorf("plugin revoked: %s", reason)
-	}
-
-	// 检查密钥是否已吊销
-	if sign.IsKeyRevoked(signed.Payload.KeyID) {
-		return fmt.Errorf("signing key revoked: %s", signed.Payload.KeyID)
-	}
-
 	// 获取公钥
 	pubKey, err := sign.GetPublicKeyByID(signed.Payload.KeyID)
 	if err != nil {

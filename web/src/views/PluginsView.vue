@@ -19,7 +19,6 @@ const plugins = ref<PluginInfo[]>([])
 const storePlugins = ref<StorePluginInfo[]>([])
 const jsPlugins = ref<JSPlugin[]>([])
 const clients = ref<ClientStatus[]>([])
-const storeUrl = ref('')
 const loading = ref(true)
 const storeLoading = ref(false)
 const jsLoading = ref(false)
@@ -41,7 +40,6 @@ const loadStorePlugins = async () => {
   try {
     const { data } = await getStorePlugins()
     storePlugins.value = data.plugins || []
-    storeUrl.value = data.store_url || ''
   } catch (e) {
     console.error('Failed to load store plugins', e)
   } finally {
@@ -165,11 +163,16 @@ const handleInstallStorePlugin = async () => {
     message.error('该插件没有下载地址')
     return
   }
+  if (!selectedStorePlugin.value.signature_url) {
+    message.error('该插件没有签名文件')
+    return
+  }
   installing.value = true
   try {
     await installStorePlugin(
       selectedStorePlugin.value.name,
       selectedStorePlugin.value.download_url,
+      selectedStorePlugin.value.signature_url,
       selectedClientId.value
     )
     message.success(`已安装 ${selectedStorePlugin.value.name} 到客户端`)
@@ -258,8 +261,7 @@ onMounted(() => {
       <!-- 扩展商店 -->
       <n-tab-pane name="store" tab="扩展商店">
         <n-spin :show="storeLoading">
-          <n-empty v-if="!storeUrl" description="未配置扩展商店URL，请在配置文件中设置 plugin_store.url" />
-          <n-empty v-else-if="!storeLoading && storePlugins.length === 0" description="扩展商店暂无可用扩展" />
+          <n-empty v-if="!storeLoading && storePlugins.length === 0" description="扩展商店暂无可用扩展" />
 
           <n-grid v-else :cols="3" :x-gap="16" :y-gap="16" responsive="screen" cols-s="1" cols-m="2">
             <n-gi v-for="plugin in storePlugins" :key="plugin.name">
@@ -273,7 +275,7 @@ onMounted(() => {
                 </template>
                 <template #header-extra>
                   <n-button
-                    v-if="plugin.download_url && onlineClients.length > 0"
+                    v-if="plugin.download_url && plugin.signature_url && onlineClients.length > 0"
                     size="small"
                     type="primary"
                     @click="openInstallModal(plugin)"

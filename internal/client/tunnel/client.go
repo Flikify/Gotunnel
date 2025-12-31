@@ -578,17 +578,6 @@ func (c *Client) verifyJSPluginSignature(pluginName, source, signature string) e
 		return fmt.Errorf("decode signature: %w", err)
 	}
 
-	// 检查插件是否被撤销
-	if revoked, reason := sign.IsPluginRevoked(pluginName, signed.Payload.Version); revoked {
-		return fmt.Errorf("plugin %s v%s has been revoked: %s",
-			pluginName, signed.Payload.Version, reason)
-	}
-
-	// 检查密钥是否已吊销
-	if sign.IsKeyRevoked(signed.Payload.KeyID) {
-		return fmt.Errorf("signing key %s has been revoked", signed.Payload.KeyID)
-	}
-
 	// 根据 KeyID 获取对应公钥
 	pubKey, err := sign.GetPublicKeyByID(signed.Payload.KeyID)
 	if err != nil {

@@ -26,13 +26,21 @@ type JSPluginConfig struct {
 	AutoStart bool              `yaml:"auto_start,omitempty"` // 是否自动启动
 }
 
-// PluginStoreSettings 扩展商店设置
+// PluginStoreSettings 插件仓库设置
 type PluginStoreSettings struct {
-	// 保留结构体以便未来扩展，但不暴露 URL 配置
+	URL string `yaml:"url"` // 插件仓库 URL，为空则使用默认值
 }
 
-// 官方插件商店（不可配置）
-const OfficialPluginStoreURL = "https://git.92coco.cn:8443/flik/GoTunnel-Plugins/raw/branch/main/store.json"
+// 默认插件仓库 URL
+const DefaultPluginStoreURL = "https://git.92coco.cn:8443/flik/GoTunnel-Plugins/raw/branch/main/store.json"
+
+// GetPluginStoreURL 获取插件仓库 URL
+func (s *PluginStoreSettings) GetPluginStoreURL() string {
+	if s.URL != "" {
+		return s.URL
+	}
+	return DefaultPluginStoreURL
+}
 
 // ServerSettings 服务端设置
 type ServerSettings struct {

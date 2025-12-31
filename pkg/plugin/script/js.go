@@ -48,6 +48,11 @@ func (p *JSPlugin) SetSandbox(sandbox *Sandbox) {
 
 // init 初始化 JS 运行时
 func (p *JSPlugin) init() error {
+	// 设置栈深度限制（防止递归攻击）
+	if p.sandbox.MaxStackDepth > 0 {
+		p.vm.SetMaxCallStackSize(p.sandbox.MaxStackDepth)
+	}
+
 	// 注入基础 API
 	p.vm.Set("log", p.jsLog)
 	p.vm.Set("config", p.jsGetConfig)
