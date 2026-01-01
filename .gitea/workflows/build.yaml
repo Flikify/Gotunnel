@@ -94,7 +94,7 @@ jobs:
             EXT=".exe"
           fi
           
-          FILENAME="${{ matrix.target }}-${{ matrix.goos }}-${{ matrix.goarch }}${ARM_VAL}${EXT}"
+          FILENAME="gotunnel-${{ matrix.target }}-${{ matrix.goos }}-${{ matrix.goarch }}${ARM_VAL}${EXT}"
           
           # 执行编译
           go build -ldflags="-s -w" -o "${FILENAME}" ./cmd/${{ matrix.target }}
