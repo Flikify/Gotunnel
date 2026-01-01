@@ -121,8 +121,17 @@ type spaHandler struct {
 
 func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
+
+	// 尝试打开请求的文件
 	f, err := h.fs.Open(path)
 	if err != nil {
+		// 文件不存在时，检查是否是静态资源请求
+		// 静态资源（js, css, 图片等）应该返回 404，而不是 index.html
+		if isStaticAsset(path) {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+		// 其他路径返回 index.html（SPA 路由）
 		f, err = h.fs.Open("index.html")
 		if err != nil {
 			http.Error(w, "Not Found", http.StatusNotFound)
@@ -149,6 +158,20 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if seeker, ok := f.(io.ReadSeeker); ok {
 		http.ServeContent(w, r, path, stat.ModTime(), seeker)
 	}
+}
+
+// isStaticAsset 检查路径是否是静态资源
+func isStaticAsset(path string) bool {
+	staticExtensions := []string{
+		".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+		".woff", ".woff2", ".ttf", ".eot", ".map", ".json",
+	}
+	for _, ext := range staticExtensions {
+		if len(path) > len(ext) && path[len(path)-len(ext):] == ext {
+			return true
+		}
+	}
+	return false
 }
 
 // Re-export types from handler package for backward compatibility
