@@ -3,20 +3,20 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NTable, NEmpty,
-  NFormItem, NInput, NInputNumber, NSelect, NModal, NCheckbox, NSwitch,
+  NFormItem, NInput, NInputNumber, NSelect, NModal, NSwitch,
   NIcon, useMessage, useDialog, NSpin
 } from 'naive-ui'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, PowerOutline, AddOutline, SaveOutline, CloseOutline,
-  DownloadOutline, SettingsOutline, StorefrontOutline, RefreshOutline, StopOutline
+  SettingsOutline, StorefrontOutline, RefreshOutline, StopOutline
 } from '@vicons/ionicons5'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
-  getPlugins, installPluginsToClient, getClientPluginConfig, updateClientPluginConfig,
+  getClientPluginConfig, updateClientPluginConfig,
   getStorePlugins, installStorePlugin, getRuleSchemas, restartClientPlugin, stopClientPlugin
 } from '../api'
-import type { ProxyRule, PluginInfo, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
+import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -74,11 +74,6 @@ const getExtraFields = (type: string): ConfigField[] => {
   return schema?.extra_fields || []
 }
 
-// 插件安装相关
-const showInstallModal = ref(false)
-const availablePlugins = ref<PluginInfo[]>([])
-const selectedPlugins = ref<string[]>([])
-
 // 插件配置相关
 const showConfigModal = ref(false)
 const configPluginName = ref('')
@@ -92,37 +87,6 @@ const storePlugins = ref<StorePluginInfo[]>([])
 const storeLoading = ref(false)
 const selectedStorePlugin = ref<StorePluginInfo | null>(null)
 const storeInstalling = ref(false)
-
-const loadPlugins = async () => {
-  try {
-    const { data } = await getPlugins()
-    availablePlugins.value = (data || []).filter(p => p.enabled)
-
-    // 更新类型选项：内置类型 + proxy 类型插件
-    const proxyPlugins = availablePlugins.value
-      .filter(p => p.type === 'proxy')
-      .map(p => ({ label: `${p.name.toUpperCase()} (插件)`, value: p.name }))
-    typeOptions.value = [...builtinTypes, ...proxyPlugins]
-
-    // 合并插件的 RuleSchema 到 pluginRuleSchemas
-    for (const p of availablePlugins.value) {
-      if (p.rule_schema) {
-        pluginRuleSchemas.value[p.name] = p.rule_schema
-      }
-    }
-  } catch (e) {
-    console.error('Failed to load plugins', e)
-  }
-}
-
-const openInstallModal = async () => {
-  await loadPlugins()
-  // 过滤掉已安装的插件
-  const installedNames = clientPlugins.value.map(p => p.name)
-  availablePlugins.value = availablePlugins.value.filter(p => !installedNames.includes(p.name))
-  selectedPlugins.value = []
-  showInstallModal.value = true
-}
 
 // 商店插件相关函数
 const openStoreModal = async () => {
@@ -160,11 +124,6 @@ const handleInstallStorePlugin = async (plugin: StorePluginInfo) => {
   }
 }
 
-const getTypeLabel = (type: string) => {
-  const labels: Record<string, string> = { proxy: '协议', app: '应用', service: '服务', tool: '工具' }
-  return labels[type] || type
-}
-
 const loadClient = async () => {
   try {
     const { data } = await getClient(clientId)
@@ -182,7 +141,6 @@ const loadClient = async () => {
 onMounted(() => {
   loadRuleSchemas() // 加载内置协议配置模式
   loadClient()
-  loadPlugins()
 })
 
 // 打开重命名弹窗
@@ -339,21 +297,6 @@ const handleStopPlugin = async (plugin: ClientPlugin) => {
   }
 }
 
-const installPlugins = async () => {
-  if (selectedPlugins.value.length === 0) {
-    message.warning('请选择要安装的插件')
-    return
-  }
-  try {
-    await installPluginsToClient(clientId, selectedPlugins.value)
-    message.success(`已推送 ${selectedPlugins.value.length} 个插件到客户端`)
-    showInstallModal.value = false
-    await loadClient() // 刷新客户端数据
-  } catch (e: any) {
-    message.error(e.response?.data || '安装失败')
-  }
-}
-
 const toggleClientPlugin = async (plugin: ClientPlugin) => {
   const newEnabled = !plugin.enabled
   const updatedPlugins = clientPlugins.value.map(p =>
@@ -440,10 +383,6 @@ const savePluginConfig = async () => {
             <n-button type="info" @click="pushConfig">
               <template #icon><n-icon><PushOutline /></n-icon></template>
               推送配置
-            </n-button>
-            <n-button type="success" @click="openInstallModal">
-              <template #icon><n-icon><DownloadOutline /></n-icon></template>
-              安装插件
             </n-button>
             <n-button @click="openStoreModal">
               <template #icon><n-icon><StorefrontOutline /></n-icon></template>
@@ -643,39 +582,6 @@ const savePluginConfig = async () => {
         </tbody>
       </n-table>
     </n-card>
-
-    <!-- 安装插件模态框 -->
-    <n-modal v-model:show="showInstallModal" preset="card" title="安装插件到客户端" style="width: 500px;">
-      <n-empty v-if="availablePlugins.length === 0" description="暂无可用插件" />
-      <n-space v-else vertical :size="12">
-        <n-card v-for="plugin in availablePlugins" :key="plugin.name" size="small">
-          <n-space justify="space-between" align="center">
-            <n-space vertical :size="4">
-              <n-space align="center">
-                <span style="font-weight: 500;">{{ plugin.name }}</span>
-                <n-tag size="small">{{ getTypeLabel(plugin.type) }}</n-tag>
-              </n-space>
-              <span style="color: #666; font-size: 12px;">{{ plugin.description }}</span>
-            </n-space>
-            <n-checkbox
-              :checked="selectedPlugins.includes(plugin.name)"
-              @update:checked="(v: boolean) => {
-                if (v) selectedPlugins.push(plugin.name)
-                else selectedPlugins = selectedPlugins.filter(n => n !== plugin.name)
-              }"
-            />
-          </n-space>
-        </n-card>
-      </n-space>
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showInstallModal = false">取消</n-button>
-          <n-button type="primary" @click="installPlugins" :disabled="selectedPlugins.length === 0">
-            安装 ({{ selectedPlugins.length }})
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
 
     <!-- 插件配置模态框 -->
     <n-modal v-model:show="showConfigModal" preset="card" :title="`${configPluginName} 配置`" style="width: 500px;">

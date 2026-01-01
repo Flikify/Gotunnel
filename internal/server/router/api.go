@@ -826,11 +826,24 @@ func (h *APIHandler) getClientPluginConfig(rw http.ResponseWriter, clientID, plu
 		return
 	}
 
-	// 获取插件配置模式
+	// 尝试从内置插件获取配置模式
 	schema, err := h.server.GetPluginConfigSchema(pluginName)
 	if err != nil {
-		http.Error(rw, err.Error(), http.StatusNotFound)
-		return
+		// 如果内置插件中找不到，尝试从 JS 插件获取
+		jsPlugin, jsErr := h.jsPluginStore.GetJSPlugin(pluginName)
+		if jsErr != nil {
+			// 两者都找不到，返回空 schema（允许配置但没有预定义的 schema）
+			schema = []ConfigField{}
+		} else {
+			// 使用 JS 插件的 config 作为动态 schema
+			for key := range jsPlugin.Config {
+				schema = append(schema, ConfigField{
+					Key:   key,
+					Label: key,
+					Type:  "string",
+				})
+			}
+		}
 	}
 
 	// 查找客户端的插件配置
