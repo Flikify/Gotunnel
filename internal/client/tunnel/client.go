@@ -221,10 +221,16 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handlePluginConfig(msg)
 	case protocol.MsgTypeClientPluginStart:
 		c.handleClientPluginStart(stream, msg)
+	case protocol.MsgTypeClientPluginStop:
+		c.handleClientPluginStop(stream, msg)
 	case protocol.MsgTypeClientPluginConn:
 		c.handleClientPluginConn(stream, msg)
 	case protocol.MsgTypeJSPluginInstall:
 		c.handleJSPluginInstall(stream, msg)
+	case protocol.MsgTypeClientRestart:
+		c.handleClientRestart(stream, msg)
+	case protocol.MsgTypePluginConfigUpdate:
+		c.handlePluginConfigUpdate(stream, msg)
 	}
 }
 
@@ -608,4 +614,127 @@ func (c *Client) verifyJSPluginSignature(pluginName, source, signature string) e
 	}
 
 	return nil
+}
+
+// handleClientPluginStop 处理客户端插件停止请求
+func (c *Client) handleClientPluginStop(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var req protocol.ClientPluginStopRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		c.sendPluginStatus(stream, req.PluginName, req.RuleName, true, "", err.Error())
+		return
+	}
+
+	key := req.PluginName + ":" + req.RuleName
+
+	c.pluginMu.Lock()
+	handler, ok := c.runningPlugins[key]
+	if ok {
+		if err := handler.Stop(); err != nil {
+			log.Printf("[Client] Plugin %s stop error: %v", key, err)
+		}
+		delete(c.runningPlugins, key)
+	}
+	c.pluginMu.Unlock()
+
+	log.Printf("[Client] Plugin %s stopped", key)
+	c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", "")
+}
+
+// handleClientRestart 处理客户端重启请求
+func (c *Client) handleClientRestart(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var req protocol.ClientRestartRequest
+	msg.ParsePayload(&req)
+
+	log.Printf("[Client] Restart requested: %s", req.Reason)
+
+	// 发送响应
+	resp := protocol.ClientRestartResponse{
+		Success: true,
+		Message: "restarting",
+	}
+	respMsg, _ := protocol.NewMessage(protocol.MsgTypeClientRestart, resp)
+	protocol.WriteMessage(stream, respMsg)
+
+	// 停止所有运行中的插件
+	c.pluginMu.Lock()
+	for key, handler := range c.runningPlugins {
+		log.Printf("[Client] Stopping plugin %s for restart", key)
+		handler.Stop()
+	}
+	c.runningPlugins = make(map[string]plugin.ClientPlugin)
+	c.pluginMu.Unlock()
+
+	// 关闭会话（会触发重连）
+	if c.session != nil {
+		c.session.Close()
+	}
+}
+
+// handlePluginConfigUpdate 处理插件配置更新请求
+func (c *Client) handlePluginConfigUpdate(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var req protocol.PluginConfigUpdateRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, false, err.Error())
+		return
+	}
+
+	key := req.PluginName + ":" + req.RuleName
+	log.Printf("[Client] Config update for plugin %s", key)
+
+	c.pluginMu.RLock()
+	handler, ok := c.runningPlugins[key]
+	c.pluginMu.RUnlock()
+
+	if !ok {
+		c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, false, "plugin not running")
+		return
+	}
+
+	if req.Restart {
+		// 停止并重启插件
+		c.pluginMu.Lock()
+		if err := handler.Stop(); err != nil {
+			log.Printf("[Client] Plugin %s stop error: %v", key, err)
+		}
+		delete(c.runningPlugins, key)
+		c.pluginMu.Unlock()
+
+		// 重新初始化和启动
+		if err := handler.Init(req.Config); err != nil {
+			c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, false, err.Error())
+			return
+		}
+
+		localAddr, err := handler.Start()
+		if err != nil {
+			c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, false, err.Error())
+			return
+		}
+
+		c.pluginMu.Lock()
+		c.runningPlugins[key] = handler
+		c.pluginMu.Unlock()
+
+		log.Printf("[Client] Plugin %s restarted at %s with new config", key, localAddr)
+	}
+
+	c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, true, "")
+}
+
+// sendPluginConfigUpdateResult 发送插件配置更新结果
+func (c *Client) sendPluginConfigUpdateResult(stream net.Conn, pluginName, ruleName string, success bool, errMsg string) {
+	result := protocol.PluginConfigUpdateResponse{
+		PluginName: pluginName,
+		RuleName:   ruleName,
+		Success:    success,
+		Error:      errMsg,
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypePluginConfigUpdate, result)
+	protocol.WriteMessage(stream, msg)
 }

@@ -4,12 +4,12 @@ import { useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NStatistic, NGrid, NGi,
   NEmpty, NSpin, NIcon, NSwitch, NTabs, NTabPane, useMessage,
-  NSelect, NModal
+  NSelect, NModal, NInput
 } from 'naive-ui'
-import { ArrowBackOutline, ExtensionPuzzleOutline, StorefrontOutline, CodeSlashOutline } from '@vicons/ionicons5'
+import { ArrowBackOutline, ExtensionPuzzleOutline, StorefrontOutline, CodeSlashOutline, SettingsOutline } from '@vicons/ionicons5'
 import {
   getPlugins, enablePlugin, disablePlugin, getStorePlugins, getJSPlugins,
-  pushJSPluginToClient, getClients, installStorePlugin
+  pushJSPluginToClient, getClients, installStorePlugin, updateJSPluginConfig, setJSPluginEnabled
 } from '../api'
 import type { PluginInfo, StorePluginInfo, JSPlugin, ClientStatus } from '../types'
 
@@ -142,6 +142,68 @@ const handlePushJSPlugin = async (pluginName: string, clientId: string) => {
 
 const onlineClients = computed(() => clients.value.filter(c => c.online))
 
+// JS 插件配置相关
+const showJSConfigModal = ref(false)
+const currentJSPlugin = ref<JSPlugin | null>(null)
+const jsConfigItems = ref<Array<{ key: string; value: string }>>([])
+const jsConfigSaving = ref(false)
+
+const openJSConfigModal = (plugin: JSPlugin) => {
+  currentJSPlugin.value = plugin
+  // 将 config 转换为数组形式便于编辑
+  jsConfigItems.value = Object.entries(plugin.config || {}).map(([key, value]) => ({ key, value }))
+  if (jsConfigItems.value.length === 0) {
+    jsConfigItems.value.push({ key: '', value: '' })
+  }
+  showJSConfigModal.value = true
+}
+
+const addJSConfigItem = () => {
+  jsConfigItems.value.push({ key: '', value: '' })
+}
+
+const removeJSConfigItem = (index: number) => {
+  jsConfigItems.value.splice(index, 1)
+}
+
+const saveJSPluginConfig = async () => {
+  if (!currentJSPlugin.value) return
+
+  jsConfigSaving.value = true
+  try {
+    // 将数组转换回对象
+    const config: Record<string, string> = {}
+    for (const item of jsConfigItems.value) {
+      if (item.key.trim()) {
+        config[item.key.trim()] = item.value
+      }
+    }
+    await updateJSPluginConfig(currentJSPlugin.value.name, config)
+    // 更新本地数据
+    const plugin = jsPlugins.value.find(p => p.name === currentJSPlugin.value!.name)
+    if (plugin) {
+      plugin.config = config
+    }
+    message.success('配置已保存')
+    showJSConfigModal.value = false
+  } catch (e: any) {
+    message.error(e.response?.data || '保存失败')
+  } finally {
+    jsConfigSaving.value = false
+  }
+}
+
+// 切换 JS 插件启用状态
+const toggleJSPlugin = async (plugin: JSPlugin) => {
+  try {
+    await setJSPluginEnabled(plugin.name, !plugin.enabled)
+    plugin.enabled = !plugin.enabled
+    message.success(plugin.enabled ? `已启用 ${plugin.name}` : `已禁用 ${plugin.name}`)
+  } catch (e: any) {
+    message.error(e.response?.data || '操作失败')
+  }
+}
+
 // 商店插件安装相关
 const showInstallModal = ref(false)
 const selectedStorePlugin = ref<StorePluginInfo | null>(null)
@@ -246,8 +308,8 @@ onMounted(() => {
                     <n-tag size="small" :type="getTypeColor(plugin.type)">
                       {{ getTypeLabel(plugin.type) }}
                     </n-tag>
-                    <n-tag size="small" :type="plugin.source === 'builtin' ? 'default' : 'warning'">
-                      {{ plugin.source === 'builtin' ? '内置' : 'WASM' }}
+                    <n-tag size="small" :type="plugin.source === 'builtin' ? 'default' : 'info'">
+                      {{ plugin.source === 'builtin' ? '内置' : 'JS' }}
                     </n-tag>
                   </n-space>
                   <p style="margin: 0; color: #666;">{{ plugin.description }}</p>
@@ -301,15 +363,6 @@ onMounted(() => {
 
       <!-- JS 插件 -->
       <n-tab-pane name="js" tab="JS 插件">
-        <!-- 安全加固：暂时禁用 Web UI 创建功能
-        <n-space justify="end" style="margin-bottom: 16px;">
-          <n-button type="primary" @click="showJSModal = true">
-            <template #icon><n-icon><AddOutline /></n-icon></template>
-            新建 JS 插件
-          </n-button>
-        </n-space>
-        -->
-
         <n-spin :show="jsLoading">
           <n-empty v-if="!jsLoading && jsPlugins.length === 0" description="暂无 JS 插件" />
 
@@ -320,36 +373,47 @@ onMounted(() => {
                   <n-space align="center">
                     <n-icon size="24" color="#f0a020"><CodeSlashOutline /></n-icon>
                     <span>{{ plugin.name }}</span>
+                    <n-tag v-if="plugin.version" size="small">v{{ plugin.version }}</n-tag>
                   </n-space>
                 </template>
                 <template #header-extra>
-                  <n-space>
-                    <n-select
-                      v-if="onlineClients.length > 0"
-                      placeholder="推送到..."
-                      size="small"
-                      style="width: 120px;"
-                      :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))"
-                      @update:value="(v: string) => handlePushJSPlugin(plugin.name, v)"
-                    />
-                    <!-- 安全加固：暂时禁用删除功能
-                    <n-popconfirm @positive-click="handleDeleteJSPlugin(plugin.name)">
-                      <template #trigger>
-                        <n-button size="small" type="error" quaternary>删除</n-button>
-                      </template>
-                      确定删除此插件？
-                    </n-popconfirm>
-                    -->
-                  </n-space>
+                  <n-switch :value="plugin.enabled" @update:value="toggleJSPlugin(plugin)" />
                 </template>
                 <n-space vertical :size="8">
                   <n-space>
                     <n-tag size="small" type="warning">JS</n-tag>
                     <n-tag v-if="plugin.auto_start" size="small" type="success">自动启动</n-tag>
+                    <n-tag v-if="plugin.signature" size="small" type="info">已签名</n-tag>
                   </n-space>
                   <p style="margin: 0; color: #666;">{{ plugin.description || '无描述' }}</p>
                   <p v-if="plugin.author" style="margin: 0; color: #999; font-size: 12px;">作者: {{ plugin.author }}</p>
+
+                  <!-- 配置预览 -->
+                  <div v-if="Object.keys(plugin.config || {}).length > 0" style="margin-top: 8px;">
+                    <p style="margin: 0 0 4px 0; color: #999; font-size: 12px;">配置:</p>
+                    <n-space :size="4" wrap>
+                      <n-tag v-for="(value, key) in plugin.config" :key="key" size="small" type="default">
+                        {{ key }}: {{ value.length > 10 ? value.slice(0, 10) + '...' : value }}
+                      </n-tag>
+                    </n-space>
+                  </div>
                 </n-space>
+                <template #action>
+                  <n-space justify="space-between">
+                    <n-button size="small" quaternary @click="openJSConfigModal(plugin)">
+                      <template #icon><n-icon><SettingsOutline /></n-icon></template>
+                      配置
+                    </n-button>
+                    <n-select
+                      v-if="onlineClients.length > 0"
+                      placeholder="推送到..."
+                      size="small"
+                      style="width: 140px;"
+                      :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))"
+                      @update:value="(v: string) => handlePushJSPlugin(plugin.name, v)"
+                    />
+                  </n-space>
+                </template>
               </n-card>
             </n-gi>
           </n-grid>
@@ -387,6 +451,29 @@ onMounted(() => {
           >
             安装
           </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- JS 插件配置模态框 -->
+    <n-modal v-model:show="showJSConfigModal" preset="card" :title="`${currentJSPlugin?.name || ''} 配置`" style="width: 500px;">
+      <n-space vertical :size="12">
+        <p style="margin: 0; color: #666; font-size: 13px;">编辑插件配置参数（键值对形式）</p>
+        <div v-for="(item, index) in jsConfigItems" :key="index">
+          <n-space :size="8" align="center">
+            <n-input v-model:value="item.key" placeholder="参数名" style="width: 150px;" />
+            <n-input v-model:value="item.value" placeholder="参数值" style="width: 200px;" />
+            <n-button v-if="jsConfigItems.length > 1" quaternary type="error" size="small" @click="removeJSConfigItem(index)">
+              删除
+            </n-button>
+          </n-space>
+        </div>
+        <n-button dashed size="small" @click="addJSConfigItem">添加配置项</n-button>
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showJSConfigModal = false">取消</n-button>
+          <n-button type="primary" :loading="jsConfigSaving" @click="saveJSPluginConfig">保存</n-button>
         </n-space>
       </template>
     </n-modal>

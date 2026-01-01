@@ -48,6 +48,10 @@ const (
 	// JS 插件动态安装
 	MsgTypeJSPluginInstall uint8 = 50 // 安装 JS 插件
 	MsgTypeJSPluginResult  uint8 = 51 // 安装结果
+
+	// 客户端控制消息
+	MsgTypeClientRestart      uint8 = 60 // 重启客户端
+	MsgTypePluginConfigUpdate uint8 = 61 // 更新插件配置
 )
 
 // Message 基础消息结构
@@ -222,6 +226,33 @@ type JSPluginInstallRequest struct {
 // JSPluginInstallResult JS 插件安装结果
 type JSPluginInstallResult struct {
 	PluginName string `json:"plugin_name"`
+	Success    bool   `json:"success"`
+	Error      string `json:"error,omitempty"`
+}
+
+// ClientRestartRequest 客户端重启请求
+type ClientRestartRequest struct {
+	Reason string `json:"reason,omitempty"` // 重启原因
+}
+
+// ClientRestartResponse 客户端重启响应
+type ClientRestartResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
+// PluginConfigUpdateRequest 插件配置更新请求
+type PluginConfigUpdateRequest struct {
+	PluginName string            `json:"plugin_name"` // 插件名称
+	RuleName   string            `json:"rule_name"`   // 规则名称
+	Config     map[string]string `json:"config"`      // 新配置
+	Restart    bool              `json:"restart"`     // 是否重启插件
+}
+
+// PluginConfigUpdateResponse 插件配置更新响应
+type PluginConfigUpdateResponse struct {
+	PluginName string `json:"plugin_name"`
+	RuleName   string `json:"rule_name"`
 	Success    bool   `json:"success"`
 	Error      string `json:"error,omitempty"`
 }

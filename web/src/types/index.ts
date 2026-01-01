@@ -117,10 +117,15 @@ export interface StorePluginInfo {
 export interface JSPlugin {
   name: string
   source: string
+  signature?: string
   description: string
   author: string
+  version?: string
   auto_push: string[]
   config: Record<string, string>
   auto_start: boolean
   enabled: boolean
 }
+
+// 规则配置模式集合
+export type RuleSchemasMap = Record<string, RuleSchema>

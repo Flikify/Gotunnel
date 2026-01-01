@@ -52,41 +52,21 @@ func (s *SQLiteStore) init() error {
 	// 迁移：添加 plugins 列
 	s.db.Exec(`ALTER TABLE clients ADD COLUMN plugins TEXT NOT NULL DEFAULT '[]'`)
 
-	// 创建插件表
-	_, err = s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS plugins (
-			name TEXT PRIMARY KEY,
-			version TEXT NOT NULL,
-			type TEXT NOT NULL DEFAULT 'proxy',
-			source TEXT NOT NULL DEFAULT 'wasm',
-			description TEXT,
-			author TEXT,
-			icon TEXT,
-			checksum TEXT,
-			size INTEGER DEFAULT 0,
-			enabled INTEGER DEFAULT 1,
-			wasm_data BLOB
-		)
-	`)
-	if err != nil {
-		return err
-	}
-
-	// 迁移：添加 icon 列
-	s.db.Exec(`ALTER TABLE plugins ADD COLUMN icon TEXT`)
-
 	// 创建 JS 插件表
 	_, err = s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS js_plugins (
 			name TEXT PRIMARY KEY,
 			source TEXT NOT NULL,
+			signature TEXT NOT NULL DEFAULT '',
 			description TEXT,
 			author TEXT,
+			version TEXT DEFAULT '',
 			auto_push TEXT NOT NULL DEFAULT '[]',
-			config TEXT NOT NULL DEFAULT '',
+			config TEXT NOT NULL DEFAULT '{}',
 			auto_start INTEGER DEFAULT 1,
 			enabled INTEGER DEFAULT 1,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)
 	`)
 	if err != nil {
@@ -95,6 +75,10 @@ func (s *SQLiteStore) init() error {
 
 	// 迁移：添加 signature 列
 	s.db.Exec(`ALTER TABLE js_plugins ADD COLUMN signature TEXT NOT NULL DEFAULT ''`)
+	// 迁移：添加 version 列
+	s.db.Exec(`ALTER TABLE js_plugins ADD COLUMN version TEXT DEFAULT ''`)
+	// 迁移：添加 updated_at 列
+	s.db.Exec(`ALTER TABLE js_plugins ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`)
 
 	return nil
 }
@@ -217,107 +201,6 @@ func (s *SQLiteStore) GetClientRules(id string) ([]protocol.ProxyRule, error) {
 	return c.Rules, nil
 }
 
-// ========== 插件存储方法 ==========
-
-// GetAllPlugins 获取所有插件
-func (s *SQLiteStore) GetAllPlugins() ([]PluginData, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	rows, err := s.db.Query(`
-		SELECT name, version, type, source, description, author, icon, checksum, size, enabled
-		FROM plugins
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var plugins []PluginData
-	for rows.Next() {
-		var p PluginData
-		var enabled int
-		var icon sql.NullString
-		err := rows.Scan(&p.Name, &p.Version, &p.Type, &p.Source,
-			&p.Description, &p.Author, &icon, &p.Checksum, &p.Size, &enabled)
-		if err != nil {
-			return nil, err
-		}
-		p.Enabled = enabled == 1
-		p.Icon = icon.String
-		plugins = append(plugins, p)
-	}
-	return plugins, nil
-}
-
-// GetPlugin 获取单个插件
-func (s *SQLiteStore) GetPlugin(name string) (*PluginData, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var p PluginData
-	var enabled int
-	var icon sql.NullString
-	err := s.db.QueryRow(`
-		SELECT name, version, type, source, description, author, icon, checksum, size, enabled
-		FROM plugins WHERE name = ?
-	`, name).Scan(&p.Name, &p.Version, &p.Type, &p.Source,
-		&p.Description, &p.Author, &icon, &p.Checksum, &p.Size, &enabled)
-	if err != nil {
-		return nil, err
-	}
-	p.Enabled = enabled == 1
-	p.Icon = icon.String
-	return &p, nil
-}
-
-// SavePlugin 保存插件
-func (s *SQLiteStore) SavePlugin(p *PluginData) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	enabled := 0
-	if p.Enabled {
-		enabled = 1
-	}
-	_, err := s.db.Exec(`
-		INSERT OR REPLACE INTO plugins
-		(name, version, type, source, description, author, icon, checksum, size, enabled, wasm_data)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.Name, p.Version, p.Type, p.Source, p.Description, p.Author,
-		p.Icon, p.Checksum, p.Size, enabled, p.WASMData)
-	return err
-}
-
-// DeletePlugin 删除插件
-func (s *SQLiteStore) DeletePlugin(name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.db.Exec(`DELETE FROM plugins WHERE name = ?`, name)
-	return err
-}
-
-// SetPluginEnabled 设置插件启用状态
-func (s *SQLiteStore) SetPluginEnabled(name string, enabled bool) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	val := 0
-	if enabled {
-		val = 1
-	}
-	_, err := s.db.Exec(`UPDATE plugins SET enabled = ? WHERE name = ?`, val, name)
-	return err
-}
-
-// GetPluginWASM 获取插件 WASM 数据
-func (s *SQLiteStore) GetPluginWASM(name string) ([]byte, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var data []byte
-	err := s.db.QueryRow(`SELECT wasm_data FROM plugins WHERE name = ?`, name).Scan(&data)
-	return data, err
-}
-
 // ========== JS 插件存储方法 ==========
 
 // GetAllJSPlugins 获取所有 JS 插件
@@ -326,7 +209,7 @@ func (s *SQLiteStore) GetAllJSPlugins() ([]JSPlugin, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT name, source, signature, description, author, auto_push, config, auto_start, enabled
+		SELECT name, source, signature, description, author, version, auto_push, config, auto_start, enabled
 		FROM js_plugins
 	`)
 	if err != nil {
@@ -338,12 +221,14 @@ func (s *SQLiteStore) GetAllJSPlugins() ([]JSPlugin, error) {
 	for rows.Next() {
 		var p JSPlugin
 		var autoPushJSON, configJSON string
+		var version sql.NullString
 		var autoStart, enabled int
 		err := rows.Scan(&p.Name, &p.Source, &p.Signature, &p.Description, &p.Author,
-			&autoPushJSON, &configJSON, &autoStart, &enabled)
+			&version, &autoPushJSON, &configJSON, &autoStart, &enabled)
 		if err != nil {
 			return nil, err
 		}
+		p.Version = version.String
 		json.Unmarshal([]byte(autoPushJSON), &p.AutoPush)
 		json.Unmarshal([]byte(configJSON), &p.Config)
 		p.AutoStart = autoStart == 1
@@ -360,15 +245,17 @@ func (s *SQLiteStore) GetJSPlugin(name string) (*JSPlugin, error) {
 
 	var p JSPlugin
 	var autoPushJSON, configJSON string
+	var version sql.NullString
 	var autoStart, enabled int
 	err := s.db.QueryRow(`
-		SELECT name, source, signature, description, author, auto_push, config, auto_start, enabled
+		SELECT name, source, signature, description, author, version, auto_push, config, auto_start, enabled
 		FROM js_plugins WHERE name = ?
 	`, name).Scan(&p.Name, &p.Source, &p.Signature, &p.Description, &p.Author,
-		&autoPushJSON, &configJSON, &autoStart, &enabled)
+		&version, &autoPushJSON, &configJSON, &autoStart, &enabled)
 	if err != nil {
 		return nil, err
 	}
+	p.Version = version.String
 	json.Unmarshal([]byte(autoPushJSON), &p.AutoPush)
 	json.Unmarshal([]byte(configJSON), &p.Config)
 	p.AutoStart = autoStart == 1
@@ -393,9 +280,9 @@ func (s *SQLiteStore) SaveJSPlugin(p *JSPlugin) error {
 
 	_, err := s.db.Exec(`
 		INSERT OR REPLACE INTO js_plugins
-		(name, source, signature, description, author, auto_push, config, auto_start, enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.Name, p.Source, p.Signature, p.Description, p.Author,
+		(name, source, signature, description, author, version, auto_push, config, auto_start, enabled, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, p.Name, p.Source, p.Signature, p.Description, p.Author, p.Version,
 		string(autoPushJSON), string(configJSON), autoStart, enabled)
 	return err
 }
@@ -416,6 +303,15 @@ func (s *SQLiteStore) SetJSPluginEnabled(name string, enabled bool) error {
 	if enabled {
 		val = 1
 	}
-	_, err := s.db.Exec(`UPDATE js_plugins SET enabled = ? WHERE name = ?`, val, name)
+	_, err := s.db.Exec(`UPDATE js_plugins SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`, val, name)
+	return err
+}
+
+// UpdateJSPluginConfig 更新 JS 插件配置
+func (s *SQLiteStore) UpdateJSPluginConfig(name string, config map[string]string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	configJSON, _ := json.Marshal(config)
+	_, err := s.db.Exec(`UPDATE js_plugins SET config = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`, string(configJSON), name)
 	return err
 }

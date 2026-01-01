@@ -1,426 +1,319 @@
-# GoTunnel 架构修复计划
+# GoTunnel 重构计划
 
-> 面向 100 万用户发布前的安全与稳定性修复方案
+## 概述
 
-## 问题概览
-
-| 严重程度 | 数量 | 状态 |
-|---------|------|------|
-| P0 严重 | 5 | ✅ 已修复 |
-| P1 高 | 5 | ✅ 已修复 |
-| P2 中 | 13 | 计划中 |
-| P3 低 | 15 | 后续迭代 |
+本次重构包含三个主要目标：
+1. 移除 WASM 支持，只保留 JS 插件系统
+2. 优化 Web 界面，支持协议动态配置和 JS 插件管理
+3. 实现动态重启客户端和插件功能
 
 ---
 
-## 修复完成总结
+## 第一部分：移除 WASM，简化插件系统
 
-### P0 严重问题 (已全部修复)
+### 1.1 需要删除的文件/目录
+- `pkg/plugin/wasm/` - WASM 运行时目录（如果存在）
 
-| 编号 | 问题 | 修复文件 | 状态 |
-|-----|------|---------|------|
-| 1.1 | TLS 证书验证 | `pkg/crypto/tls.go` | ✅ TOFU 机制 |
-| 1.2 | Web 控制台无认证 | `cmd/server/main.go`, `config/config.go` | ✅ 强制认证 |
-| 1.3 | 认证检查端点失效 | `router/auth.go` | ✅ 实际验证 JWT |
-| 1.4 | Token 生成错误 | `config/config.go` | ✅ 错误检查 |
-| 1.5 | 客户端 ID 未验证 | `tunnel/server.go` | ✅ 正则验证 |
+### 1.2 需要修改的文件
 
-### P1 高优先级问题 (已全部修复)
+#### 数据库层 (`internal/server/db/`)
+- **interface.go**: 移除 `PluginStore` 接口中的 `GetPluginWASM` 方法
+- **sqlite.go**:
+  - 移除 `plugins` 表（WASM 插件表）
+  - 移除相关的 CRUD 方法
+  - 保留 `js_plugins` 表
 
-| 编号 | 问题 | 修复文件 | 状态 |
-|-----|------|---------|------|
-| 2.1 | 无连接数限制 | `tunnel/server.go` | ✅ 10000 上限 |
-| 2.3 | 无优雅关闭 | `tunnel/server.go`, `cmd/server/main.go` | ✅ 信号处理 |
-| 2.4 | 消息大小未验证 | `protocol/message.go` | ✅ 已有验证 |
-| 2.5 | 无安全事件日志 | `pkg/security/audit.go` | ✅ 新增模块 |
+#### 插件类型 (`pkg/plugin/types.go`)
+- 移除 `PluginSource` 中的 `"wasm"` 选项，只保留 `"builtin"` 和 `"script"`
+
+#### 依赖清理
+- 检查 `go.mod` 是否有 wazero 依赖，如有则移除
 
 ---
 
-## 第一阶段：P0 严重问题 (发布前必须修复)
+## 第二部分：优化 Web 界面
 
-### 1.1 TLS 证书验证被禁用
+### 2.1 协议动态配置
 
-**文件**: `pkg/crypto/tls.go`
+#### 后端修改
 
-**问题**: `InsecureSkipVerify: true` 导致中间人攻击风险
-
-**修复方案**:
-- 添加服务端证书指纹验证机制
-- 客户端首次连接时保存服务端证书指纹
-- 后续连接验证指纹是否匹配（Trust On First Use）
-- 提供 `--skip-verify` 参数供测试环境使用
-
-**修改内容**:
+##### A. 扩展 ConfigField 类型 (`pkg/plugin/types.go`)
 ```go
-// pkg/crypto/tls.go
-func ClientTLSConfig(serverFingerprint string) *tls.Config {
-    return &tls.Config{
-        MinVersion:         tls.VersionTLS12,
-        InsecureSkipVerify: true, // 仍需要，因为是自签名证书
-        VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
-            // 验证证书指纹
-            return verifyCertFingerprint(rawCerts, serverFingerprint)
-        },
-    }
+type ConfigField struct {
+    Key         string   `json:"key"`
+    Label       string   `json:"label"`
+    Type        string   `json:"type"` // string, number, bool, select, password
+    Default     string   `json:"default,omitempty"`
+    Required    bool     `json:"required,omitempty"`
+    Options     []string `json:"options,omitempty"`
+    Description string   `json:"description,omitempty"`
+}
+
+type RuleSchema struct {
+    NeedsLocalAddr bool          `json:"needs_local_addr"`
+    ExtraFields    []ConfigField `json:"extra_fields"`
 }
 ```
 
----
+##### B. 内置协议配置模式
+为 SOCKS5 和 HTTP 代理添加认证配置字段：
 
-### 1.2 Web 控制台无认证
-
-**文件**: `cmd/server/main.go`
-
-**问题**: 默认配置下 Web 控制台完全开放
-
-**修复方案**:
-- 首次启动时自动生成随机密码
-- 强制要求配置用户名密码
-- 无认证时拒绝启动 Web 服务
-
-**修改内容**:
 ```go
-// cmd/server/main.go
-if cfg.Web.Enabled {
-    if cfg.Web.Username == "" || cfg.Web.Password == "" {
-        // 自动生成凭据
-        cfg.Web.Username = "admin"
-        cfg.Web.Password = generateSecurePassword(16)
-        log.Printf("[Web] 自动生成凭据 - 用户名: %s, 密码: %s",
-            cfg.Web.Username, cfg.Web.Password)
-        // 保存到配置文件
-        saveConfig(cfg)
-    }
+// SOCKS5 配置模式
+var Socks5Schema = RuleSchema{
+    NeedsLocalAddr: false,
+    ExtraFields: []ConfigField{
+        {Key: "auth_enabled", Label: "启用认证", Type: "bool", Default: "false"},
+        {Key: "username", Label: "用户名", Type: "string"},
+        {Key: "password", Label: "密码", Type: "password"},
+    },
+}
+
+// HTTP 代理配置模式
+var HTTPProxySchema = RuleSchema{
+    NeedsLocalAddr: false,
+    ExtraFields: []ConfigField{
+        {Key: "auth_enabled", Label: "启用认证", Type: "bool", Default: "false"},
+        {Key: "username", Label: "用户名", Type: "string"},
+        {Key: "password", Label: "密码", Type: "password"},
+    },
 }
 ```
 
+##### C. API 端点 (`internal/server/router/api.go`)
+- **GET `/api/rule-schemas`**: 返回所有协议类型的配置模式
+  - 内置类型 (tcp, udp, http, https) 的模式
+  - 已注册插件的模式（从插件 Metadata 获取）
+
+#### 前端修改 (`web/src/views/ClientView.vue`)
+- 页面加载时获取 rule-schemas
+- 根据选择的协议类型动态渲染额外配置字段
+- 支持的字段类型：string, number, bool, select, password
+
+### 2.2 JS 插件管理界面优化
+
+#### 后端修改
+
+##### A. 扩展 JSPlugin 结构 (`internal/server/db/interface.go`)
+```go
+type JSPlugin struct {
+    Name        string              `json:"name"`
+    Source      string              `json:"source"`      // JS 源码
+    Signature   string              `json:"signature"`   // 官方签名
+    Description string              `json:"description"`
+    Author      string              `json:"author"`
+    Version     string              `json:"version"`
+    AutoPush    []string            `json:"auto_push"`   // 自动推送客户端列表
+    Config      map[string]string   `json:"config"`      // 插件运行时配置
+    ConfigSchema []ConfigField      `json:"config_schema"` // 配置字段定义
+    AutoStart   bool                `json:"auto_start"`
+    Enabled     bool                `json:"enabled"`
+    CreatedAt   time.Time           `json:"created_at"`
+    UpdatedAt   time.Time           `json:"updated_at"`
+}
+```
+
+##### B. 新增/修改 API 端点
+- **GET `/api/js-plugins`**: 获取所有 JS 插件列表（包含配置模式）
+- **GET `/api/js-plugin/{name}`**: 获取单个插件详情
+- **PUT `/api/js-plugin/{name}/config`**: 更新插件运行时配置
+- **POST `/api/js-plugin/{name}/push/{clientId}`**: 推送插件到指定客户端
+- **POST `/api/js-plugin/{name}/reload`**: 重新加载插件（重新解析源码）
+
+#### 前端修改 (`web/src/views/PluginsView.vue`)
+
+##### A. 重新设计 JS 插件 Tab
+```
+┌─────────────────────────────────────────────────────────────┐
+│  已安装的 JS 插件                                            │
+├─────────────────────────────────────────────────────────────┤
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ 📦 socks5-auth                              v1.0.0     │ │
+│ │ 带认证的 SOCKS5 代理                                    │ │
+│ │ 作者: official                                         │ │
+│ │ ────────────────────────────────────────────────────── │ │
+│ │ 状态: ✅ 启用    自动启动: ✅                           │ │
+│ │ 推送目标: 所有客户端                                    │ │
+│ │ ────────────────────────────────────────────────────── │ │
+│ │ [⚙️ 配置] [🔄 重载] [📤 推送] [🗑️ 删除]                │ │
+│ └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+##### B. 插件配置模态框
+- 动态渲染 ConfigSchema 定义的字段
+- 支持 string, number, bool, select, password 类型
+- 保存后可选择是否同步到已连接的客户端
+
+##### C. 推送配置
+- 选择目标客户端（支持多选）
+- 选择是否自动启动
+- 显示推送结果
+
 ---
 
-### 1.3 认证检查端点失效
+## 第三部分：动态重启功能
 
-**文件**: `internal/server/router/auth.go`
+### 3.1 协议消息定义 (`pkg/protocol/message.go`)
 
-**问题**: `/auth/check` 始终返回 `valid: true`
-
-**修复方案**:
-- 实际验证 JWT Token
-- 返回真实的验证结果
-
-**修改内容**:
 ```go
-// internal/server/router/auth.go
-func (h *AuthHandler) handleCheck(w http.ResponseWriter, r *http.Request) {
-    // 从 Authorization header 获取 token
-    token := extractToken(r)
-    if token == "" {
-        jsonError(w, "missing token", http.StatusUnauthorized)
+// 已有消息类型
+const (
+    MsgTypeClientPluginStart  = 40  // 启动插件
+    MsgTypeClientPluginStop   = 41  // 停止插件 (需实现)
+    MsgTypeClientPluginStatus = 42  // 插件状态
+    MsgTypeClientPluginConn   = 43  // 插件连接
+
+    // 新增消息类型
+    MsgTypeClientRestart       = 44  // 客户端重启
+    MsgTypePluginConfigUpdate  = 45  // 插件配置更新
+)
+
+// 新增请求/响应结构
+type ClientPluginStopRequest struct {
+    PluginName string `json:"plugin_name"`
+    RuleName   string `json:"rule_name"`
+}
+
+type ClientRestartRequest struct {
+    Reason string `json:"reason,omitempty"`
+}
+
+type PluginConfigUpdateRequest struct {
+    PluginName string            `json:"plugin_name"`
+    RuleName   string            `json:"rule_name"`
+    Config     map[string]string `json:"config"`
+}
+```
+
+### 3.2 客户端实现 (`internal/client/tunnel/client.go`)
+
+#### A. 实现插件停止处理
+```go
+func (c *Client) handleClientPluginStop(stream net.Conn, msg *protocol.Message) {
+    defer stream.Close()
+
+    var req protocol.ClientPluginStopRequest
+    if err := msg.ParsePayload(&req); err != nil {
         return
     }
 
-    // 验证 token
-    claims, err := h.validateToken(token)
-    if err != nil {
-        jsonError(w, "invalid token", http.StatusUnauthorized)
-        return
-    }
+    key := req.PluginName + ":" + req.RuleName
 
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "valid": true,
-        "user":  claims.Username,
-    })
+    c.pluginMu.Lock()
+    if handler, ok := c.runningPlugins[key]; ok {
+        handler.Stop()
+        delete(c.runningPlugins, key)
+    }
+    c.pluginMu.Unlock()
+
+    // 发送确认
+    resp := protocol.ClientPluginStatusResponse{
+        PluginName: req.PluginName,
+        RuleName:   req.RuleName,
+        Running:    false,
+    }
+    respMsg, _ := protocol.NewMessage(protocol.MsgTypeClientPluginStatus, resp)
+    protocol.WriteMessage(stream, respMsg)
 }
 ```
 
----
-
-### 1.4 Token 生成错误未处理
-
-**文件**: `internal/server/config/config.go`
-
-**问题**: `rand.Read()` 错误被忽略，可能生成弱 Token
-
-**修复方案**:
-- 检查 `rand.Read()` 返回值
-- 失败时 panic 或返回错误
-- 增加 Token 强度验证
-
-**修改内容**:
+#### B. 实现配置热更新
 ```go
-// internal/server/config/config.go
-func generateToken(length int) (string, error) {
-    bytes := make([]byte, length/2)
-    n, err := rand.Read(bytes)
-    if err != nil {
-        return "", fmt.Errorf("failed to generate token: %w", err)
-    }
-    if n != len(bytes) {
-        return "", fmt.Errorf("insufficient random bytes: got %d, want %d", n, len(bytes))
-    }
-    return hex.EncodeToString(bytes), nil
+func (c *Client) handlePluginConfigUpdate(stream net.Conn, msg *protocol.Message) {
+    // 更新运行中插件的配置（如果插件支持热更新）
 }
 ```
 
----
-
-### 1.5 客户端 ID 未验证
-
-**文件**: `internal/server/tunnel/server.go`
-
-**问题**: tunnel server 中未使用已有的 ID 验证函数
-
-**修复方案**:
-- 在 handleConnection 中验证 clientID
-- 拒绝非法格式的 ID
-- 记录安全日志
-
-**修改内容**:
+#### C. 实现客户端优雅重启
 ```go
-// internal/server/tunnel/server.go
-func (s *Server) handleConnection(conn net.Conn) {
-    // ... 读取认证消息后
-
-    clientID := authReq.ClientID
-    if clientID != "" && !isValidClientID(clientID) {
-        log.Printf("[Security] Invalid client ID format from %s: %s",
-            conn.RemoteAddr(), clientID)
-        sendAuthResponse(conn, false, "invalid client id format")
-        return
-    }
-    // ...
-}
-
-var clientIDRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
-
-func isValidClientID(id string) bool {
-    return clientIDRegex.MatchString(id)
+func (c *Client) handleClientRestart(stream net.Conn, msg *protocol.Message) {
+    // 1. 停止所有运行中的插件
+    // 2. 关闭当前会话
+    // 3. 触发重连（Run() 循环会自动处理）
 }
 ```
 
----
+### 3.3 服务端实现 (`internal/server/tunnel/server.go`)
 
-## 第二阶段：P1 高优先级问题 (发布前建议修复)
-
-### 2.1 无连接数限制
-
-**文件**: `internal/server/tunnel/server.go`
-
-**修复方案**:
-- 添加全局最大连接数限制
-- 添加单客户端连接数限制
-- 使用 semaphore 控制并发
-
-**修改内容**:
 ```go
-type Server struct {
-    // ...
-    maxConns     int
-    connSem      chan struct{} // semaphore
-    clientConns  map[string]int
-}
+// 停止客户端插件
+func (s *Server) StopClientPlugin(clientID, pluginName, ruleName string) error
 
-func (s *Server) handleConnection(conn net.Conn) {
-    select {
-    case s.connSem <- struct{}{}:
-        defer func() { <-s.connSem }()
-    default:
-        conn.Close()
-        log.Printf("[Server] Connection rejected: max connections reached")
-        return
-    }
-    // ...
-}
+// 重启客户端插件
+func (s *Server) RestartClientPlugin(clientID, pluginName, ruleName string) error
+
+// 更新插件配置
+func (s *Server) UpdateClientPluginConfig(clientID, pluginName, ruleName string, config map[string]string) error
+
+// 重启整个客户端
+func (s *Server) RestartClient(clientID string) error
 ```
 
----
+### 3.4 REST API (`internal/server/router/api.go`)
 
-### 2.2 Goroutine 泄漏
-
-**文件**: 多个文件
-
-**修复方案**:
-- 使用 context 控制 goroutine 生命周期
-- 添加 goroutine 池
-- 确保所有 goroutine 有退出机制
-
----
-
-### 2.3 无优雅关闭
-
-**文件**: `cmd/server/main.go`
-
-**修复方案**:
-- 监听 SIGTERM/SIGINT 信号
-- 关闭所有监听器
-- 等待现有连接完成
-- 设置关闭超时
-
-**修改内容**:
 ```go
-// cmd/server/main.go
-func main() {
-    // ...
+// 客户端控制
+POST /api/client/{id}/restart           // 重启整个客户端
 
-    // 优雅关闭
-    quit := make(chan os.Signal, 1)
-    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-    go func() {
-        <-quit
-        log.Println("[Server] Shutting down...")
-
-        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-        defer cancel()
-
-        server.Shutdown(ctx)
-        webServer.Shutdown(ctx)
-    }()
-
-    server.Run()
-}
+// 插件控制
+POST /api/client/{id}/plugin/{name}/stop      // 停止插件
+POST /api/client/{id}/plugin/{name}/restart   // 重启插件
+PUT  /api/client/{id}/plugin/{name}/config    // 更新配置并可选重启
 ```
 
----
+### 3.5 前端界面 (`web/src/views/ClientView.vue`)
 
-### 2.4 消息大小未验证
-
-**文件**: `pkg/protocol/message.go`
-
-**修复方案**:
-- 在 ReadMessage 中检查消息长度
-- 超过限制时返回错误
+在客户端详情页添加控制按钮：
+- **客户端级别**: "重启客户端" 按钮
+- **插件级别**: 每个运行中的插件显示 "停止"、"重启"、"配置" 按钮
 
 ---
 
-### 2.5 无读写超时
+## 实施顺序
 
-**文件**: `internal/server/tunnel/server.go`
+### 阶段 1: 清理 WASM 代码
+1. 删除 WASM 相关文件和代码
+2. 更新数据库 schema
+3. 清理依赖
 
-**修复方案**:
-- 所有连接设置读写超时
-- 使用 SetDeadline 而非一次性设置
+### 阶段 2: 协议动态配置
+1. 定义 ConfigField 和 RuleSchema 类型
+2. 实现内置协议的配置模式
+3. 添加 `/api/rule-schemas` 端点
+4. 更新前端规则编辑界面
 
----
+### 阶段 3: JS 插件管理优化
+1. 扩展 JSPlugin 结构和数据库
+2. 实现插件配置 API
+3. 重新设计前端插件管理界面
 
-### 2.6 竞态条件
+### 阶段 4: 动态重启功能
+1. 实现客户端 pluginStop 处理
+2. 实现服务端重启方法
+3. 添加 REST API 端点
+4. 更新前端添加控制按钮
 
-**文件**: `internal/server/tunnel/server.go`
-
-**修复方案**:
-- 使用 sync.Map 替代 map + mutex
-- 或确保所有 map 访问都在锁保护下
-
----
-
-### 2.7 无安全事件日志
-
-**修复方案**:
-- 添加安全日志模块
-- 记录认证失败、异常访问等事件
-- 支持日志轮转
-
----
-
-## 第三阶段：P2 中优先级问题 (发布后迭代)
-
-| 编号 | 问题 | 文件 |
-|-----|------|------|
-| 3.1 | 配置文件权限过宽 (0644) | config/config.go |
-| 3.2 | 心跳机制不完善 | tunnel/server.go |
-| 3.3 | HTTP 代理无 SSRF 防护 | proxy/http.go |
-| 3.4 | SOCKS5 代理无验证 | proxy/socks5.go |
-| 3.5 | 数据库操作无超时 | db/sqlite.go |
-| 3.6 | 错误处理不一致 | 多个文件 |
-| 3.7 | UDP 缓冲区无限制 | tunnel/server.go |
-| 3.8 | 代理规则无验证 | tunnel/server.go |
-| 3.9 | 客户端注册竞态 | tunnel/server.go |
-| 3.10 | Relay 资源泄漏 | relay/relay.go |
-| 3.11 | 插件配置无验证 | tunnel/server.go |
-| 3.12 | 端口号无边界检查 | tunnel/server.go |
-| 3.13 | 插件商店 URL 硬编码 | config/config.go |
+### 阶段 5: 测试和文档
+1. 端到端测试
+2. 更新 CLAUDE.md
 
 ---
 
-## 第四阶段：P3 低优先级问题 (后续优化)
+## 文件变更清单
 
-| 编号 | 问题 | 建议 |
-|-----|------|------|
-| 4.1 | 无结构化日志 | 引入 zap/zerolog |
-| 4.2 | 无连接池 | 实现连接池 |
-| 4.3 | 线性查找规则 | 使用 map 索引 |
-| 4.4 | 无数据库缓存 | 添加内存缓存 |
-| 4.5 | 魔法数字 | 提取为常量 |
-| 4.6 | 无 godoc 注释 | 补充文档 |
-| 4.7 | 配置无验证 | 添加验证逻辑 |
+### 后端 Go 文件
+- `pkg/plugin/types.go` - 添加 ConfigField, RuleSchema
+- `pkg/plugin/schema.go` (新建) - 内置协议配置模式
+- `pkg/protocol/message.go` - 新增消息类型
+- `internal/server/db/interface.go` - 更新接口
+- `internal/server/db/sqlite.go` - 更新数据库操作
+- `internal/server/router/api.go` - 新增 API 端点
+- `internal/server/tunnel/server.go` - 重启控制方法
+- `internal/client/tunnel/client.go` - 插件停止/重启处理
 
----
-
-## 修复顺序
-
-```
-Week 1: P0 问题 (5个)
-  ├── Day 1-2: 1.1 TLS 证书验证
-  ├── Day 2-3: 1.2 Web 控制台认证
-  ├── Day 3-4: 1.3 认证检查端点
-  ├── Day 4: 1.4 Token 生成
-  └── Day 5: 1.5 客户端 ID 验证
-
-Week 2: P1 问题 (7个)
-  ├── Day 1-2: 2.1 连接数限制
-  ├── Day 2-3: 2.2 Goroutine 泄漏
-  ├── Day 3-4: 2.3 优雅关闭
-  ├── Day 4: 2.4 消息大小验证
-  ├── Day 5: 2.5 读写超时
-  └── Day 5: 2.6-2.7 竞态条件 + 安全日志
-
-Week 3+: P2/P3 问题
-  └── 按优先级逐步修复
-```
-
----
-
-## 测试计划
-
-### 安全测试
-- [ ] TLS 中间人攻击测试
-- [ ] 认证绕过测试
-- [ ] 注入攻击测试
-- [ ] DoS 攻击测试
-
-### 稳定性测试
-- [ ] 长时间运行测试 (72h+)
-- [ ] 高并发连接测试 (10000+)
-- [ ] 内存泄漏测试
-- [ ] Goroutine 泄漏测试
-
-### 性能测试
-- [ ] 吞吐量基准测试
-- [ ] 延迟基准测试
-- [ ] 资源使用监控
-
----
-
-## 回滚方案
-
-如发布后发现严重问题：
-
-1. **立即回滚**: 保留上一版本二进制文件
-2. **热修复**: 针对特定问题发布补丁
-3. **降级运行**: 禁用问题功能模块
-
----
-
-## 监控告警
-
-发布后需要监控的指标：
-
-- 连接数 / 活跃客户端数
-- 内存使用 / Goroutine 数量
-- 认证失败率
-- 错误日志频率
-- 响应延迟 P99
-
----
-
-*文档版本: 1.0*
-*创建时间: 2025-12-29*
-*状态: 待审核*
+### 前端文件
+- `web/src/types/index.ts` - 类型定义
+- `web/src/api/index.ts` - API 调用
+- `web/src/views/ClientView.vue` - 规则配置和重启控制
+- `web/src/views/PluginsView.vue` - 插件管理界面

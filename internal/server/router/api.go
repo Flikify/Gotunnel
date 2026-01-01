@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
+	"github.com/gotunnel/pkg/plugin"
 	"github.com/gotunnel/pkg/protocol"
 )
 
@@ -53,6 +54,11 @@ type ServerInterface interface {
 	SyncPluginConfigToClient(clientID string, pluginName string, config map[string]string) error
 	// JS 插件
 	InstallJSPluginToClient(clientID string, req JSPluginInstallRequest) error
+	// 客户端/插件重启
+	RestartClient(clientID string) error
+	StopClientPlugin(clientID, pluginName, ruleName string) error
+	RestartClientPlugin(clientID, pluginName, ruleName string) error
+	UpdateClientPluginConfig(clientID, pluginName, ruleName string, config map[string]string, restart bool) error
 }
 
 // JSPluginInstallRequest JS 插件安装请求
@@ -135,6 +141,7 @@ func RegisterRoutes(r *Router, app AppInterface) {
 	api.HandleFunc("/client-plugin/", h.handleClientPlugin)
 	api.HandleFunc("/js-plugin/", h.handleJSPlugin)
 	api.HandleFunc("/js-plugins", h.handleJSPlugins)
+	api.HandleFunc("/rule-schemas", h.handleRuleSchemas)
 }
 
 func (h *APIHandler) handleStatus(rw http.ResponseWriter, r *http.Request) {
@@ -246,6 +253,22 @@ func (h *APIHandler) handleClient(rw http.ResponseWriter, r *http.Request) {
 			return
 		case "install-plugins":
 			h.installPluginsToClient(rw, r, clientID)
+			return
+		case "restart":
+			h.restartClient(rw, r, clientID)
+			return
+		}
+	}
+
+	// 检查是否是插件操作: /api/client/{id}/plugin/{name}/{action}
+	if len(parts) >= 2 && parts[1] == "plugin" {
+		// 重新解析路径
+		remaining := clientID[len(parts[0])+1:] // "plugin/xxx/action"
+		pluginParts := splitPath(remaining[7:]) // 跳过 "plugin/"
+		if len(pluginParts) >= 2 {
+			pluginName := pluginParts[0]
+			pluginAction := pluginParts[1]
+			h.handleClientPluginAction(rw, r, parts[0], pluginName, pluginAction)
 			return
 		}
 	}
@@ -1063,4 +1086,106 @@ func (h *APIHandler) pushJSPluginToClient(rw http.ResponseWriter, pluginName, cl
 	}
 
 	h.jsonResponse(rw, map[string]string{"status": "ok", "plugin": pluginName, "client": clientID})
+}
+
+// handleRuleSchemas 返回所有协议类型的配置模式
+func (h *APIHandler) handleRuleSchemas(rw http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 获取内置协议模式
+	schemas := make(map[string]RuleSchema)
+	for name, schema := range plugin.BuiltinRuleSchemas() {
+		schemas[name] = RuleSchema{
+			NeedsLocalAddr: schema.NeedsLocalAddr,
+			ExtraFields:    convertConfigFields(schema.ExtraFields),
+		}
+	}
+
+	// 添加已注册插件的模式
+	plugins := h.server.GetPluginList()
+	for _, p := range plugins {
+		if p.RuleSchema != nil {
+			schemas[p.Name] = *p.RuleSchema
+		}
+	}
+
+	h.jsonResponse(rw, schemas)
+}
+
+// convertConfigFields 将 plugin.ConfigField 转换为 router.ConfigField
+func convertConfigFields(fields []plugin.ConfigField) []ConfigField {
+	result := make([]ConfigField, len(fields))
+	for i, f := range fields {
+		result[i] = ConfigField{
+			Key:         f.Key,
+			Label:       f.Label,
+			Type:        string(f.Type),
+			Default:     f.Default,
+			Required:    f.Required,
+			Options:     f.Options,
+			Description: f.Description,
+		}
+	}
+	return result
+}
+
+// restartClient 重启客户端
+func (h *APIHandler) restartClient(rw http.ResponseWriter, r *http.Request, clientID string) {
+	if r.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := h.server.RestartClient(clientID); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonResponse(rw, map[string]string{"status": "ok", "message": "client restart initiated"})
+}
+
+// handleClientPluginAction 处理客户端插件操作
+func (h *APIHandler) handleClientPluginAction(rw http.ResponseWriter, r *http.Request, clientID, pluginName, action string) {
+	if r.Method != http.MethodPost && r.Method != http.MethodPut {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 获取规则名称（从请求体或使用插件名作为默认值）
+	var req struct {
+		RuleName string            `json:"rule_name"`
+		Config   map[string]string `json:"config"`
+		Restart  bool              `json:"restart"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	if req.RuleName == "" {
+		req.RuleName = pluginName
+	}
+
+	var err error
+	switch action {
+	case "stop":
+		err = h.server.StopClientPlugin(clientID, pluginName, req.RuleName)
+	case "restart":
+		err = h.server.RestartClientPlugin(clientID, pluginName, req.RuleName)
+	case "config":
+		if req.Config == nil {
+			http.Error(rw, "config required", http.StatusBadRequest)
+			return
+		}
+		err = h.server.UpdateClientPluginConfig(clientID, pluginName, req.RuleName, req.Config, req.Restart)
+	default:
+		http.Error(rw, "unknown action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonResponse(rw, map[string]string{"status": "ok", "action": action, "plugin": pluginName})
 }

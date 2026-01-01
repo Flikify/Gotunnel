@@ -1146,3 +1146,163 @@ func (s *Server) shouldPushToClient(autoPush []string, clientID string) bool {
 	}
 	return false
 }
+
+// RestartClient 重启客户端（通过断开连接，让客户端自动重连）
+func (s *Server) RestartClient(clientID string) error {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("client %s not found or not online", clientID)
+	}
+
+	// 发送重启消息
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return err
+	}
+
+	req := protocol.ClientRestartRequest{
+		Reason: "server requested restart",
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeClientRestart, req)
+	protocol.WriteMessage(stream, msg)
+	stream.Close()
+
+	// 等待一小段时间后断开连接
+	time.AfterFunc(100*time.Millisecond, func() {
+		cs.Session.Close()
+	})
+
+	log.Printf("[Server] Restart initiated for client %s", clientID)
+	return nil
+}
+
+// StopClientPlugin 停止客户端插件
+func (s *Server) StopClientPlugin(clientID, pluginName, ruleName string) error {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("client %s not found or not online", clientID)
+	}
+
+	return s.sendClientPluginStop(cs.Session, pluginName, ruleName)
+}
+
+// sendClientPluginStop 发送客户端插件停止命令
+func (s *Server) sendClientPluginStop(session *yamux.Session, pluginName, ruleName string) error {
+	stream, err := session.Open()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	req := protocol.ClientPluginStopRequest{
+		PluginName: pluginName,
+		RuleName:   ruleName,
+	}
+	msg, err := protocol.NewMessage(protocol.MsgTypeClientPluginStop, req)
+	if err != nil {
+		return err
+	}
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return err
+	}
+
+	// 等待响应
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return err
+	}
+	if resp.Type != protocol.MsgTypeClientPluginStatus {
+		return fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+
+	var status protocol.ClientPluginStatusResponse
+	if err := resp.ParsePayload(&status); err != nil {
+		return err
+	}
+	if status.Running {
+		return fmt.Errorf("plugin still running: %s", status.Error)
+	}
+	return nil
+}
+
+// RestartClientPlugin 重启客户端插件
+func (s *Server) RestartClientPlugin(clientID, pluginName, ruleName string) error {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("client %s not found or not online", clientID)
+	}
+
+	// 查找规则
+	var rule *protocol.ProxyRule
+	for _, r := range cs.Rules {
+		if r.Name == ruleName && r.Type == pluginName {
+			rule = &r
+			break
+		}
+	}
+	if rule == nil {
+		return fmt.Errorf("rule %s not found for plugin %s", ruleName, pluginName)
+	}
+
+	// 先停止
+	if err := s.sendClientPluginStop(cs.Session, pluginName, ruleName); err != nil {
+		log.Printf("[Server] Stop plugin warning: %v", err)
+	}
+
+	// 再启动
+	return s.sendClientPluginStart(cs.Session, *rule)
+}
+
+// UpdateClientPluginConfig 更新客户端插件配置
+func (s *Server) UpdateClientPluginConfig(clientID, pluginName, ruleName string, config map[string]string, restart bool) error {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("client %s not found or not online", clientID)
+	}
+
+	// 发送配置更新消息
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	req := protocol.PluginConfigUpdateRequest{
+		PluginName: pluginName,
+		RuleName:   ruleName,
+		Config:     config,
+		Restart:    restart,
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypePluginConfigUpdate, req)
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return err
+	}
+
+	// 等待响应
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return err
+	}
+
+	var result protocol.PluginConfigUpdateResponse
+	if err := resp.ParsePayload(&result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return fmt.Errorf("config update failed: %s", result.Error)
+	}
+
+	return nil
+}

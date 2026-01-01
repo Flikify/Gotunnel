@@ -9,14 +9,14 @@ import {
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, PowerOutline, AddOutline, SaveOutline, CloseOutline,
-  DownloadOutline, SettingsOutline, StorefrontOutline
+  DownloadOutline, SettingsOutline, StorefrontOutline, RefreshOutline, StopOutline
 } from '@vicons/ionicons5'
 import {
-  getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient,
+  getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
   getPlugins, installPluginsToClient, getClientPluginConfig, updateClientPluginConfig,
-  getStorePlugins, installStorePlugin
+  getStorePlugins, installStorePlugin, getRuleSchemas, restartClientPlugin, stopClientPlugin
 } from '../api'
-import type { ProxyRule, PluginInfo, ClientPlugin, ConfigField, RuleSchema, StorePluginInfo } from '../types'
+import type { ProxyRule, PluginInfo, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,16 +49,23 @@ const builtinTypes = [
 // 规则类型选项（内置 + 插件）
 const typeOptions = ref([...builtinTypes])
 
-// 插件 RuleSchema 映射
-const pluginRuleSchemas = ref<Record<string, RuleSchema>>({})
+// 插件 RuleSchema 映射（包含内置类型和插件类型）
+const pluginRuleSchemas = ref<RuleSchemasMap>({})
+
+// 加载规则配置模式
+const loadRuleSchemas = async () => {
+  try {
+    const { data } = await getRuleSchemas()
+    pluginRuleSchemas.value = data || {}
+  } catch (e) {
+    console.error('Failed to load rule schemas', e)
+  }
+}
 
 // 判断类型是否需要本地地址
 const needsLocalAddr = (type: string) => {
-  // 内置类型
-  if (['tcp', 'udp'].includes(type)) return true
-  // 插件类型：查询 RuleSchema
   const schema = pluginRuleSchemas.value[type]
-  return schema?.needs_local_addr ?? false
+  return schema?.needs_local_addr ?? true // 默认需要
 }
 
 // 获取类型的额外字段
@@ -97,14 +104,12 @@ const loadPlugins = async () => {
       .map(p => ({ label: `${p.name.toUpperCase()} (插件)`, value: p.name }))
     typeOptions.value = [...builtinTypes, ...proxyPlugins]
 
-    // 保存插件的 RuleSchema
-    const schemas: Record<string, RuleSchema> = {}
+    // 合并插件的 RuleSchema 到 pluginRuleSchemas
     for (const p of availablePlugins.value) {
       if (p.rule_schema) {
-        schemas[p.name] = p.rule_schema
+        pluginRuleSchemas.value[p.name] = p.rule_schema
       }
     }
-    pluginRuleSchemas.value = schemas
   } catch (e) {
     console.error('Failed to load plugins', e)
   }
@@ -175,6 +180,7 @@ const loadClient = async () => {
 }
 
 onMounted(() => {
+  loadRuleSchemas() // 加载内置协议配置模式
   loadClient()
   loadPlugins()
 })
@@ -287,6 +293,50 @@ const disconnect = () => {
       }
     }
   })
+}
+
+// 重启客户端
+const handleRestartClient = () => {
+  dialog.warning({
+    title: '确认重启',
+    content: '确定要重启此客户端吗？客户端将断开连接并自动重连。',
+    positiveText: '重启',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await restartClient(clientId)
+        message.success('重启命令已发送，客户端将自动重连')
+        setTimeout(() => loadClient(), 3000)
+      } catch (e: any) {
+        message.error(e.response?.data || '重启失败')
+      }
+    }
+  })
+}
+
+// 重启客户端插件
+const handleRestartPlugin = async (plugin: ClientPlugin) => {
+  // 找到使用此插件的规则
+  const rule = rules.value.find(r => r.type === plugin.name)
+  const ruleName = rule?.name || ''
+  try {
+    await restartClientPlugin(clientId, plugin.name, ruleName)
+    message.success(`已重启 ${plugin.name}`)
+  } catch (e: any) {
+    message.error(e.response?.data || '重启失败')
+  }
+}
+
+// 停止客户端插件
+const handleStopPlugin = async (plugin: ClientPlugin) => {
+  const rule = rules.value.find(r => r.type === plugin.name)
+  const ruleName = rule?.name || ''
+  try {
+    await stopClientPlugin(clientId, plugin.name, ruleName)
+    message.success(`已停止 ${plugin.name}`)
+  } catch (e: any) {
+    message.error(e.response?.data || '停止失败')
+  }
 }
 
 const installPlugins = async () => {
@@ -403,6 +453,10 @@ const savePluginConfig = async () => {
               <template #icon><n-icon><PowerOutline /></n-icon></template>
               断开连接
             </n-button>
+            <n-button type="error" @click="handleRestartClient">
+              <template #icon><n-icon><RefreshOutline /></n-icon></template>
+              重启客户端
+            </n-button>
           </template>
           <template v-if="!editing">
             <n-button type="primary" @click="startEdit">
@@ -496,11 +550,44 @@ const savePluginConfig = async () => {
               <!-- 插件额外字段 -->
               <template v-for="field in getExtraFields(rule.type || '')" :key="field.key">
                 <n-form-item :label="field.label" :show-feedback="false">
+                  <!-- 字符串输入 -->
                   <n-input
                     v-if="field.type === 'string'"
                     :value="rule.plugin_config?.[field.key] || field.default || ''"
                     @update:value="(v: string) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v }"
                     :placeholder="field.description"
+                  />
+                  <!-- 密码输入 -->
+                  <n-input
+                    v-else-if="field.type === 'password'"
+                    :value="rule.plugin_config?.[field.key] || ''"
+                    @update:value="(v: string) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v }"
+                    type="password"
+                    show-password-on="click"
+                    :placeholder="field.description"
+                  />
+                  <!-- 数字输入 -->
+                  <n-input-number
+                    v-else-if="field.type === 'number'"
+                    :value="rule.plugin_config?.[field.key] ? Number(rule.plugin_config[field.key]) : undefined"
+                    @update:value="(v: number | null) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v !== null ? String(v) : '' }"
+                    :placeholder="field.description"
+                    :show-button="false"
+                    style="width: 120px;"
+                  />
+                  <!-- 布尔开关 -->
+                  <n-switch
+                    v-else-if="field.type === 'bool'"
+                    :value="rule.plugin_config?.[field.key] === 'true'"
+                    @update:value="(v: boolean) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = String(v) }"
+                  />
+                  <!-- 下拉选择 -->
+                  <n-select
+                    v-else-if="field.type === 'select'"
+                    :value="rule.plugin_config?.[field.key] || field.default"
+                    @update:value="(v: string) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v }"
+                    :options="(field.options || []).map(o => ({ label: o, value: o }))"
+                    style="width: 120px;"
                   />
                 </n-form-item>
               </template>
@@ -537,10 +624,20 @@ const savePluginConfig = async () => {
               <n-switch :value="plugin.enabled" @update:value="toggleClientPlugin(plugin)" />
             </td>
             <td>
-              <n-button size="small" quaternary @click="openConfigModal(plugin)">
-                <template #icon><n-icon><SettingsOutline /></n-icon></template>
-                配置
-              </n-button>
+              <n-space :size="4">
+                <n-button size="small" quaternary @click="openConfigModal(plugin)">
+                  <template #icon><n-icon><SettingsOutline /></n-icon></template>
+                  配置
+                </n-button>
+                <n-button v-if="online && plugin.enabled" size="small" quaternary type="info" @click="handleRestartPlugin(plugin)">
+                  <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                  重启
+                </n-button>
+                <n-button v-if="online && plugin.enabled" size="small" quaternary type="warning" @click="handleStopPlugin(plugin)">
+                  <template #icon><n-icon><StopOutline /></n-icon></template>
+                  停止
+                </n-button>
+              </n-space>
             </td>
           </tr>
         </tbody>

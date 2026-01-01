@@ -18,21 +18,6 @@ type Client struct {
 	Plugins  []ClientPlugin       `json:"plugins,omitempty"` // 已安装的插件
 }
 
-// PluginData 插件数据
-type PluginData struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Type        string `json:"type"`
-	Source      string `json:"source"`
-	Description string `json:"description"`
-	Author      string `json:"author"`
-	Icon        string `json:"icon"`
-	Checksum    string `json:"checksum"`
-	Size        int64  `json:"size"`
-	Enabled     bool   `json:"enabled"`
-	WASMData    []byte `json:"-"`
-}
-
 // JSPlugin JS 插件数据
 type JSPlugin struct {
 	Name        string            `json:"name"`
@@ -40,6 +25,7 @@ type JSPlugin struct {
 	Signature   string            `json:"signature"` // 官方签名 (Base64)
 	Description string            `json:"description"`
 	Author      string            `json:"author"`
+	Version     string            `json:"version,omitempty"`
 	AutoPush    []string          `json:"auto_push"`
 	Config      map[string]string `json:"config"`
 	AutoStart   bool              `json:"auto_start"`
@@ -58,16 +44,6 @@ type ClientStore interface {
 	Close() error
 }
 
-// PluginStore 插件存储接口
-type PluginStore interface {
-	GetAllPlugins() ([]PluginData, error)
-	GetPlugin(name string) (*PluginData, error)
-	SavePlugin(p *PluginData) error
-	DeletePlugin(name string) error
-	SetPluginEnabled(name string, enabled bool) error
-	GetPluginWASM(name string) ([]byte, error)
-}
-
 // JSPluginStore JS 插件存储接口
 type JSPluginStore interface {
 	GetAllJSPlugins() ([]JSPlugin, error)
@@ -75,12 +51,12 @@ type JSPluginStore interface {
 	SaveJSPlugin(p *JSPlugin) error
 	DeleteJSPlugin(name string) error
 	SetJSPluginEnabled(name string, enabled bool) error
+	UpdateJSPluginConfig(name string, config map[string]string) error
 }
 
 // Store 统一存储接口
 type Store interface {
 	ClientStore
-	PluginStore
 	JSPluginStore
 	Close() error
 }
