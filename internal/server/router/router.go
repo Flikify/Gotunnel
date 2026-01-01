@@ -1,123 +1,162 @@
 package router
 
 import (
-	"crypto/subtle"
+	"io"
+	"io/fs"
 	"net/http"
-	"strings"
 
+	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	"github.com/gotunnel/internal/server/router/handler"
+	"github.com/gotunnel/internal/server/router/middleware"
 	"github.com/gotunnel/pkg/auth"
 )
 
-// Router 路由管理器
-type Router struct {
-	mux *http.ServeMux
+// GinRouter Gin 路由管理器
+type GinRouter struct {
+	Engine *gin.Engine
 }
 
-// AuthConfig 认证配置
-type AuthConfig struct {
-	Username string
-	Password string
-}
-
-// New 创建路由管理器
-func New() *Router {
-	return &Router{
-		mux: http.NewServeMux(),
-	}
-}
-
-// Handle 注册路由处理器
-func (r *Router) Handle(pattern string, handler http.Handler) {
-	r.mux.Handle(pattern, handler)
-}
-
-// HandleFunc 注册路由处理函数
-func (r *Router) HandleFunc(pattern string, handler http.HandlerFunc) {
-	r.mux.HandleFunc(pattern, handler)
-}
-
-// Group 创建路由组
-func (r *Router) Group(prefix string) *RouteGroup {
-	return &RouteGroup{
-		router: r,
-		prefix: prefix,
-	}
-}
-
-// RouteGroup 路由组
-type RouteGroup struct {
-	router *Router
-	prefix string
-}
-
-// HandleFunc 注册路由组处理函数
-func (g *RouteGroup) HandleFunc(pattern string, handler http.HandlerFunc) {
-	g.router.mux.HandleFunc(g.prefix+pattern, handler)
+// New 创建 Gin 路由管理器
+func New() *GinRouter {
+	gin.SetMode(gin.ReleaseMode)
+	engine := gin.New()
+	return &GinRouter{Engine: engine}
 }
 
 // Handler 返回 http.Handler
-func (r *Router) Handler() http.Handler {
-	return r.mux
+func (r *GinRouter) Handler() http.Handler {
+	return r.Engine
 }
 
-// BasicAuthMiddleware 基础认证中间件
-func BasicAuthMiddleware(auth *AuthConfig, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if auth == nil || (auth.Username == "" && auth.Password == "") {
-			next.ServeHTTP(w, r)
-			return
-		}
+// SetupRoutes 配置所有路由
+func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth, username, password string) {
+	engine := r.Engine
 
-		user, pass, ok := r.BasicAuth()
-		if !ok {
-			w.Header().Set("WWW-Authenticate", `Basic realm="GoTunnel"`)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
+	// 全局中间件
+	engine.Use(middleware.Recovery())
+	engine.Use(middleware.Logger())
+	engine.Use(middleware.CORS())
 
-		userMatch := subtle.ConstantTimeCompare([]byte(user), []byte(auth.Username)) == 1
-		passMatch := subtle.ConstantTimeCompare([]byte(pass), []byte(auth.Password)) == 1
+	// Swagger 文档
+	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-		if !userMatch || !passMatch {
-			w.Header().Set("WWW-Authenticate", `Basic realm="GoTunnel"`)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
+	// 认证路由 (无需 JWT)
+	authHandler := handler.NewAuthHandler(username, password, jwtAuth)
+	engine.POST("/api/auth/login", authHandler.Login)
+	engine.GET("/api/auth/check", authHandler.Check)
 
-		next.ServeHTTP(w, r)
-	})
+	// API 路由 (需要 JWT)
+	api := engine.Group("/api")
+	api.Use(middleware.JWTAuth(jwtAuth))
+	{
+		// 状态
+		statusHandler := handler.NewStatusHandler(app)
+		api.GET("/status", statusHandler.GetStatus)
+		api.GET("/update/version", statusHandler.GetVersion)
+
+		// 客户端管理
+		clientHandler := handler.NewClientHandler(app)
+		api.GET("/clients", clientHandler.List)
+		api.POST("/clients", clientHandler.Create)
+		api.GET("/client/:id", clientHandler.Get)
+		api.PUT("/client/:id", clientHandler.Update)
+		api.DELETE("/client/:id", clientHandler.Delete)
+		api.POST("/client/:id/push", clientHandler.PushConfig)
+		api.POST("/client/:id/disconnect", clientHandler.Disconnect)
+		api.POST("/client/:id/restart", clientHandler.Restart)
+		api.POST("/client/:id/install-plugins", clientHandler.InstallPlugins)
+		api.POST("/client/:id/plugin/:pluginName/:action", clientHandler.PluginAction)
+
+		// 配置管理
+		configHandler := handler.NewConfigHandler(app)
+		api.GET("/config", configHandler.Get)
+		api.PUT("/config", configHandler.Update)
+		api.POST("/config/reload", configHandler.Reload)
+
+		// 插件管理
+		pluginHandler := handler.NewPluginHandler(app)
+		api.GET("/plugins", pluginHandler.List)
+		api.POST("/plugin/:name/enable", pluginHandler.Enable)
+		api.POST("/plugin/:name/disable", pluginHandler.Disable)
+		api.GET("/rule-schemas", pluginHandler.GetRuleSchemas)
+		api.GET("/client-plugin/:clientID/:pluginName/config", pluginHandler.GetClientConfig)
+		api.PUT("/client-plugin/:clientID/:pluginName/config", pluginHandler.UpdateClientConfig)
+
+		// JS 插件管理
+		jsPluginHandler := handler.NewJSPluginHandler(app)
+		api.GET("/js-plugins", jsPluginHandler.List)
+		api.POST("/js-plugins", jsPluginHandler.Create)
+		api.GET("/js-plugin/:name", jsPluginHandler.Get)
+		api.PUT("/js-plugin/:name", jsPluginHandler.Update)
+		api.DELETE("/js-plugin/:name", jsPluginHandler.Delete)
+		api.POST("/js-plugin/:name/push/:clientID", jsPluginHandler.PushToClient)
+
+		// 插件商店
+		storeHandler := handler.NewStoreHandler(app)
+		api.GET("/store/plugins", storeHandler.ListPlugins)
+		api.POST("/store/install", storeHandler.Install)
+
+		// 更新管理
+		updateHandler := handler.NewUpdateHandler(app)
+		api.GET("/update/check/server", updateHandler.CheckServer)
+		api.GET("/update/check/client", updateHandler.CheckClient)
+		api.POST("/update/apply/server", updateHandler.ApplyServer)
+		api.POST("/update/apply/client", updateHandler.ApplyClient)
+	}
 }
 
-// JWTMiddleware JWT 认证中间件
-func JWTMiddleware(jwtAuth *auth.JWTAuth, skipPaths []string, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 只对 /api/ 路径进行认证
-		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// 检查是否跳过认证
-		for _, path := range skipPaths {
-			if strings.HasPrefix(r.URL.Path, path) {
-				next.ServeHTTP(w, r)
-				return
-			}
-		}
-
-		// 从 Header 获取 token
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-			return
-		}
-
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if _, err := jwtAuth.ValidateToken(token); err != nil {
-			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
+// SetupStaticFiles 配置静态文件处理
+func (r *GinRouter) SetupStaticFiles(staticFS fs.FS) {
+	// 使用 NoRoute 处理 SPA 路由
+	r.Engine.NoRoute(gin.WrapH(&spaHandler{fs: http.FS(staticFS)}))
 }
+
+// spaHandler SPA 路由处理器
+type spaHandler struct {
+	fs http.FileSystem
+}
+
+func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+	f, err := h.fs.Open(path)
+	if err != nil {
+		f, err = h.fs.Open("index.html")
+		if err != nil {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if stat.IsDir() {
+		f.Close()
+		f, err = h.fs.Open(path + "/index.html")
+		if err != nil {
+			f, _ = h.fs.Open("index.html")
+		}
+		stat, _ = f.Stat()
+	}
+
+	if seeker, ok := f.(io.ReadSeeker); ok {
+		http.ServeContent(w, r, path, stat.ModTime(), seeker)
+	}
+}
+
+// Re-export types from handler package for backward compatibility
+type (
+	ServerInterface       = handler.ServerInterface
+	AppInterface          = handler.AppInterface
+	ConfigField           = handler.ConfigField
+	RuleSchema            = handler.RuleSchema
+	PluginInfo            = handler.PluginInfo
+	JSPluginInstallRequest = handler.JSPluginInstallRequest
+)

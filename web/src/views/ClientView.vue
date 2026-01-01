@@ -14,7 +14,7 @@ import {
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
   getClientPluginConfig, updateClientPluginConfig,
-  getStorePlugins, installStorePlugin, getRuleSchemas, restartClientPlugin, stopClientPlugin
+  getStorePlugins, installStorePlugin, getRuleSchemas, restartClientPlugin, stopClientPlugin, deleteClientPlugin
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 
@@ -351,6 +351,25 @@ const savePluginConfig = async () => {
     message.error(e.response?.data || '保存失败')
   }
 }
+
+// 删除客户端插件
+const handleDeletePlugin = (plugin: ClientPlugin) => {
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除插件 ${plugin.name} 吗？`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deleteClientPlugin(clientId, plugin.name)
+        message.success(`已删除 ${plugin.name}`)
+        await loadClient()
+      } catch (e: any) {
+        message.error(e.response?.data || '删除失败')
+      }
+    }
+  })
+}
 </script>
 
 <template>
@@ -575,6 +594,10 @@ const savePluginConfig = async () => {
                 <n-button v-if="online && plugin.enabled" size="small" quaternary type="warning" @click="handleStopPlugin(plugin)">
                   <template #icon><n-icon><StopOutline /></n-icon></template>
                   停止
+                </n-button>
+                <n-button size="small" quaternary type="error" @click="handleDeletePlugin(plugin)">
+                  <template #icon><n-icon><TrashOutline /></n-icon></template>
+                  删除
                 </n-button>
               </n-space>
             </td>

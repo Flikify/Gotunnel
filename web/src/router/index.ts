@@ -25,6 +25,11 @@ const router = createRouter({
       name: 'plugins',
       component: () => import('../views/PluginsView.vue'),
     },
+    {
+      path: '/update',
+      name: 'update',
+      component: () => import('../views/UpdateView.vue'),
+    },
   ],
 })
 

@@ -1,0 +1,1500 @@
+basePath: /
+definitions:
+  github_com_gotunnel_internal_server_db.ClientPlugin:
+    properties:
+      config:
+        additionalProperties:
+          type: string
+        description: 插件配置
+        type: object
+      enabled:
+        type: boolean
+      name:
+        type: string
+      version:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_db.JSPlugin:
+    properties:
+      author:
+        type: string
+      auto_push:
+        items:
+          type: string
+        type: array
+      auto_start:
+        type: boolean
+      config:
+        additionalProperties:
+          type: string
+        type: object
+      description:
+        type: string
+      enabled:
+        type: boolean
+      name:
+        type: string
+      signature:
+        description: 官方签名 (Base64)
+        type: string
+      source:
+        type: string
+      version:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ApplyClientUpdateRequest:
+    description: 推送更新到客户端
+    properties:
+      client_id:
+        type: string
+      download_url:
+        type: string
+    required:
+    - client_id
+    - download_url
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ApplyServerUpdateRequest:
+    description: 应用服务端更新
+    properties:
+      download_url:
+        type: string
+      restart:
+        type: boolean
+    required:
+    - download_url
+    type: object
+  github_com_gotunnel_internal_server_router_dto.CheckUpdateResponse:
+    description: 更新检查结果
+    properties:
+      current_version:
+        type: string
+      download_url:
+        type: string
+      has_update:
+        type: boolean
+      latest_version:
+        type: string
+      published_at:
+        type: string
+      release_notes:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ClientListItem:
+    description: 客户端列表中的单个项目
+    properties:
+      id:
+        example: client-001
+        type: string
+      last_ping:
+        type: string
+      nickname:
+        example: My Client
+        type: string
+      online:
+        example: true
+        type: boolean
+      remote_addr:
+        type: string
+      rule_count:
+        example: 3
+        type: integer
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ClientPluginActionRequest:
+    description: 对客户端插件执行操作
+    properties:
+      config:
+        additionalProperties:
+          type: string
+        type: object
+      restart:
+        type: boolean
+      rule_name:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ClientResponse:
+    description: 客户端详细信息
+    properties:
+      id:
+        example: client-001
+        type: string
+      last_ping:
+        example: "2025-01-02T10:30:00Z"
+        type: string
+      nickname:
+        example: My Client
+        type: string
+      online:
+        example: true
+        type: boolean
+      plugins:
+        items:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_db.ClientPlugin'
+        type: array
+      remote_addr:
+        example: 192.168.1.100:54321
+        type: string
+      rules:
+        items:
+          $ref: '#/definitions/github_com_gotunnel_pkg_protocol.ProxyRule'
+        type: array
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ConfigField:
+    description: 配置表单字段
+    properties:
+      default:
+        type: string
+      description:
+        type: string
+      key:
+        type: string
+      label:
+        type: string
+      options:
+        items:
+          type: string
+        type: array
+      required:
+        type: boolean
+      type:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.CreateClientRequest:
+    description: 创建新客户端的请求体
+    properties:
+      id:
+        example: client-001
+        maxLength: 64
+        minLength: 1
+        type: string
+      rules:
+        items:
+          $ref: '#/definitions/github_com_gotunnel_pkg_protocol.ProxyRule'
+        type: array
+    required:
+    - id
+    type: object
+  github_com_gotunnel_internal_server_router_dto.InstallPluginsRequest:
+    description: 安装插件到指定客户端
+    properties:
+      plugins:
+        example:
+        - socks5
+        - http-proxy
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - plugins
+    type: object
+  github_com_gotunnel_internal_server_router_dto.JSPluginCreateRequest:
+    description: 创建新的 JS 插件
+    properties:
+      author:
+        maxLength: 64
+        type: string
+      auto_start:
+        type: boolean
+      config:
+        additionalProperties:
+          type: string
+        type: object
+      description:
+        maxLength: 500
+        type: string
+      name:
+        maxLength: 64
+        minLength: 1
+        type: string
+      signature:
+        type: string
+      source:
+        type: string
+    required:
+    - name
+    - source
+    type: object
+  github_com_gotunnel_internal_server_router_dto.JSPluginUpdateRequest:
+    description: 更新 JS 插件
+    properties:
+      author:
+        maxLength: 64
+        type: string
+      auto_start:
+        type: boolean
+      config:
+        additionalProperties:
+          type: string
+        type: object
+      description:
+        maxLength: 500
+        type: string
+      enabled:
+        type: boolean
+      signature:
+        type: string
+      source:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.LoginRequest:
+    description: 用户登录
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  github_com_gotunnel_internal_server_router_dto.LoginResponse:
+    description: 登录成功返回
+    properties:
+      token:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.PluginConfigRequest:
+    description: 更新客户端插件配置
+    properties:
+      config:
+        additionalProperties:
+          type: string
+        type: object
+    required:
+    - config
+    type: object
+  github_com_gotunnel_internal_server_router_dto.PluginConfigResponse:
+    description: 插件配置详情
+    properties:
+      config:
+        additionalProperties:
+          type: string
+        type: object
+      plugin_name:
+        type: string
+      schema:
+        items:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ConfigField'
+        type: array
+    type: object
+  github_com_gotunnel_internal_server_router_dto.PluginInfo:
+    description: 服务端插件信息
+    properties:
+      description:
+        type: string
+      enabled:
+        type: boolean
+      icon:
+        type: string
+      name:
+        type: string
+      rule_schema:
+        $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.RuleSchema'
+      source:
+        type: string
+      type:
+        type: string
+      version:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.RuleSchema:
+    description: 代理规则的配置模式
+    properties:
+      extra_fields:
+        items:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ConfigField'
+        type: array
+      needs_local_addr:
+        type: boolean
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ServerConfigInfo:
+    properties:
+      bind_addr:
+        type: string
+      bind_port:
+        type: integer
+      heartbeat_sec:
+        type: integer
+      heartbeat_timeout:
+        type: integer
+      token:
+        description: 脱敏后的 token
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ServerConfigPart:
+    description: 隧道服务器配置
+    properties:
+      bind_addr:
+        type: string
+      bind_port:
+        maximum: 65535
+        minimum: 1
+        type: integer
+      heartbeat_sec:
+        maximum: 300
+        minimum: 1
+        type: integer
+      heartbeat_timeout:
+        maximum: 600
+        minimum: 1
+        type: integer
+      token:
+        minLength: 8
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ServerConfigResponse:
+    description: 服务器配置信息
+    properties:
+      server:
+        $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ServerConfigInfo'
+      web:
+        $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.WebConfigInfo'
+    type: object
+  github_com_gotunnel_internal_server_router_dto.ServerStatus:
+    properties:
+      bind_addr:
+        type: string
+      bind_port:
+        type: integer
+    type: object
+  github_com_gotunnel_internal_server_router_dto.StatusResponse:
+    description: 服务器状态信息
+    properties:
+      client_count:
+        type: integer
+      server:
+        $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ServerStatus'
+    type: object
+  github_com_gotunnel_internal_server_router_dto.StoreInstallRequest:
+    description: 从插件商店安装插件到客户端
+    properties:
+      client_id:
+        type: string
+      download_url:
+        type: string
+      plugin_name:
+        type: string
+      signature_url:
+        type: string
+    required:
+    - client_id
+    - download_url
+    - plugin_name
+    - signature_url
+    type: object
+  github_com_gotunnel_internal_server_router_dto.StorePluginInfo:
+    description: 插件商店中的插件信息
+    properties:
+      author:
+        type: string
+      description:
+        type: string
+      download_url:
+        type: string
+      icon:
+        type: string
+      name:
+        type: string
+      signature_url:
+        type: string
+      type:
+        type: string
+      version:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.TokenCheckResponse:
+    description: Token 验证结果
+    properties:
+      username:
+        type: string
+      valid:
+        type: boolean
+    type: object
+  github_com_gotunnel_internal_server_router_dto.UpdateClientRequest:
+    description: 更新客户端配置的请求体
+    properties:
+      nickname:
+        example: My Client
+        maxLength: 128
+        type: string
+      plugins:
+        items:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_db.ClientPlugin'
+        type: array
+      rules:
+        items:
+          $ref: '#/definitions/github_com_gotunnel_pkg_protocol.ProxyRule'
+        type: array
+    type: object
+  github_com_gotunnel_internal_server_router_dto.UpdateServerConfigRequest:
+    description: 更新服务器配置
+    properties:
+      server:
+        $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ServerConfigPart'
+      web:
+        $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.WebConfigPart'
+    type: object
+  github_com_gotunnel_internal_server_router_dto.VersionInfo:
+    description: 当前版本信息
+    properties:
+      build_time:
+        type: string
+      git_commit:
+        type: string
+      go_version:
+        type: string
+      platform:
+        type: string
+      version:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.WebConfigInfo:
+    properties:
+      bind_addr:
+        type: string
+      bind_port:
+        type: integer
+      enabled:
+        type: boolean
+      password:
+        description: 显示为 ****
+        type: string
+      username:
+        type: string
+    type: object
+  github_com_gotunnel_internal_server_router_dto.WebConfigPart:
+    description: Web 控制台配置
+    properties:
+      bind_addr:
+        type: string
+      bind_port:
+        maximum: 65535
+        minimum: 1
+        type: integer
+      enabled:
+        type: boolean
+      password:
+        maxLength: 64
+        minLength: 6
+        type: string
+      username:
+        maxLength: 32
+        minLength: 3
+        type: string
+    type: object
+  github_com_gotunnel_pkg_protocol.ProxyRule:
+    properties:
+      enabled:
+        description: 是否启用，默认为 true
+        type: boolean
+      local_ip:
+        description: tcp/udp 模式使用
+        type: string
+      local_port:
+        description: tcp/udp 模式使用
+        type: integer
+      name:
+        type: string
+      plugin_config:
+        additionalProperties:
+          type: string
+        type: object
+      plugin_name:
+        description: Plugin 支持字段
+        type: string
+      plugin_version:
+        type: string
+      remote_port:
+        description: 服务端监听端口
+        type: integer
+      type:
+        description: '内置: tcp, udp, http, https; 插件: socks5 等'
+        type: string
+    type: object
+  internal_server_router_handler.Response:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+    type: object
+host: localhost:7500
+info:
+  contact: {}
+  description: GoTunnel 内网穿透服务器 API
+  title: GoTunnel API
+  version: "1.0"
+paths:
+  /api/auth/check:
+    get:
+      description: 验证 JWT token 是否有效
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.TokenCheckResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 检查 Token
+      tags:
+      - 认证
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 使用用户名密码登录，返回 JWT token
+      parameters:
+      - description: 登录信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.LoginResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      summary: 用户登录
+      tags:
+      - 认证
+  /api/client-plugin/{clientID}/{pluginName}/config:
+    get:
+      description: 获取客户端上指定插件的配置
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: clientID
+        required: true
+        type: string
+      - description: 插件名称
+        in: path
+        name: pluginName
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.PluginConfigResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 获取客户端插件配置
+      tags:
+      - 插件
+    put:
+      consumes:
+      - application/json
+      description: 更新客户端上指定插件的配置
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: clientID
+        required: true
+        type: string
+      - description: 插件名称
+        in: path
+        name: pluginName
+        required: true
+        type: string
+      - description: 配置内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.PluginConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 更新客户端插件配置
+      tags:
+      - 插件
+  /api/client/{id}:
+    delete:
+      description: 删除指定的客户端配置
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 删除客户端
+      tags:
+      - 客户端
+    get:
+      description: 获取指定客户端的详细信息
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ClientResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 获取客户端详情
+      tags:
+      - 客户端
+    put:
+      consumes:
+      - application/json
+      description: 更新指定客户端的配置信息
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 更新内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.UpdateClientRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 更新客户端配置
+      tags:
+      - 客户端
+  /api/client/{id}/disconnect:
+    post:
+      description: 强制断开客户端连接
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 断开连接
+      tags:
+      - 客户端
+  /api/client/{id}/install-plugins:
+    post:
+      consumes:
+      - application/json
+      description: 将指定插件安装到客户端
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 插件列表
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.InstallPluginsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 安装插件
+      tags:
+      - 客户端
+  /api/client/{id}/plugin/{pluginName}/{action}:
+    post:
+      consumes:
+      - application/json
+      description: 对客户端插件执行操作(stop/restart/config/delete)
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 插件名称
+        in: path
+        name: pluginName
+        required: true
+        type: string
+      - description: 操作类型
+        enum:
+        - stop
+        - restart
+        - config
+        - delete
+        in: path
+        name: action
+        required: true
+        type: string
+      - description: 操作参数
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ClientPluginActionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 插件操作
+      tags:
+      - 客户端
+  /api/client/{id}/push:
+    post:
+      description: 将配置推送到在线客户端
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 推送配置
+      tags:
+      - 客户端
+  /api/client/{id}/restart:
+    post:
+      description: 发送重启命令到客户端
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 重启客户端
+      tags:
+      - 客户端
+  /api/clients:
+    get:
+      description: 返回所有注册客户端的列表及其在线状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ClientListItem'
+                  type: array
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取所有客户端
+      tags:
+      - 客户端
+    post:
+      consumes:
+      - application/json
+      description: 创建一个新的客户端配置
+      parameters:
+      - description: 客户端信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.CreateClientRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 创建新客户端
+      tags:
+      - 客户端
+  /api/config:
+    get:
+      description: 返回服务器配置（敏感信息脱敏）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ServerConfigResponse'
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取配置
+      tags:
+      - 配置
+    put:
+      consumes:
+      - application/json
+      description: 更新服务器配置
+      parameters:
+      - description: 配置内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.UpdateServerConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 更新配置
+      tags:
+      - 配置
+  /api/config/reload:
+    post:
+      description: 重新加载服务器配置
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 重新加载配置
+      tags:
+      - 配置
+  /api/js-plugin/{name}:
+    delete:
+      description: 删除指定的 JS 插件
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 删除 JS 插件
+      tags:
+      - JS插件
+    get:
+      description: 获取指定 JS 插件的详细信息
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_db.JSPlugin'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 获取 JS 插件详情
+      tags:
+      - JS插件
+    put:
+      consumes:
+      - application/json
+      description: 更新指定 JS 插件的信息
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 更新内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.JSPluginUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 更新 JS 插件
+      tags:
+      - JS插件
+  /api/js-plugin/{name}/push/{clientID}:
+    post:
+      description: 将 JS 插件推送到指定客户端
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 客户端ID
+        in: path
+        name: clientID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 推送插件到客户端
+      tags:
+      - JS插件
+  /api/js-plugins:
+    get:
+      description: 返回所有注册的 JS 插件
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_gotunnel_internal_server_db.JSPlugin'
+                  type: array
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取所有 JS 插件
+      tags:
+      - JS插件
+    post:
+      consumes:
+      - application/json
+      description: 创建新的 JS 插件
+      parameters:
+      - description: 插件信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.JSPluginCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 创建 JS 插件
+      tags:
+      - JS插件
+  /api/plugin/{name}/disable:
+    post:
+      description: 禁用指定插件
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 禁用插件
+      tags:
+      - 插件
+  /api/plugin/{name}/enable:
+    post:
+      description: 启用指定插件
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 启用插件
+      tags:
+      - 插件
+  /api/plugins:
+    get:
+      description: 返回服务端所有注册的插件
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.PluginInfo'
+                  type: array
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取所有插件
+      tags:
+      - 插件
+  /api/rule-schemas:
+    get:
+      description: 返回所有协议类型的配置模式
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.RuleSchema'
+                  type: object
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取规则模式
+      tags:
+      - 插件
+  /api/status:
+    get:
+      description: 返回服务器运行状态和客户端数量
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.StatusResponse'
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取服务器状态
+      tags:
+      - 状态
+  /api/store/install:
+    post:
+      consumes:
+      - application/json
+      description: 从插件商店下载并安装插件到指定客户端
+      parameters:
+      - description: 安装请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.StoreInstallRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 安装商店插件
+      tags:
+      - 插件商店
+  /api/store/plugins:
+    get:
+      description: 从远程插件商店获取可用插件列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  properties:
+                    plugins:
+                      items:
+                        $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.StorePluginInfo'
+                      type: array
+                  type: object
+              type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 获取商店插件
+      tags:
+      - 插件商店
+  /api/update/apply/client:
+    post:
+      consumes:
+      - application/json
+      description: 向指定客户端推送更新命令
+      parameters:
+      - description: 更新请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ApplyClientUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 推送客户端更新
+      tags:
+      - 更新
+  /api/update/apply/server:
+    post:
+      consumes:
+      - application/json
+      description: 下载并应用服务端更新，服务器将自动重启
+      parameters:
+      - description: 更新请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.ApplyServerUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server_router_handler.Response'
+      security:
+      - Bearer: []
+      summary: 应用服务端更新
+      tags:
+      - 更新
+  /api/update/check/client:
+    get:
+      description: 检查是否有新的客户端版本可用
+      parameters:
+      - description: 操作系统
+        enum:
+        - linux
+        - darwin
+        - windows
+        in: query
+        name: os
+        type: string
+      - description: 架构
+        enum:
+        - amd64
+        - arm64
+        - "386"
+        - arm
+        in: query
+        name: arch
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.CheckUpdateResponse'
+              type: object
+      security:
+      - Bearer: []
+      summary: 检查客户端更新
+      tags:
+      - 更新
+  /api/update/check/server:
+    get:
+      description: 检查是否有新的服务端版本可用
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.CheckUpdateResponse'
+              type: object
+      security:
+      - Bearer: []
+      summary: 检查服务端更新
+      tags:
+      - 更新
+  /api/update/version:
+    get:
+      description: 返回服务器版本信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_server_router_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_gotunnel_internal_server_router_dto.VersionInfo'
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取版本信息
+      tags:
+      - 状态
+securityDefinitions:
+  Bearer:
+    description: JWT Bearer token
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

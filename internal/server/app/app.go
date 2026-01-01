@@ -2,10 +2,8 @@ package app
 
 import (
 	"embed"
-	"io"
 	"io/fs"
 	"log"
-	"net/http"
 
 	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
@@ -15,33 +13,6 @@ import (
 
 //go:embed dist/*
 var staticFiles embed.FS
-
-// spaHandler SPA路由处理器
-type spaHandler struct {
-	fs http.FileSystem
-}
-
-func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
-	f, err := h.fs.Open(path)
-	if err != nil {
-		f, err = h.fs.Open("index.html")
-		if err != nil {
-			http.Error(w, "Not Found", http.StatusNotFound)
-			return
-		}
-	}
-	defer f.Close()
-
-	stat, _ := f.Stat()
-	if stat.IsDir() {
-		f, err = h.fs.Open(path + "/index.html")
-		if err != nil {
-			f, _ = h.fs.Open("index.html")
-		}
-	}
-	http.ServeContent(w, r, path, stat.ModTime(), f.(io.ReadSeeker))
-}
 
 // WebServer Web控制台服务
 type WebServer struct {
@@ -63,36 +34,29 @@ func NewWebServer(cs db.ClientStore, srv router.ServerInterface, cfg *config.Ser
 	}
 }
 
-// Run 启动Web服务
+// Run 启动Web服务 (无认证，仅用于开发)
 func (w *WebServer) Run(addr string) error {
 	r := router.New()
-	router.RegisterRoutes(r, w)
 
+	// 使用默认凭据和 JWT
+	jwtAuth := auth.NewJWTAuth("dev-secret", 24)
+	r.SetupRoutes(w, jwtAuth, "admin", "admin")
+
+	// 静态文件
 	staticFS, err := fs.Sub(staticFiles, "dist")
 	if err != nil {
 		return err
 	}
-	r.Handle("/", spaHandler{fs: http.FS(staticFS)})
+	r.SetupStaticFiles(staticFS)
 
 	log.Printf("[Web] Console listening on %s", addr)
-	return http.ListenAndServe(addr, r.Handler())
+	return r.Engine.Run(addr)
 }
 
-// RunWithAuth 启动带认证的Web服务
+// RunWithAuth 启动带 Basic Auth 的 Web 服务 (已废弃，使用 RunWithJWT)
 func (w *WebServer) RunWithAuth(addr, username, password string) error {
-	r := router.New()
-	router.RegisterRoutes(r, w)
-
-	staticFS, err := fs.Sub(staticFiles, "dist")
-	if err != nil {
-		return err
-	}
-	r.Handle("/", spaHandler{fs: http.FS(staticFS)})
-
-	auth := &router.AuthConfig{Username: username, Password: password}
-	handler := router.BasicAuthMiddleware(auth, r.Handler())
-	log.Printf("[Web] Console listening on %s (auth enabled)", addr)
-	return http.ListenAndServe(addr, handler)
+	// 转发到 JWT 认证
+	return w.RunWithJWT(addr, username, password, "auto-generated-secret")
 }
 
 // RunWithJWT 启动带 JWT 认证的 Web 服务
@@ -102,26 +66,18 @@ func (w *WebServer) RunWithJWT(addr, username, password, jwtSecret string) error
 	// JWT 认证器
 	jwtAuth := auth.NewJWTAuth(jwtSecret, 24) // 24小时过期
 
-	// 注册认证路由（不需要认证）
-	authHandler := router.NewAuthHandler(username, password, jwtAuth)
-	router.RegisterAuthRoutes(r, authHandler)
-
-	// 注册业务路由
-	router.RegisterRoutes(r, w)
+	// 设置所有路由
+	r.SetupRoutes(w, jwtAuth, username, password)
 
 	// 静态文件
 	staticFS, err := fs.Sub(staticFiles, "dist")
 	if err != nil {
 		return err
 	}
-	r.Handle("/", spaHandler{fs: http.FS(staticFS)})
-
-	// JWT 中间件，只对 /api/ 路径进行认证（排除 /api/auth/）
-	skipPaths := []string{"/api/auth/"}
-	handler := router.JWTMiddleware(jwtAuth, skipPaths, r.Handler())
+	r.SetupStaticFiles(staticFS)
 
 	log.Printf("[Web] Console listening on %s (JWT auth enabled)", addr)
-	return http.ListenAndServe(addr, handler)
+	return r.Engine.Run(addr)
 }
 
 // GetClientStore 获取客户端存储

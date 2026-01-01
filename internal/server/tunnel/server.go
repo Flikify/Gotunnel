@@ -1306,3 +1306,32 @@ func (s *Server) UpdateClientPluginConfig(clientID, pluginName, ruleName string,
 
 	return nil
 }
+
+// SendUpdateToClient 发送更新命令到客户端
+func (s *Server) SendUpdateToClient(clientID, downloadURL string) error {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("client %s not found or not online", clientID)
+	}
+
+	// 发送更新消息
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	req := protocol.UpdateDownloadRequest{
+		DownloadURL: downloadURL,
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeUpdateDownload, req)
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return err
+	}
+
+	log.Printf("[Server] Update command sent to client %s: %s", clientID, downloadURL)
+	return nil
+}

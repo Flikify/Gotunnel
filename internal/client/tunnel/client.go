@@ -3,10 +3,14 @@ package tunnel
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -231,6 +235,8 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handleClientRestart(stream, msg)
 	case protocol.MsgTypePluginConfigUpdate:
 		c.handlePluginConfigUpdate(stream, msg)
+	case protocol.MsgTypeUpdateDownload:
+		c.handleUpdateDownload(stream, msg)
 	}
 }
 
@@ -737,4 +743,182 @@ func (c *Client) sendPluginConfigUpdateResult(stream net.Conn, pluginName, ruleN
 	}
 	msg, _ := protocol.NewMessage(protocol.MsgTypePluginConfigUpdate, result)
 	protocol.WriteMessage(stream, msg)
+}
+
+// handleUpdateDownload 处理更新下载请求
+func (c *Client) handleUpdateDownload(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var req protocol.UpdateDownloadRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		log.Printf("[Client] Parse update request error: %v", err)
+		c.sendUpdateResult(stream, false, "invalid request")
+		return
+	}
+
+	log.Printf("[Client] Update download requested: %s", req.DownloadURL)
+
+	// 异步执行更新
+	go func() {
+		if err := c.performSelfUpdate(req.DownloadURL); err != nil {
+			log.Printf("[Client] Update failed: %v", err)
+		}
+	}()
+
+	c.sendUpdateResult(stream, true, "update started")
+}
+
+// sendUpdateResult 发送更新结果
+func (c *Client) sendUpdateResult(stream net.Conn, success bool, message string) {
+	result := protocol.UpdateResultResponse{
+		Success: success,
+		Message: message,
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeUpdateResult, result)
+	protocol.WriteMessage(stream, msg)
+}
+
+// performSelfUpdate 执行自更新
+func (c *Client) performSelfUpdate(downloadURL string) error {
+	log.Printf("[Client] Starting self-update from: %s", downloadURL)
+
+	// 创建临时文件
+	tempDir := os.TempDir()
+	tempFile := filepath.Join(tempDir, "gotunnel_client_update")
+
+	if runtime.GOOS == "windows" {
+		tempFile += ".exe"
+	}
+
+	// 下载新版本
+	if err := downloadUpdateFile(downloadURL, tempFile); err != nil {
+		return fmt.Errorf("download update: %w", err)
+	}
+
+	// 设置执行权限
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(tempFile, 0755); err != nil {
+			os.Remove(tempFile)
+			return fmt.Errorf("chmod: %w", err)
+		}
+	}
+
+	// 获取当前可执行文件路径
+	currentPath, err := os.Executable()
+	if err != nil {
+		os.Remove(tempFile)
+		return fmt.Errorf("get executable: %w", err)
+	}
+	currentPath, _ = filepath.EvalSymlinks(currentPath)
+
+	// Windows 需要特殊处理
+	if runtime.GOOS == "windows" {
+		return performWindowsClientUpdate(tempFile, currentPath, c.ServerAddr, c.Token, c.ID)
+	}
+
+	// Linux/Mac: 直接替换
+	backupPath := currentPath + ".bak"
+
+	// 停止所有插件
+	c.stopAllPlugins()
+
+	// 备份当前文件
+	if err := os.Rename(currentPath, backupPath); err != nil {
+		os.Remove(tempFile)
+		return fmt.Errorf("backup current: %w", err)
+	}
+
+	// 移动新文件
+	if err := os.Rename(tempFile, currentPath); err != nil {
+		os.Rename(backupPath, currentPath)
+		return fmt.Errorf("replace binary: %w", err)
+	}
+
+	// 删除备份
+	os.Remove(backupPath)
+
+	log.Printf("[Client] Update completed, restarting...")
+
+	// 重启进程
+	restartClientProcess(currentPath, c.ServerAddr, c.Token, c.ID)
+	return nil
+}
+
+// stopAllPlugins 停止所有运行中的插件
+func (c *Client) stopAllPlugins() {
+	c.pluginMu.Lock()
+	for key, handler := range c.runningPlugins {
+		log.Printf("[Client] Stopping plugin %s for update", key)
+		handler.Stop()
+	}
+	c.runningPlugins = make(map[string]plugin.ClientPlugin)
+	c.pluginMu.Unlock()
+}
+
+// downloadUpdateFile 下载更新文件
+func downloadUpdateFile(url, dest string) error {
+	client := &http.Client{Timeout: 10 * time.Minute}
+	resp, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed: %s", resp.Status)
+	}
+
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+// performWindowsClientUpdate Windows 平台更新
+func performWindowsClientUpdate(newFile, currentPath, serverAddr, token, id string) error {
+	// 创建批处理脚本
+	args := fmt.Sprintf(`-s "%s" -t "%s"`, serverAddr, token)
+	if id != "" {
+		args += fmt.Sprintf(` -id "%s"`, id)
+	}
+
+	batchScript := fmt.Sprintf(`@echo off
+ping 127.0.0.1 -n 2 > nul
+del "%s"
+move "%s" "%s"
+start "" "%s" %s
+del "%%~f0"
+`, currentPath, newFile, currentPath, currentPath, args)
+
+	batchPath := filepath.Join(os.TempDir(), "gotunnel_client_update.bat")
+	if err := os.WriteFile(batchPath, []byte(batchScript), 0755); err != nil {
+		return fmt.Errorf("write batch: %w", err)
+	}
+
+	cmd := exec.Command("cmd", "/C", "start", "/MIN", batchPath)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start batch: %w", err)
+	}
+
+	// 退出当前进程
+	os.Exit(0)
+	return nil
+}
+
+// restartClientProcess 重启客户端进程
+func restartClientProcess(path, serverAddr, token, id string) {
+	args := []string{"-s", serverAddr, "-t", token}
+	if id != "" {
+		args = append(args, "-id", id)
+	}
+
+	cmd := exec.Command(path, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Start()
+	os.Exit(0)
 }

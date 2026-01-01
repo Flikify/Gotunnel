@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { NCard, NButton, NSpace, NTag, NStatistic, NGrid, NGi, NEmpty } from 'naive-ui'
+import { NCard, NButton, NSpace, NTag, NStatistic, NGrid, NGi, NEmpty, NIcon } from 'naive-ui'
+import { ExtensionPuzzleOutline, CloudDownloadOutline } from '@vicons/ionicons5'
 import { getClients } from '../api'
 import type { ClientStatus } from '../types'
 
@@ -35,10 +36,22 @@ const viewClient = (id: string) => {
 
 <template>
   <div class="home">
-    <div style="margin-bottom: 24px;">
-      <h2 style="margin: 0 0 8px 0;">客户端管理</h2>
-      <p style="margin: 0; color: #666;">查看已连接的隧道客户端</p>
-    </div>
+    <n-space justify="space-between" align="center" style="margin-bottom: 24px;">
+      <div>
+        <h2 style="margin: 0 0 8px 0;">客户端管理</h2>
+        <p style="margin: 0; color: #666;">查看已连接的隧道客户端</p>
+      </div>
+      <n-space>
+        <n-button @click="router.push('/plugins')">
+          <template #icon><n-icon><ExtensionPuzzleOutline /></n-icon></template>
+          扩展商店
+        </n-button>
+        <n-button @click="router.push('/update')">
+          <template #icon><n-icon><CloudDownloadOutline /></n-icon></template>
+          系统更新
+        </n-button>
+      </n-space>
+    </n-space>
 
     <n-grid :cols="3" :x-gap="16" :y-gap="16" style="margin-bottom: 24px;">
       <n-gi>

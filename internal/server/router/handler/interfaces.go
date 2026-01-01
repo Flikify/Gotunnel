@@ -1,0 +1,83 @@
+package handler
+
+import (
+	"github.com/gotunnel/internal/server/config"
+	"github.com/gotunnel/internal/server/db"
+)
+
+// AppInterface 应用接口
+type AppInterface interface {
+	GetClientStore() db.ClientStore
+	GetServer() ServerInterface
+	GetConfig() *config.ServerConfig
+	GetConfigPath() string
+	SaveConfig() error
+	GetJSPluginStore() db.JSPluginStore
+}
+
+// ServerInterface 服务端接口
+type ServerInterface interface {
+	GetClientStatus(clientID string) (online bool, lastPing string, remoteAddr string)
+	GetAllClientStatus() map[string]struct {
+		Online     bool
+		LastPing   string
+		RemoteAddr string
+	}
+	ReloadConfig() error
+	GetBindAddr() string
+	GetBindPort() int
+	PushConfigToClient(clientID string) error
+	DisconnectClient(clientID string) error
+	GetPluginList() []PluginInfo
+	EnablePlugin(name string) error
+	DisablePlugin(name string) error
+	InstallPluginsToClient(clientID string, plugins []string) error
+	GetPluginConfigSchema(name string) ([]ConfigField, error)
+	SyncPluginConfigToClient(clientID string, pluginName string, config map[string]string) error
+	InstallJSPluginToClient(clientID string, req JSPluginInstallRequest) error
+	RestartClient(clientID string) error
+	StopClientPlugin(clientID, pluginName, ruleName string) error
+	RestartClientPlugin(clientID, pluginName, ruleName string) error
+	UpdateClientPluginConfig(clientID, pluginName, ruleName string, config map[string]string, restart bool) error
+	SendUpdateToClient(clientID, downloadURL string) error
+}
+
+// ConfigField 配置字段
+type ConfigField struct {
+	Key         string   `json:"key"`
+	Label       string   `json:"label"`
+	Type        string   `json:"type"`
+	Default     string   `json:"default,omitempty"`
+	Required    bool     `json:"required,omitempty"`
+	Options     []string `json:"options,omitempty"`
+	Description string   `json:"description,omitempty"`
+}
+
+// RuleSchema 规则表单模式
+type RuleSchema struct {
+	NeedsLocalAddr bool          `json:"needs_local_addr"`
+	ExtraFields    []ConfigField `json:"extra_fields,omitempty"`
+}
+
+// PluginInfo 插件信息
+type PluginInfo struct {
+	Name        string      `json:"name"`
+	Version     string      `json:"version"`
+	Type        string      `json:"type"`
+	Description string      `json:"description"`
+	Source      string      `json:"source"`
+	Icon        string      `json:"icon,omitempty"`
+	Enabled     bool        `json:"enabled"`
+	RuleSchema  *RuleSchema `json:"rule_schema,omitempty"`
+}
+
+// JSPluginInstallRequest JS 插件安装请求
+type JSPluginInstallRequest struct {
+	PluginName string            `json:"plugin_name"`
+	Source     string            `json:"source"`
+	Signature  string            `json:"signature"`
+	RuleName   string            `json:"rule_name"`
+	RemotePort int               `json:"remote_port"`
+	Config     map[string]string `json:"config"`
+	AutoStart  bool              `json:"auto_start"`
+}

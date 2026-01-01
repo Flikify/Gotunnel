@@ -35,6 +35,8 @@ export const stopClientPlugin = (clientId: string, pluginName: string, ruleName:
   post(`/client/${clientId}/plugin/${pluginName}/stop`, { rule_name: ruleName })
 export const restartClientPlugin = (clientId: string, pluginName: string, ruleName: string) =>
   post(`/client/${clientId}/plugin/${pluginName}/restart`, { rule_name: ruleName })
+export const deleteClientPlugin = (clientId: string, pluginName: string) =>
+  del(`/client/${clientId}/plugin/${pluginName}/delete`)
 export const updateClientPluginConfigWithRestart = (clientId: string, pluginName: string, ruleName: string, config: Record<string, string>, restart: boolean) =>
   post(`/client/${clientId}/plugin/${pluginName}/config`, { rule_name: ruleName, config, restart })
 
@@ -66,3 +68,37 @@ export const updateJSPluginConfig = (name: string, config: Record<string, string
   put(`/js-plugin/${name}/config`, { config })
 export const setJSPluginEnabled = (name: string, enabled: boolean) =>
   post(`/js-plugin/${name}/${enabled ? 'enable' : 'disable'}`)
+
+// 更新管理
+export interface UpdateInfo {
+  available: boolean
+  current: string
+  latest: string
+  release_note: string
+  download_url: string
+  asset_name: string
+  asset_size: number
+}
+
+export interface VersionInfo {
+  version: string
+  git_commit: string
+  build_time: string
+  go_version: string
+  os: string
+  arch: string
+}
+
+export const getVersionInfo = () => get<VersionInfo>('/update/version')
+export const checkServerUpdate = () => get<UpdateInfo>('/update/check/server')
+export const checkClientUpdate = (os?: string, arch?: string) => {
+  const params = new URLSearchParams()
+  if (os) params.append('os', os)
+  if (arch) params.append('arch', arch)
+  const query = params.toString()
+  return get<UpdateInfo>(`/update/check/client${query ? '?' + query : ''}`)
+}
+export const applyServerUpdate = (downloadUrl: string, restart: boolean = true) =>
+  post('/update/apply/server', { download_url: downloadUrl, restart })
+export const applyClientUpdate = (clientId: string, downloadUrl: string) =>
+  post('/update/apply/client', { client_id: clientId, download_url: downloadUrl })

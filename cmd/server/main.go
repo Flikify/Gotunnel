@@ -1,5 +1,15 @@
 package main
 
+// @title GoTunnel API
+// @version 1.0
+// @description GoTunnel 内网穿透服务器 API
+// @host localhost:7500
+// @BasePath /
+// @securityDefinitions.apikey Bearer
+// @in header
+// @name Authorization
+// @description JWT Bearer token
+
 import (
 	"flag"
 	"fmt"
@@ -8,6 +18,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	_ "github.com/gotunnel/docs" // Swagger docs
 
 	"github.com/gotunnel/internal/server/app"
 	"github.com/gotunnel/internal/server/config"

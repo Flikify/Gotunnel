@@ -52,6 +52,14 @@ const (
 	// 客户端控制消息
 	MsgTypeClientRestart      uint8 = 60 // 重启客户端
 	MsgTypePluginConfigUpdate uint8 = 61 // 更新插件配置
+
+	// 更新相关消息
+	MsgTypeUpdateCheck    uint8 = 70 // 检查更新请求
+	MsgTypeUpdateInfo     uint8 = 71 // 更新信息响应
+	MsgTypeUpdateDownload uint8 = 72 // 下载更新请求
+	MsgTypeUpdateApply    uint8 = 73 // 应用更新请求
+	MsgTypeUpdateProgress uint8 = 74 // 更新进度
+	MsgTypeUpdateResult   uint8 = 75 // 更新结果
 )
 
 // Message 基础消息结构
@@ -255,6 +263,46 @@ type PluginConfigUpdateResponse struct {
 	RuleName   string `json:"rule_name"`
 	Success    bool   `json:"success"`
 	Error      string `json:"error,omitempty"`
+}
+
+// UpdateCheckRequest 更新检查请求
+type UpdateCheckRequest struct {
+	Component string `json:"component"` // "server" 或 "client"
+}
+
+// UpdateInfoResponse 更新信息响应
+type UpdateInfoResponse struct {
+	Available   bool   `json:"available"`
+	Current     string `json:"current"`
+	Latest      string `json:"latest"`
+	ReleaseNote string `json:"release_note"`
+	DownloadURL string `json:"download_url"`
+	AssetName   string `json:"asset_name"`
+	AssetSize   int64  `json:"asset_size"`
+}
+
+// UpdateDownloadRequest 下载更新请求
+type UpdateDownloadRequest struct {
+	DownloadURL string `json:"download_url"`
+}
+
+// UpdateApplyRequest 应用更新请求
+type UpdateApplyRequest struct {
+	Restart bool `json:"restart"` // 是否自动重启
+}
+
+// UpdateProgressResponse 更新进度响应
+type UpdateProgressResponse struct {
+	Downloaded int64  `json:"downloaded"`
+	Total      int64  `json:"total"`
+	Percent    int    `json:"percent"`
+	Status     string `json:"status"` // downloading, applying, completed, failed
+}
+
+// UpdateResultResponse 更新结果响应
+type UpdateResultResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
 }
 
 // WriteMessage 写入消息到 writer
