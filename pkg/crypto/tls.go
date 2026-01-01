@@ -11,7 +11,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +18,7 @@ import (
 )
 
 // GenerateTLSConfig 生成内存中的自签名证书并返回 TLS 配置
+// 证书不限定具体 IP 地址，客户端使用 InsecureSkipVerify 跳过主机名验证（类似 frp）
 func GenerateTLSConfig() (*tls.Config, error) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -41,8 +41,7 @@ func GenerateTLSConfig() (*tls.Config, error) {
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
-		DNSNames:              []string{"localhost"},
+		// 不限定 IP 地址和域名，客户端通过 InsecureSkipVerify + TOFU 验证
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
