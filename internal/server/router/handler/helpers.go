@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/gotunnel/pkg/version"
@@ -36,16 +37,14 @@ func checkUpdateForComponent(component string) (*UpdateInfo, error) {
 	available := version.CompareVersions(currentVersion, latestVersion) < 0
 
 	// 查找对应平台的资产
-	assetName := getAssetNameForPlatform(component, runtime.GOOS, runtime.GOARCH)
 	var downloadURL string
+	var assetName string
 	var assetSize int64
 
-	for _, asset := range release.Assets {
-		if asset.Name == assetName {
-			downloadURL = asset.BrowserDownloadURL
-			assetSize = asset.Size
-			break
-		}
+	if asset := findAssetForPlatform(release.Assets, component, runtime.GOOS, runtime.GOARCH); asset != nil {
+		downloadURL = asset.BrowserDownloadURL
+		assetName = asset.Name
+		assetSize = asset.Size
 	}
 
 	return &UpdateInfo{
@@ -76,16 +75,14 @@ func checkClientUpdateForPlatform(osName, arch string) (*UpdateInfo, error) {
 	latestVersion := release.TagName
 
 	// 查找对应平台的资产
-	assetName := getAssetNameForPlatform("client", osName, arch)
 	var downloadURL string
+	var assetName string
 	var assetSize int64
 
-	for _, asset := range release.Assets {
-		if asset.Name == assetName {
-			downloadURL = asset.BrowserDownloadURL
-			assetSize = asset.Size
-			break
-		}
+	if asset := findAssetForPlatform(release.Assets, "client", osName, arch); asset != nil {
+		downloadURL = asset.BrowserDownloadURL
+		assetName = asset.Name
+		assetSize = asset.Size
 	}
 
 	return &UpdateInfo{
@@ -99,13 +96,21 @@ func checkClientUpdateForPlatform(osName, arch string) (*UpdateInfo, error) {
 	}, nil
 }
 
-// getAssetNameForPlatform 获取指定平台的资产名称
-func getAssetNameForPlatform(component, osName, arch string) string {
-	ext := ""
-	if osName == "windows" {
-		ext = ".exe"
+// findAssetForPlatform 在 Release 资产中查找匹配的文件
+// CI 格式: gotunnel-server-v1.0.0-linux-amd64.tar.gz
+// 或者:    gotunnel-client-v1.0.0-windows-amd64.zip
+func findAssetForPlatform(assets []version.ReleaseAsset, component, osName, arch string) *version.ReleaseAsset {
+	prefix := fmt.Sprintf("gotunnel-%s-", component)
+	suffix := fmt.Sprintf("-%s-%s", osName, arch)
+
+	for i := range assets {
+		name := assets[i].Name
+		// 检查是否匹配 gotunnel-{component}-{version}-{os}-{arch}.{ext}
+		if strings.HasPrefix(name, prefix) && strings.Contains(name, suffix) {
+			return &assets[i]
+		}
 	}
-	return fmt.Sprintf("%s_%s_%s%s", component, osName, arch, ext)
+	return nil
 }
 
 // performSelfUpdate 执行自更新

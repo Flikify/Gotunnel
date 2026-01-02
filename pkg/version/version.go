@@ -70,13 +70,32 @@ type UpdateInfo struct {
 }
 
 // GetLatestRelease 获取最新 Release
+// Gitea 兼容：先尝试 /releases/latest，失败则尝试 /releases 取第一个
 func GetLatestRelease() (*ReleaseInfo, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", APIBaseURL, RepoOwner, RepoName)
-
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
+
+	// 首先尝试 /releases/latest 端点（GitHub 兼容）
+	latestURL := fmt.Sprintf("%s/repos/%s/%s/releases/latest", APIBaseURL, RepoOwner, RepoName)
+	resp, err := client.Get(latestURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		var release ReleaseInfo
+		if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+			return nil, fmt.Errorf("decode response: %w", err)
+		}
+		return &release, nil
+	}
+
+	// 如果 /releases/latest 不可用，尝试 /releases 并取第一个
+	resp.Body.Close()
+	listURL := fmt.Sprintf("%s/repos/%s/%s/releases?limit=1", APIBaseURL, RepoOwner, RepoName)
+	resp, err = client.Get(listURL)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -85,12 +104,16 @@ func GetLatestRelease() (*ReleaseInfo, error) {
 		return nil, fmt.Errorf("API error: %s - %s", resp.Status, string(body))
 	}
 
-	var release ReleaseInfo
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, err
+	var releases []ReleaseInfo
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	return &release, nil
+	if len(releases) == 0 {
+		return nil, fmt.Errorf("no releases found in repository")
+	}
+
+	return &releases[0], nil
 }
 
 // CheckUpdate 检查更新（返回最新版本信息）
@@ -101,16 +124,14 @@ func CheckUpdate(component string) (*UpdateInfo, error) {
 	}
 
 	// 查找对应平台的资产
-	assetName := getAssetName(component)
 	var downloadURL string
+	var assetName string
 	var assetSize int64
 
-	for _, asset := range release.Assets {
-		if asset.Name == assetName {
-			downloadURL = asset.BrowserDownloadURL
-			assetSize = asset.Size
-			break
-		}
+	if asset := findAssetForPlatform(release.Assets, component, runtime.GOOS, runtime.GOARCH); asset != nil {
+		downloadURL = asset.BrowserDownloadURL
+		assetName = asset.Name
+		assetSize = asset.Size
 	}
 
 	return &UpdateInfo{
@@ -130,16 +151,14 @@ func CheckUpdateForPlatform(component, osName, arch string) (*UpdateInfo, error)
 	}
 
 	// 查找对应平台的资产
-	assetName := getAssetNameForPlatform(component, osName, arch)
 	var downloadURL string
+	var assetName string
 	var assetSize int64
 
-	for _, asset := range release.Assets {
-		if asset.Name == assetName {
-			downloadURL = asset.BrowserDownloadURL
-			assetSize = asset.Size
-			break
-		}
+	if asset := findAssetForPlatform(release.Assets, component, osName, arch); asset != nil {
+		downloadURL = asset.BrowserDownloadURL
+		assetName = asset.Name
+		assetSize = asset.Size
 	}
 
 	return &UpdateInfo{
@@ -151,18 +170,22 @@ func CheckUpdateForPlatform(component, osName, arch string) (*UpdateInfo, error)
 	}, nil
 }
 
-// getAssetName 获取当前平台的资产文件名
-func getAssetName(component string) string {
-	return getAssetNameForPlatform(component, runtime.GOOS, runtime.GOARCH)
-}
+// findAssetForPlatform 在 Release 资产中查找匹配的文件
+func findAssetForPlatform(assets []ReleaseAsset, component, osName, arch string) *ReleaseAsset {
+	// 构建匹配模式
+	// CI 格式: gotunnel-server-v1.0.0-linux-amd64.tar.gz
+	// 或者:    gotunnel-client-v1.0.0-windows-amd64.zip
+	prefix := fmt.Sprintf("gotunnel-%s-", component)
+	suffix := fmt.Sprintf("-%s-%s", osName, arch)
 
-// getAssetNameForPlatform 获取指定平台的资产文件名
-func getAssetNameForPlatform(component, osName, arch string) string {
-	ext := ""
-	if osName == "windows" {
-		ext = ".exe"
+	for i := range assets {
+		name := assets[i].Name
+		// 检查是否匹配 gotunnel-{component}-{version}-{os}-{arch}.{ext}
+		if strings.HasPrefix(name, prefix) && strings.Contains(name, suffix) {
+			return &assets[i]
+		}
 	}
-	return fmt.Sprintf("%s_%s_%s%s", component, osName, arch, ext)
+	return nil
 }
 
 // CompareVersions 比较版本号
