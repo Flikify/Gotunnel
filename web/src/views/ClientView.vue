@@ -9,12 +9,12 @@ import {
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, PowerOutline, AddOutline, SaveOutline, CloseOutline,
-  SettingsOutline, StorefrontOutline, RefreshOutline, StopOutline
+  SettingsOutline, StorefrontOutline, RefreshOutline, StopOutline, PlayOutline
 } from '@vicons/ionicons5'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
   getClientPluginConfig, updateClientPluginConfig,
-  getStorePlugins, installStorePlugin, getRuleSchemas, restartClientPlugin, stopClientPlugin, deleteClientPlugin
+  getStorePlugins, installStorePlugin, getRuleSchemas, startClientPlugin, restartClientPlugin, stopClientPlugin, deleteClientPlugin
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 
@@ -272,28 +272,43 @@ const handleRestartClient = () => {
   })
 }
 
+// 启动客户端插件
+const handleStartPlugin = async (plugin: ClientPlugin) => {
+  const rule = rules.value.find(r => r.type === plugin.name)
+  const ruleName = rule?.name || plugin.name
+  try {
+    await startClientPlugin(clientId, plugin.name, ruleName)
+    message.success(`已启动 ${plugin.name}`)
+    plugin.running = true
+  } catch (e: any) {
+    message.error(e.message || '启动失败')
+  }
+}
+
 // 重启客户端插件
 const handleRestartPlugin = async (plugin: ClientPlugin) => {
   // 找到使用此插件的规则
   const rule = rules.value.find(r => r.type === plugin.name)
-  const ruleName = rule?.name || ''
+  const ruleName = rule?.name || plugin.name
   try {
     await restartClientPlugin(clientId, plugin.name, ruleName)
     message.success(`已重启 ${plugin.name}`)
+    plugin.running = true
   } catch (e: any) {
-    message.error(e.response?.data || '重启失败')
+    message.error(e.message || '重启失败')
   }
 }
 
 // 停止客户端插件
 const handleStopPlugin = async (plugin: ClientPlugin) => {
   const rule = rules.value.find(r => r.type === plugin.name)
-  const ruleName = rule?.name || ''
+  const ruleName = rule?.name || plugin.name
   try {
     await stopClientPlugin(clientId, plugin.name, ruleName)
     message.success(`已停止 ${plugin.name}`)
+    plugin.running = false
   } catch (e: any) {
-    message.error(e.response?.data || '停止失败')
+    message.error(e.message || '停止失败')
   }
 }
 
@@ -571,6 +586,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
             <th>名称</th>
             <th>版本</th>
             <th>状态</th>
+            <th>启用</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -578,6 +594,10 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
           <tr v-for="plugin in clientPlugins" :key="plugin.name">
             <td>{{ plugin.name }}</td>
             <td>v{{ plugin.version }}</td>
+            <td>
+              <n-tag v-if="plugin.running" type="success" size="small">运行中</n-tag>
+              <n-tag v-else type="default" size="small">已停止</n-tag>
+            </td>
             <td>
               <n-switch :value="plugin.enabled" @update:value="toggleClientPlugin(plugin)" />
             </td>
@@ -587,11 +607,15 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                   <template #icon><n-icon><SettingsOutline /></n-icon></template>
                   配置
                 </n-button>
-                <n-button v-if="online && plugin.enabled" size="small" quaternary type="info" @click="handleRestartPlugin(plugin)">
+                <n-button v-if="online && plugin.enabled && plugin.running" size="small" quaternary type="info" @click="handleRestartPlugin(plugin)">
                   <template #icon><n-icon><RefreshOutline /></n-icon></template>
                   重启
                 </n-button>
-                <n-button v-if="online && plugin.enabled" size="small" quaternary type="warning" @click="handleStopPlugin(plugin)">
+                <n-button v-if="online && plugin.enabled && !plugin.running" size="small" quaternary type="success" @click="handleStartPlugin(plugin)">
+                  <template #icon><n-icon><PlayOutline /></n-icon></template>
+                  启动
+                </n-button>
+                <n-button v-if="online && plugin.enabled && plugin.running" size="small" quaternary type="warning" @click="handleStopPlugin(plugin)">
                   <template #icon><n-icon><StopOutline /></n-icon></template>
                   停止
                 </n-button>

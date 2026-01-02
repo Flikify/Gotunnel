@@ -36,6 +36,7 @@ type ServerInterface interface {
 	SyncPluginConfigToClient(clientID string, pluginName string, config map[string]string) error
 	InstallJSPluginToClient(clientID string, req JSPluginInstallRequest) error
 	RestartClient(clientID string) error
+	StartClientPlugin(clientID, pluginName, ruleName string) error
 	StopClientPlugin(clientID, pluginName, ruleName string) error
 	RestartClientPlugin(clientID, pluginName, ruleName string) error
 	UpdateClientPluginConfig(clientID, pluginName, ruleName string, config map[string]string, restart bool) error

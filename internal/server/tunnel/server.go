@@ -1231,6 +1231,20 @@ func (s *Server) RestartClient(clientID string) error {
 	return nil
 }
 
+// StartClientPlugin 启动客户端插件
+func (s *Server) StartClientPlugin(clientID, pluginName, ruleName string) error {
+	s.mu.RLock()
+	_, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("client %s not found or not online", clientID)
+	}
+
+	// 重新发送安装请求来启动插件
+	return s.reinstallJSPlugin(clientID, pluginName, ruleName)
+}
+
 // StopClientPlugin 停止客户端插件
 func (s *Server) StopClientPlugin(clientID, pluginName, ruleName string) error {
 	s.mu.RLock()

@@ -14,6 +14,7 @@ export interface ClientPlugin {
   name: string
   version: string
   enabled: boolean
+  running: boolean
   config?: Record<string, string>
 }
 

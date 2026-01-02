@@ -7,7 +7,8 @@ type ClientPlugin struct {
 	Name    string            `json:"name"`
 	Version string            `json:"version"`
 	Enabled bool              `json:"enabled"`
-	Config  map[string]string `json:"config,omitempty"` // 插件配置
+	Running bool              `json:"running"`              // 运行状态
+	Config  map[string]string `json:"config,omitempty"`     // 插件配置
 }
 
 // Client 客户端数据

@@ -299,14 +299,14 @@ func (h *ClientHandler) InstallPlugins(c *gin.Context) {
 
 // PluginAction 客户端插件操作
 // @Summary 插件操作
-// @Description 对客户端插件执行操作(stop/restart/config/delete)
+// @Description 对客户端插件执行操作(start/stop/restart/config/delete)
 // @Tags 客户端
 // @Accept json
 // @Produce json
 // @Security Bearer
 // @Param id path string true "客户端ID"
 // @Param pluginName path string true "插件名称"
-// @Param action path string true "操作类型" Enums(stop, restart, config, delete)
+// @Param action path string true "操作类型" Enums(start, stop, restart, config, delete)
 // @Param request body dto.ClientPluginActionRequest false "操作参数"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
@@ -325,6 +325,8 @@ func (h *ClientHandler) PluginAction(c *gin.Context) {
 
 	var err error
 	switch action {
+	case "start":
+		err = h.app.GetServer().StartClientPlugin(clientID, pluginName, req.RuleName)
 	case "stop":
 		err = h.app.GetServer().StopClientPlugin(clientID, pluginName, req.RuleName)
 	case "restart":

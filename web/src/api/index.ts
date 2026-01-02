@@ -31,6 +31,8 @@ export const installPluginsToClient = (id: string, plugins: string[]) =>
 export const getRuleSchemas = () => get<RuleSchemasMap>('/rule-schemas')
 
 // 客户端插件控制
+export const startClientPlugin = (clientId: string, pluginName: string, ruleName: string) =>
+  post(`/client/${clientId}/plugin/${pluginName}/start`, { rule_name: ruleName })
 export const stopClientPlugin = (clientId: string, pluginName: string, ruleName: string) =>
   post(`/client/${clientId}/plugin/${pluginName}/stop`, { rule_name: ruleName })
 export const restartClientPlugin = (clientId: string, pluginName: string, ruleName: string) =>
