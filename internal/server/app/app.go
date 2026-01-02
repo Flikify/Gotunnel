@@ -11,7 +11,7 @@ import (
 	"github.com/gotunnel/pkg/auth"
 )
 
-//go:embed dist/*
+//go:embed all:dist/*
 var staticFiles embed.FS
 
 // WebServer Web控制台服务
