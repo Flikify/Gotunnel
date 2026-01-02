@@ -48,6 +48,7 @@ func generateClientID() string {
 // Server 隧道服务端
 type Server struct {
 	clientStore    db.ClientStore
+	jsPluginStore  db.JSPluginStore // JS 插件存储
 	bindAddr       string
 	bindPort       int
 	token          string
@@ -145,6 +146,11 @@ func (s *Server) Shutdown(timeout time.Duration) error {
 // SetPluginRegistry 设置插件注册表
 func (s *Server) SetPluginRegistry(registry *plugin.Registry) {
 	s.pluginRegistry = registry
+}
+
+// SetJSPluginStore 设置 JS 插件存储
+func (s *Server) SetJSPluginStore(store db.JSPluginStore) {
+	s.jsPluginStore = store
 }
 
 // LoadJSPlugins 加载 JS 插件配置
@@ -1112,6 +1118,10 @@ func (s *Server) handleClientPluginConn(cs *ClientSession, conn net.Conn, rule p
 
 // autoPushJSPlugins 自动推送 JS 插件到客户端
 func (s *Server) autoPushJSPlugins(cs *ClientSession) {
+	// 记录已推送的插件，避免重复推送
+	pushedPlugins := make(map[string]bool)
+
+	// 1. 推送配置文件中的 JS 插件
 	for _, jp := range s.jsPlugins {
 		if !s.shouldPushToClient(jp.AutoPush, cs.ID) {
 			continue
@@ -1130,6 +1140,67 @@ func (s *Server) autoPushJSPlugins(cs *ClientSession) {
 
 		if err := s.InstallJSPluginToClient(cs.ID, req); err != nil {
 			log.Printf("[Server] Failed to push JS plugin %s: %v", jp.Name, err)
+		} else {
+			pushedPlugins[jp.Name] = true
+		}
+	}
+
+	// 2. 推送客户端已安装的插件（从数据库）
+	s.pushClientInstalledPlugins(cs, pushedPlugins)
+}
+
+// pushClientInstalledPlugins 推送客户端已安装的插件
+func (s *Server) pushClientInstalledPlugins(cs *ClientSession, alreadyPushed map[string]bool) {
+	if s.jsPluginStore == nil {
+		return
+	}
+
+	// 获取客户端信息
+	client, err := s.clientStore.GetClient(cs.ID)
+	if err != nil {
+		return
+	}
+
+	// 遍历客户端已安装的插件
+	for _, cp := range client.Plugins {
+		if !cp.Enabled {
+			continue
+		}
+
+		// 跳过已推送的
+		if alreadyPushed[cp.Name] {
+			continue
+		}
+
+		// 从 JSPluginStore 获取插件完整信息
+		jsPlugin, err := s.jsPluginStore.GetJSPlugin(cp.Name)
+		if err != nil {
+			log.Printf("[Server] JS plugin %s not found in store: %v", cp.Name, err)
+			continue
+		}
+
+		log.Printf("[Server] Restoring installed plugin %s to client %s", cp.Name, cs.ID)
+
+		// 合并配置（客户端配置优先）
+		config := jsPlugin.Config
+		if config == nil {
+			config = make(map[string]string)
+		}
+		for k, v := range cp.Config {
+			config[k] = v
+		}
+
+		req := router.JSPluginInstallRequest{
+			PluginName: cp.Name,
+			Source:     jsPlugin.Source,
+			Signature:  jsPlugin.Signature,
+			RuleName:   cp.Name,
+			Config:     config,
+			AutoStart:  jsPlugin.AutoStart,
+		}
+
+		if err := s.InstallJSPluginToClient(cs.ID, req); err != nil {
+			log.Printf("[Server] Failed to restore plugin %s: %v", cp.Name, err)
 		}
 	}
 }

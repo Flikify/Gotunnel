@@ -77,6 +77,7 @@ func main() {
 		log.Fatalf("[Plugin] Register error: %v", err)
 	}
 	server.SetPluginRegistry(registry)
+	server.SetJSPluginStore(clientStore) // 设置 JS 插件存储，用于客户端重连时恢复插件
 	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetServerPlugins()))
 
 	// 加载 JS 插件配置

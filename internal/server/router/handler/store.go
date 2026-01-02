@@ -139,7 +139,18 @@ func (h *StoreHandler) Install(c *gin.Context) {
 		return
 	}
 
-	// 将插件信息保存到数据库
+	// 将插件保存到 JSPluginStore（用于客户端重连时恢复）
+	jsPlugin := &db.JSPlugin{
+		Name:      req.PluginName,
+		Source:    string(source),
+		Signature: string(signature),
+		AutoStart: true,
+		Enabled:   true,
+	}
+	// 尝试保存，忽略错误（可能已存在）
+	h.app.GetJSPluginStore().SaveJSPlugin(jsPlugin)
+
+	// 将插件信息保存到客户端记录
 	dbClient, err := h.app.GetClientStore().GetClient(req.ClientID)
 	if err == nil {
 		// 检查插件是否已存在
