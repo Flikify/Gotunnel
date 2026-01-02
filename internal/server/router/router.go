@@ -122,6 +122,14 @@ type spaHandler struct {
 func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
+	// API 请求不应该返回 SPA 页面
+	if len(path) >= 4 && path[:4] == "/api" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"code":404,"message":"Not Found"}`))
+		return
+	}
+
 	// 尝试打开请求的文件
 	f, err := h.fs.Open(path)
 	if err != nil {

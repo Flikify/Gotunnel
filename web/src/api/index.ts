@@ -36,7 +36,7 @@ export const stopClientPlugin = (clientId: string, pluginName: string, ruleName:
 export const restartClientPlugin = (clientId: string, pluginName: string, ruleName: string) =>
   post(`/client/${clientId}/plugin/${pluginName}/restart`, { rule_name: ruleName })
 export const deleteClientPlugin = (clientId: string, pluginName: string) =>
-  del(`/client/${clientId}/plugin/${pluginName}/delete`)
+  post(`/client/${clientId}/plugin/${pluginName}/delete`)
 export const updateClientPluginConfigWithRestart = (clientId: string, pluginName: string, ruleName: string, config: Record<string, string>, restart: boolean) =>
   post(`/client/${clientId}/plugin/${pluginName}/config`, { rule_name: ruleName, config, restart })
 
