@@ -1241,7 +1241,7 @@ func (s *Server) RestartClientPlugin(clientID, pluginName, ruleName string) erro
 		return fmt.Errorf("client %s not found or not online", clientID)
 	}
 
-	// 查找规则
+	// 查找规则（用于内置插件）
 	var rule *protocol.ProxyRule
 	for _, r := range cs.Rules {
 		if r.Name == ruleName && r.Type == pluginName {
@@ -1249,17 +1249,63 @@ func (s *Server) RestartClientPlugin(clientID, pluginName, ruleName string) erro
 			break
 		}
 	}
-	if rule == nil {
-		return fmt.Errorf("rule %s not found for plugin %s", ruleName, pluginName)
-	}
 
 	// 先停止
 	if err := s.sendClientPluginStop(cs.Session, pluginName, ruleName); err != nil {
 		log.Printf("[Server] Stop plugin warning: %v", err)
 	}
 
-	// 再启动
-	return s.sendClientPluginStart(cs.Session, *rule)
+	// 如果找到规则，使用规则重启（内置插件）
+	if rule != nil {
+		return s.sendClientPluginStart(cs.Session, *rule)
+	}
+
+	// 否则发送 JS 插件重启命令
+	return s.sendJSPluginRestart(cs.Session, pluginName, ruleName)
+}
+
+// sendJSPluginRestart 发送 JS 插件重启命令
+func (s *Server) sendJSPluginRestart(session *yamux.Session, pluginName, ruleName string) error {
+	stream, err := session.Open()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	// 使用 PluginConfigUpdate 消息触发重启
+	req := protocol.PluginConfigUpdateRequest{
+		PluginName: pluginName,
+		RuleName:   ruleName,
+		Config:     nil,
+		Restart:    true,
+	}
+	msg, err := protocol.NewMessage(protocol.MsgTypePluginConfigUpdate, req)
+	if err != nil {
+		return err
+	}
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return err
+	}
+
+	// 等待响应
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return err
+	}
+
+	var result struct {
+		Success bool   `json:"success"`
+		Error   string `json:"error,omitempty"`
+	}
+	if err := resp.ParsePayload(&result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return fmt.Errorf("restart failed: %s", result.Error)
+	}
+
+	log.Printf("[Server] JS plugin %s restarted on client", pluginName)
+	return nil
 }
 
 // UpdateClientPluginConfig 更新客户端插件配置
