@@ -509,6 +509,18 @@ func (c *Client) handleJSPluginInstall(stream net.Conn, msg *protocol.Message) {
 
 	log.Printf("[Client] Installing JS plugin: %s", req.PluginName)
 
+	// 如果插件已经在运行，先停止它
+	key := req.PluginName + ":" + req.RuleName
+	c.pluginMu.Lock()
+	if existingHandler, ok := c.runningPlugins[key]; ok {
+		log.Printf("[Client] Stopping existing plugin %s before reinstall", key)
+		if err := existingHandler.Stop(); err != nil {
+			log.Printf("[Client] Stop existing plugin error: %v", err)
+		}
+		delete(c.runningPlugins, key)
+	}
+	c.pluginMu.Unlock()
+
 	// 验证官方签名
 	if err := c.verifyJSPluginSignature(req.PluginName, req.Source, req.Signature); err != nil {
 		log.Printf("[Client] JS plugin %s signature verification failed: %v", req.PluginName, err)

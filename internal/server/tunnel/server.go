@@ -471,21 +471,7 @@ func (s *Server) acceptProxyConns(cs *ClientSession, ln net.Listener, rule proto
 func (s *Server) acceptProxyServerConns(cs *ClientSession, ln net.Listener, rule protocol.ProxyRule) {
 	dialer := proxy.NewTunnelDialer(cs.Session)
 
-	// 优先使用插件系统
-	if s.pluginRegistry != nil {
-		if handler, err := s.pluginRegistry.GetServer(rule.Type); err == nil {
-			handler.Init(rule.PluginConfig)
-			for {
-				conn, err := ln.Accept()
-				if err != nil {
-					return
-				}
-				go handler.HandleConn(conn, dialer)
-			}
-		}
-	}
-
-	// 回退到内置 proxy 实现
+	// 使用内置 proxy 实现
 	proxyServer := proxy.NewServer(rule.Type, dialer)
 	for {
 		conn, err := ln.Accept()
@@ -771,14 +757,9 @@ func (s *Server) InstallPluginsToClient(clientID string, plugins []string) error
 			}
 		}
 		if !found {
-			// 获取插件信息
-			version := "1.0.0"
-			if handler, err := s.pluginRegistry.GetServer(pluginName); err == nil && handler != nil {
-				version = handler.Metadata().Version
-			}
 			client.Plugins = append(client.Plugins, db.ClientPlugin{
 				Name:    pluginName,
-				Version: version,
+				Version: "1.0.0",
 				Enabled: true,
 			})
 		}
@@ -893,7 +874,7 @@ func (s *Server) GetPluginConfigSchema(name string) ([]router.ConfigField, error
 		return nil, fmt.Errorf("plugin registry not initialized")
 	}
 
-	handler, err := s.pluginRegistry.GetServer(name)
+	handler, err := s.pluginRegistry.GetClient(name)
 	if err != nil {
 		return nil, fmt.Errorf("plugin %s not found", name)
 	}
@@ -1302,37 +1283,64 @@ func (s *Server) sendClientPluginStop(session *yamux.Session, pluginName, ruleNa
 	return nil
 }
 
-// RestartClientPlugin 重启客户端插件
+// RestartClientPlugin 重启客户端 JS 插件
 func (s *Server) RestartClientPlugin(clientID, pluginName, ruleName string) error {
 	s.mu.RLock()
-	cs, ok := s.clients[clientID]
+	_, ok := s.clients[clientID]
 	s.mu.RUnlock()
 
 	if !ok {
 		return fmt.Errorf("client %s not found or not online", clientID)
 	}
 
-	// 查找规则（用于内置插件）
-	var rule *protocol.ProxyRule
-	for _, r := range cs.Rules {
-		if r.Name == ruleName && r.Type == pluginName {
-			rule = &r
+	// 重新发送完整的安装请求来重启 JS 插件
+	return s.reinstallJSPlugin(clientID, pluginName, ruleName)
+}
+
+// reinstallJSPlugin 重新安装 JS 插件（用于重启）
+func (s *Server) reinstallJSPlugin(clientID, pluginName, ruleName string) error {
+	// 从数据库获取插件信息
+	if s.jsPluginStore == nil {
+		return fmt.Errorf("JS plugin store not configured")
+	}
+
+	jsPlugin, err := s.jsPluginStore.GetJSPlugin(pluginName)
+	if err != nil {
+		return fmt.Errorf("plugin %s not found: %w", pluginName, err)
+	}
+
+	// 获取客户端的插件配置
+	client, err := s.clientStore.GetClient(clientID)
+	if err != nil {
+		return fmt.Errorf("client not found: %w", err)
+	}
+
+	// 合并配置
+	config := jsPlugin.Config
+	if config == nil {
+		config = make(map[string]string)
+	}
+	for _, cp := range client.Plugins {
+		if cp.Name == pluginName {
+			for k, v := range cp.Config {
+				config[k] = v
+			}
 			break
 		}
 	}
 
-	// 先停止
-	if err := s.sendClientPluginStop(cs.Session, pluginName, ruleName); err != nil {
-		log.Printf("[Server] Stop plugin warning: %v", err)
+	log.Printf("[Server] Reinstalling JS plugin %s to client %s", pluginName, clientID)
+
+	req := router.JSPluginInstallRequest{
+		PluginName: pluginName,
+		Source:     jsPlugin.Source,
+		Signature:  jsPlugin.Signature,
+		RuleName:   ruleName,
+		Config:     config,
+		AutoStart:  true, // 重启时总是自动启动
 	}
 
-	// 如果找到规则，使用规则重启（内置插件）
-	if rule != nil {
-		return s.sendClientPluginStart(cs.Session, *rule)
-	}
-
-	// 否则发送 JS 插件重启命令
-	return s.sendJSPluginRestart(cs.Session, pluginName, ruleName)
+	return s.InstallJSPluginToClient(clientID, req)
 }
 
 // sendJSPluginRestart 发送 JS 插件重启命令

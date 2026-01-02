@@ -13,7 +13,6 @@ import (
 type Side string
 
 const (
-	SideServer Side = "server"
 	SideClient Side = "client"
 )
 
@@ -98,15 +97,6 @@ type Info struct {
 // Dialer 网络拨号接口
 type Dialer interface {
 	Dial(network, address string) (net.Conn, error)
-}
-
-// ServerPlugin 服务端插件接口
-// 运行在服务端，处理外部连接并通过隧道转发到客户端
-type ServerPlugin interface {
-	Metadata() Metadata
-	Init(config map[string]string) error
-	HandleConn(conn net.Conn, dialer Dialer) error
-	Close() error
 }
 
 // ClientPlugin 客户端插件接口

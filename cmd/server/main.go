@@ -27,7 +27,6 @@ import (
 	"github.com/gotunnel/internal/server/tunnel"
 	"github.com/gotunnel/pkg/crypto"
 	"github.com/gotunnel/pkg/plugin"
-	"github.com/gotunnel/pkg/plugin/builtin"
 	"github.com/gotunnel/pkg/plugin/sign"
 )
 
@@ -71,14 +70,10 @@ func main() {
 		log.Printf("[Server] TLS enabled")
 	}
 
-	// 初始化插件系统
+	// 初始化插件系统（用于客户端 JS 插件管理）
 	registry := plugin.NewRegistry()
-	if err := registry.RegisterAllServer(builtin.GetServerPlugins()); err != nil {
-		log.Fatalf("[Plugin] Register error: %v", err)
-	}
 	server.SetPluginRegistry(registry)
 	server.SetJSPluginStore(clientStore) // 设置 JS 插件存储，用于客户端重连时恢复插件
-	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetServerPlugins()))
 
 	// 加载 JS 插件配置
 	if len(cfg.JSPlugins) > 0 {

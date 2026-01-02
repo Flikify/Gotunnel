@@ -7,7 +7,6 @@ import (
 	"github.com/gotunnel/internal/client/tunnel"
 	"github.com/gotunnel/pkg/crypto"
 	"github.com/gotunnel/pkg/plugin"
-	"github.com/gotunnel/pkg/plugin/builtin"
 )
 
 func main() {
@@ -30,15 +29,9 @@ func main() {
 		log.Printf("[Client] TLS enabled")
 	}
 
-	// 初始化插件系统
+	// 初始化插件注册表（用于 JS 插件）
 	registry := plugin.NewRegistry()
-	for _, h := range builtin.GetClientPlugins() {
-		if err := registry.RegisterClient(h); err != nil {
-			log.Fatalf("[Plugin] Register error: %v", err)
-		}
-	}
 	client.SetPluginRegistry(registry)
-	log.Printf("[Plugin] Registered %d plugins", len(builtin.GetClientPlugins()))
 
 	client.Run()
 }
