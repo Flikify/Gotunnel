@@ -3,10 +3,8 @@ package tunnel
 import (
 	"crypto/tls"
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +17,7 @@ import (
 	"github.com/gotunnel/pkg/plugin/sign"
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/relay"
+	"github.com/gotunnel/pkg/update"
 	"github.com/hashicorp/yamux"
 )
 
@@ -794,38 +793,23 @@ func (c *Client) sendUpdateResult(stream net.Conn, success bool, message string)
 func (c *Client) performSelfUpdate(downloadURL string) error {
 	log.Printf("[Client] Starting self-update from: %s", downloadURL)
 
-	// 创建临时文件
-	tempDir := os.TempDir()
-	tempFile := filepath.Join(tempDir, "gotunnel_client_update")
-
-	if runtime.GOOS == "windows" {
-		tempFile += ".exe"
+	// 使用共享的下载和解压逻辑
+	binaryPath, cleanup, err := update.DownloadAndExtract(downloadURL, "client")
+	if err != nil {
+		return err
 	}
-
-	// 下载新版本
-	if err := downloadUpdateFile(downloadURL, tempFile); err != nil {
-		return fmt.Errorf("download update: %w", err)
-	}
-
-	// 设置执行权限
-	if runtime.GOOS != "windows" {
-		if err := os.Chmod(tempFile, 0755); err != nil {
-			os.Remove(tempFile)
-			return fmt.Errorf("chmod: %w", err)
-		}
-	}
+	defer cleanup()
 
 	// 获取当前可执行文件路径
 	currentPath, err := os.Executable()
 	if err != nil {
-		os.Remove(tempFile)
 		return fmt.Errorf("get executable: %w", err)
 	}
 	currentPath, _ = filepath.EvalSymlinks(currentPath)
 
 	// Windows 需要特殊处理
 	if runtime.GOOS == "windows" {
-		return performWindowsClientUpdate(tempFile, currentPath, c.ServerAddr, c.Token, c.ID)
+		return performWindowsClientUpdate(binaryPath, currentPath, c.ServerAddr, c.Token, c.ID)
 	}
 
 	// Linux/Mac: 直接替换
@@ -836,14 +820,19 @@ func (c *Client) performSelfUpdate(downloadURL string) error {
 
 	// 备份当前文件
 	if err := os.Rename(currentPath, backupPath); err != nil {
-		os.Remove(tempFile)
 		return fmt.Errorf("backup current: %w", err)
 	}
 
-	// 移动新文件
-	if err := os.Rename(tempFile, currentPath); err != nil {
+	// 复制新文件（不能用 rename，可能跨文件系统）
+	if err := update.CopyFile(binaryPath, currentPath); err != nil {
 		os.Rename(backupPath, currentPath)
 		return fmt.Errorf("replace binary: %w", err)
+	}
+
+	// 设置执行权限
+	if err := os.Chmod(currentPath, 0755); err != nil {
+		os.Rename(backupPath, currentPath)
+		return fmt.Errorf("chmod: %w", err)
 	}
 
 	// 删除备份
@@ -865,29 +854,6 @@ func (c *Client) stopAllPlugins() {
 	}
 	c.runningPlugins = make(map[string]plugin.ClientPlugin)
 	c.pluginMu.Unlock()
-}
-
-// downloadUpdateFile 下载更新文件
-func downloadUpdateFile(url, dest string) error {
-	client := &http.Client{Timeout: 10 * time.Minute}
-	resp, err := client.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download failed: %s", resp.Status)
-	}
-
-	out, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	return err
 }
 
 // performWindowsClientUpdate Windows 平台更新

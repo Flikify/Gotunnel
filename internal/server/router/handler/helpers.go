@@ -2,15 +2,13 @@ package handler
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
+	"github.com/gotunnel/pkg/update"
 	"github.com/gotunnel/pkg/version"
 )
 
@@ -115,37 +113,23 @@ func findAssetForPlatform(assets []version.ReleaseAsset, component, osName, arch
 
 // performSelfUpdate 执行自更新
 func performSelfUpdate(downloadURL string, restart bool) error {
-	// 下载新版本
-	tempDir := os.TempDir()
-	tempFile := filepath.Join(tempDir, "gotunnel_update_"+time.Now().Format("20060102150405"))
-
-	if runtime.GOOS == "windows" {
-		tempFile += ".exe"
+	// 使用共享的下载和解压逻辑
+	binaryPath, cleanup, err := update.DownloadAndExtract(downloadURL, "server")
+	if err != nil {
+		return err
 	}
-
-	if err := downloadFile(downloadURL, tempFile); err != nil {
-		return fmt.Errorf("download update: %w", err)
-	}
-
-	// 设置执行权限
-	if runtime.GOOS != "windows" {
-		if err := os.Chmod(tempFile, 0755); err != nil {
-			os.Remove(tempFile)
-			return fmt.Errorf("chmod: %w", err)
-		}
-	}
+	defer cleanup()
 
 	// 获取当前可执行文件路径
 	currentPath, err := os.Executable()
 	if err != nil {
-		os.Remove(tempFile)
 		return fmt.Errorf("get executable: %w", err)
 	}
 	currentPath, _ = filepath.EvalSymlinks(currentPath)
 
 	// Windows 需要特殊处理（运行中的文件无法直接替换）
 	if runtime.GOOS == "windows" {
-		return performWindowsUpdate(tempFile, currentPath, restart)
+		return performWindowsUpdate(binaryPath, currentPath, restart)
 	}
 
 	// Linux/Mac: 直接替换
@@ -153,14 +137,19 @@ func performSelfUpdate(downloadURL string, restart bool) error {
 
 	// 备份当前文件
 	if err := os.Rename(currentPath, backupPath); err != nil {
-		os.Remove(tempFile)
 		return fmt.Errorf("backup current: %w", err)
 	}
 
-	// 移动新文件
-	if err := os.Rename(tempFile, currentPath); err != nil {
+	// 复制新文件（不能用 rename，可能跨文件系统）
+	if err := update.CopyFile(binaryPath, currentPath); err != nil {
 		os.Rename(backupPath, currentPath)
 		return fmt.Errorf("replace binary: %w", err)
+	}
+
+	// 设置执行权限
+	if err := os.Chmod(currentPath, 0755); err != nil {
+		os.Rename(backupPath, currentPath)
+		return fmt.Errorf("chmod new binary: %w", err)
 	}
 
 	// 删除备份
@@ -209,27 +198,4 @@ func restartProcess(path string) {
 	cmd.Stderr = os.Stderr
 	cmd.Start()
 	os.Exit(0)
-}
-
-// downloadFile 下载文件
-func downloadFile(url, dest string) error {
-	client := &http.Client{Timeout: 10 * time.Minute}
-	resp, err := client.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download failed: %s", resp.Status)
-	}
-
-	out, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	return err
 }
