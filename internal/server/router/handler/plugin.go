@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
-	// removed router import
+	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/internal/server/router/dto"
 	"github.com/gotunnel/pkg/plugin"
 )
@@ -145,39 +147,72 @@ func (h *PluginHandler) GetClientConfig(c *gin.Context) {
 		return
 	}
 
-	// 尝试从内置插件获取配置模式
-	schema, err := h.app.GetServer().GetPluginConfigSchema(pluginName)
-	var schemaFields []dto.ConfigField
-	if err != nil {
-		// 如果内置插件中找不到，尝试从 JS 插件获取
-		jsPlugin, jsErr := h.app.GetJSPluginStore().GetJSPlugin(pluginName)
-		if jsErr != nil {
-			// 两者都找不到，返回空 schema
-			schemaFields = []dto.ConfigField{}
-		} else {
-			// 使用 JS 插件的 config 作为动态 schema
-			for key := range jsPlugin.Config {
-				schemaFields = append(schemaFields, dto.ConfigField{
-					Key:   key,
-					Label: key,
-					Type:  "string",
-				})
-			}
-		}
-	} else {
-		schemaFields = convertRouterConfigFields(schema)
-	}
-
-	// 查找客户端的插件配置
-	var config map[string]string
-	for _, p := range client.Plugins {
+	// 查找客户端的插件
+	var clientPlugin *db.ClientPlugin
+	for i, p := range client.Plugins {
 		if p.Name == pluginName {
-			config = p.Config
+			clientPlugin = &client.Plugins[i]
 			break
 		}
 	}
+
+	if clientPlugin == nil {
+		NotFound(c, "plugin not installed on client")
+		return
+	}
+
+	var schemaFields []dto.ConfigField
+
+	// 优先使用客户端插件保存的 ConfigSchema
+	if len(clientPlugin.ConfigSchema) > 0 {
+		for _, f := range clientPlugin.ConfigSchema {
+			schemaFields = append(schemaFields, dto.ConfigField{
+				Key:         f.Key,
+				Label:       f.Label,
+				Type:        f.Type,
+				Default:     f.Default,
+				Required:    f.Required,
+				Options:     f.Options,
+				Description: f.Description,
+			})
+		}
+	} else {
+		// 尝试从内置插件获取配置模式
+		schema, err := h.app.GetServer().GetPluginConfigSchema(pluginName)
+		if err != nil {
+			// 如果内置插件中找不到，尝试从 JS 插件获取
+			jsPlugin, jsErr := h.app.GetJSPluginStore().GetJSPlugin(pluginName)
+			if jsErr == nil {
+				// 使用 JS 插件的 config 作为动态 schema
+				for key := range jsPlugin.Config {
+					schemaFields = append(schemaFields, dto.ConfigField{
+						Key:   key,
+						Label: key,
+						Type:  "string",
+					})
+				}
+			}
+		} else {
+			schemaFields = convertRouterConfigFields(schema)
+		}
+	}
+
+	// 添加 remote_port 作为系统配置字段（始终显示）
+	schemaFields = append([]dto.ConfigField{{
+		Key:         "remote_port",
+		Label:       "远程端口",
+		Type:        "number",
+		Description: "服务端监听端口，修改后需重启插件生效",
+	}}, schemaFields...)
+
+	// 构建配置值
+	config := clientPlugin.Config
 	if config == nil {
 		config = make(map[string]string)
+	}
+	// 将 remote_port 加入配置
+	if clientPlugin.RemotePort > 0 {
+		config["remote_port"] = fmt.Sprintf("%d", clientPlugin.RemotePort)
 	}
 
 	Success(c, dto.PluginConfigResponse{
@@ -218,8 +253,19 @@ func (h *PluginHandler) UpdateClientConfig(c *gin.Context) {
 
 	// 更新插件配置
 	found := false
+	portChanged := false
 	for i, p := range client.Plugins {
 		if p.Name == pluginName {
+			// 提取 remote_port 并单独处理
+			if portStr, ok := req.Config["remote_port"]; ok {
+				var newPort int
+				fmt.Sscanf(portStr, "%d", &newPort)
+				if newPort > 0 && newPort != client.Plugins[i].RemotePort {
+					client.Plugins[i].RemotePort = newPort
+					portChanged = true
+				}
+				delete(req.Config, "remote_port") // 不保存到 Config map
+			}
 			client.Plugins[i].Config = req.Config
 			found = true
 			break
@@ -242,12 +288,12 @@ func (h *PluginHandler) UpdateClientConfig(c *gin.Context) {
 	if online {
 		if err := h.app.GetServer().SyncPluginConfigToClient(clientID, pluginName, req.Config); err != nil {
 			// 配置已保存，但同步失败，返回警告
-			PartialSuccess(c, gin.H{"status": "partial"}, "config saved but sync failed: "+err.Error())
+			PartialSuccess(c, gin.H{"status": "partial", "port_changed": portChanged}, "config saved but sync failed: "+err.Error())
 			return
 		}
 	}
 
-	Success(c, gin.H{"status": "ok"})
+	Success(c, gin.H{"status": "ok", "port_changed": portChanged})
 }
 
 // convertConfigFields 转换插件配置字段到 DTO

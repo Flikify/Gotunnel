@@ -1,5 +1,5 @@
 import { get, post, put, del, getToken } from '../config/axios'
-import type { ClientConfig, ClientStatus, ClientDetail, ServerStatus, PluginInfo, StorePluginInfo, PluginConfigResponse, JSPlugin, RuleSchemasMap, LogEntry, LogStreamOptions } from '../types'
+import type { ClientConfig, ClientStatus, ClientDetail, ServerStatus, PluginInfo, StorePluginInfo, PluginConfigResponse, JSPlugin, RuleSchemasMap, LogEntry, LogStreamOptions, ConfigField } from '../types'
 
 // 重新导出 token 管理方法
 export { getToken, setToken, removeToken } from '../config/axios'
@@ -49,8 +49,8 @@ export const disablePlugin = (name: string) => post(`/plugin/${name}/disable`)
 
 // 扩展商店
 export const getStorePlugins = () => get<{ plugins: StorePluginInfo[] }>('/store/plugins')
-export const installStorePlugin = (pluginName: string, downloadUrl: string, signatureUrl: string, clientId: string, remotePort?: number) =>
-  post('/store/install', { plugin_name: pluginName, download_url: downloadUrl, signature_url: signatureUrl, client_id: clientId, remote_port: remotePort || 0 })
+export const installStorePlugin = (pluginName: string, downloadUrl: string, signatureUrl: string, clientId: string, remotePort?: number, version?: string, configSchema?: ConfigField[]) =>
+  post('/store/install', { plugin_name: pluginName, version: version || '', download_url: downloadUrl, signature_url: signatureUrl, client_id: clientId, remote_port: remotePort || 0, config_schema: configSchema || [] })
 
 // 客户端插件配置
 export const getClientPluginConfig = (clientId: string, pluginName: string) =>

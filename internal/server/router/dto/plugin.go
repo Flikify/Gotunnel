@@ -85,24 +85,27 @@ type JSPluginInstallRequest struct {
 // StorePluginInfo 扩展商店插件信息
 // @Description 插件商店中的插件信息
 type StorePluginInfo struct {
-	Name         string `json:"name"`
-	Version      string `json:"version"`
-	Type         string `json:"type"`
-	Description  string `json:"description"`
-	Author       string `json:"author"`
-	Icon         string `json:"icon,omitempty"`
-	DownloadURL  string `json:"download_url,omitempty"`
-	SignatureURL string `json:"signature_url,omitempty"`
+	Name         string        `json:"name"`
+	Version      string        `json:"version"`
+	Type         string        `json:"type"`
+	Description  string        `json:"description"`
+	Author       string        `json:"author"`
+	Icon         string        `json:"icon,omitempty"`
+	DownloadURL  string        `json:"download_url,omitempty"`
+	SignatureURL string        `json:"signature_url,omitempty"`
+	ConfigSchema []ConfigField `json:"config_schema,omitempty"`
 }
 
 // StoreInstallRequest 从商店安装插件请求
 // @Description 从插件商店安装插件到客户端
 type StoreInstallRequest struct {
-	PluginName   string `json:"plugin_name" binding:"required"`
-	DownloadURL  string `json:"download_url" binding:"required,url"`
-	SignatureURL string `json:"signature_url" binding:"required,url"`
-	ClientID     string `json:"client_id" binding:"required"`
-	RemotePort   int    `json:"remote_port"`
+	PluginName   string        `json:"plugin_name" binding:"required"`
+	Version      string        `json:"version"`
+	DownloadURL  string        `json:"download_url" binding:"required,url"`
+	SignatureURL string        `json:"signature_url" binding:"required,url"`
+	ClientID     string        `json:"client_id" binding:"required"`
+	RemotePort   int           `json:"remote_port"`
+	ConfigSchema []ConfigField `json:"config_schema,omitempty"`
 }
 
 // JSPluginPushRequest 推送 JS 插件到客户端请求

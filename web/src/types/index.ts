@@ -112,6 +112,7 @@ export interface StorePluginInfo {
   icon?: string
   download_url?: string
   signature_url?: string
+  config_schema?: ConfigField[]
 }
 
 // JS 插件信息

@@ -164,10 +164,29 @@ func (h *StoreHandler) Install(c *gin.Context) {
 			}
 		}
 		if !exists {
+			version := req.Version
+			if version == "" {
+				version = "1.0.0"
+			}
+			// 转换 ConfigSchema
+			var configSchema []db.ConfigField
+			for _, f := range req.ConfigSchema {
+				configSchema = append(configSchema, db.ConfigField{
+					Key:         f.Key,
+					Label:       f.Label,
+					Type:        f.Type,
+					Default:     f.Default,
+					Required:    f.Required,
+					Options:     f.Options,
+					Description: f.Description,
+				})
+			}
 			dbClient.Plugins = append(dbClient.Plugins, db.ClientPlugin{
-				Name:    req.PluginName,
-				Version: "1.0.0",
-				Enabled: true,
+				Name:         req.PluginName,
+				Version:      version,
+				Enabled:      true,
+				RemotePort:   req.RemotePort,
+				ConfigSchema: configSchema,
 			})
 		}
 		h.app.GetClientStore().UpdateClient(dbClient)

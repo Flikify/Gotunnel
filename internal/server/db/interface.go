@@ -2,13 +2,26 @@ package db
 
 import "github.com/gotunnel/pkg/protocol"
 
+// ConfigField 配置字段定义
+type ConfigField struct {
+	Key         string   `json:"key"`
+	Label       string   `json:"label"`
+	Type        string   `json:"type"`
+	Default     string   `json:"default,omitempty"`
+	Required    bool     `json:"required,omitempty"`
+	Options     []string `json:"options,omitempty"`
+	Description string   `json:"description,omitempty"`
+}
+
 // ClientPlugin 客户端已安装的插件
 type ClientPlugin struct {
-	Name    string            `json:"name"`
-	Version string            `json:"version"`
-	Enabled bool              `json:"enabled"`
-	Running bool              `json:"running"`              // 运行状态
-	Config  map[string]string `json:"config,omitempty"`     // 插件配置
+	Name         string            `json:"name"`
+	Version      string            `json:"version"`
+	Enabled      bool              `json:"enabled"`
+	Running      bool              `json:"running"`              // 运行状态
+	Config       map[string]string `json:"config,omitempty"`     // 插件配置
+	RemotePort   int               `json:"remote_port,omitempty"`// 远程监听端口
+	ConfigSchema []ConfigField     `json:"config_schema,omitempty"` // 配置模式
 }
 
 // Client 客户端数据

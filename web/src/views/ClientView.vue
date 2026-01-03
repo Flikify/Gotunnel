@@ -86,8 +86,7 @@ const configLoading = ref(false)
 const showStoreModal = ref(false)
 const storePlugins = ref<StorePluginInfo[]>([])
 const storeLoading = ref(false)
-const selectedStorePlugin = ref<StorePluginInfo | null>(null)
-const storeInstalling = ref(false)
+const storeInstalling = ref<string | null>(null) // 正在安装的插件名称
 
 // 日志查看相关
 const showLogViewer = ref(false)
@@ -96,7 +95,6 @@ const showLogViewer = ref(false)
 const openStoreModal = async () => {
   showStoreModal.value = true
   storeLoading.value = true
-  selectedStorePlugin.value = null
   try {
     const { data } = await getStorePlugins()
     storePlugins.value = (data.plugins || []).filter(p => p.download_url)
@@ -113,18 +111,17 @@ const handleInstallStorePlugin = async (plugin: StorePluginInfo) => {
     message.error('该插件没有下载地址')
     return
   }
-  storeInstalling.value = true
-  selectedStorePlugin.value = plugin
+
+  storeInstalling.value = plugin.name
   try {
-    await installStorePlugin(plugin.name, plugin.download_url, plugin.signature_url || '', clientId)
-    message.success(`已安装 ${plugin.name}`)
+    await installStorePlugin(plugin.name, plugin.download_url, plugin.signature_url || '', clientId, 8080, plugin.version, plugin.config_schema)
+    message.success(`已安装 ${plugin.name}，可在配置中修改端口和其他设置`)
     showStoreModal.value = false
     await loadClient()
   } catch (e: any) {
     message.error(e.response?.data || '安装失败')
   } finally {
-    storeInstalling.value = false
-    selectedStorePlugin.value = null
+    storeInstalling.value = null
   }
 }
 
@@ -724,7 +721,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
               <n-button
                 size="small"
                 type="primary"
-                :loading="storeInstalling && selectedStorePlugin?.name === plugin.name"
+                :loading="storeInstalling === plugin.name"
                 @click="handleInstallStorePlugin(plugin)"
               >
                 安装
