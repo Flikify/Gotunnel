@@ -1,6 +1,6 @@
 # GoTunnel 插件开发指南
 
-本文档介绍如何为 GoTunnel 开发 JS 插件。
+本文档介绍如何为 GoTunnel 开发 JS 插件。JS 插件基于 [goja](https://github.com/dop251/goja) 运行时，运行在客户端上。
 
 ## 目录
 
@@ -66,8 +66,7 @@ function metadata() {
     return {
         name: "plugin-name",      // 插件名称
         version: "1.0.0",         // 版本号
-        type: "app",              // 类型: "app" 或 "proxy"
-        run_at: "client",         // 运行位置: "client" 或 "server"
+        type: "app",              // 类型: "app" (应用插件)
         description: "描述",      // 插件描述
         author: "作者"            // 作者名称
     };
@@ -519,16 +518,20 @@ if (result.error) {
 
 ### 配置测试
 
-在服务端配置中测试插件：
+在 Web 控制台的插件管理页面安装并配置插件，或通过 API 安装：
 
-```yaml
-js_plugins:
-  - name: my-plugin
-    path: /path/to/my-plugin.js
-    sig_path: /path/to/my-plugin.js.sig
-    config:
-      debug: "true"
-      port: "8080"
+```bash
+# 安装 JS 插件到客户端
+POST /api/client/{id}/plugin/js/install
+Content-Type: application/json
+{
+  "plugin_name": "my-plugin",
+  "source": "function metadata() {...}",
+  "rule_name": "my-rule",
+  "remote_port": 8080,
+  "config": {"debug": "true"},
+  "auto_start": true
+}
 ```
 
 ---
