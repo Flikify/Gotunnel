@@ -26,10 +26,11 @@ Thumbs.db
 # 前端 node_modules
 web/node_modules/
 
-# 构建产物 (源码在 web/dist，嵌入用的在 pkg/webserver/dist)
+# 构建产物 (源码在 web/dist，嵌入用的在 internal/server/app/dist)
 web/dist/
 pkg/webserver/dist/
-**/dist/**
+internal/server/app/dist/*
+!internal/server/app/dist/.gitkeep
 build/**
 
 # 日志

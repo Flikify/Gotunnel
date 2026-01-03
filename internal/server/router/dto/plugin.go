@@ -102,4 +102,11 @@ type StoreInstallRequest struct {
 	DownloadURL  string `json:"download_url" binding:"required,url"`
 	SignatureURL string `json:"signature_url" binding:"required,url"`
 	ClientID     string `json:"client_id" binding:"required"`
+	RemotePort   int    `json:"remote_port"`
+}
+
+// JSPluginPushRequest 推送 JS 插件到客户端请求
+// @Description 推送 JS 插件到指定客户端
+type JSPluginPushRequest struct {
+	RemotePort int `json:"remote_port"`
 }

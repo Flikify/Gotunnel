@@ -158,10 +158,12 @@ func (h *JSPluginHandler) Delete(c *gin.Context) {
 // @Summary 推送插件到客户端
 // @Description 将 JS 插件推送到指定客户端
 // @Tags JS插件
+// @Accept json
 // @Produce json
 // @Security Bearer
 // @Param name path string true "插件名称"
 // @Param clientID path string true "客户端ID"
+// @Param request body dto.JSPluginPushRequest false "推送配置"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 404 {object} Response
@@ -169,6 +171,10 @@ func (h *JSPluginHandler) Delete(c *gin.Context) {
 func (h *JSPluginHandler) PushToClient(c *gin.Context) {
 	pluginName := c.Param("name")
 	clientID := c.Param("clientID")
+
+	// 解析请求体（可选）
+	var pushReq dto.JSPluginPushRequest
+	c.ShouldBindJSON(&pushReq) // 忽略错误，允许空请求体
 
 	// 检查客户端是否在线
 	online, _, _ := h.app.GetServer().GetClientStatus(clientID)
@@ -195,6 +201,7 @@ func (h *JSPluginHandler) PushToClient(c *gin.Context) {
 		Source:     plugin.Source,
 		Signature:  plugin.Signature,
 		RuleName:   plugin.Name,
+		RemotePort: pushReq.RemotePort,
 		Config:     plugin.Config,
 		AutoStart:  plugin.AutoStart,
 	}
@@ -205,8 +212,9 @@ func (h *JSPluginHandler) PushToClient(c *gin.Context) {
 	}
 
 	Success(c, gin.H{
-		"status": "ok",
-		"plugin": pluginName,
-		"client": clientID,
+		"status":      "ok",
+		"plugin":      pluginName,
+		"client":      clientID,
+		"remote_port": pushReq.RemotePort,
 	})
 }

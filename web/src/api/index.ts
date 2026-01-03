@@ -49,8 +49,8 @@ export const disablePlugin = (name: string) => post(`/plugin/${name}/disable`)
 
 // 扩展商店
 export const getStorePlugins = () => get<{ plugins: StorePluginInfo[] }>('/store/plugins')
-export const installStorePlugin = (pluginName: string, downloadUrl: string, signatureUrl: string, clientId: string) =>
-  post('/store/install', { plugin_name: pluginName, download_url: downloadUrl, signature_url: signatureUrl, client_id: clientId })
+export const installStorePlugin = (pluginName: string, downloadUrl: string, signatureUrl: string, clientId: string, remotePort?: number) =>
+  post('/store/install', { plugin_name: pluginName, download_url: downloadUrl, signature_url: signatureUrl, client_id: clientId, remote_port: remotePort || 0 })
 
 // 客户端插件配置
 export const getClientPluginConfig = (clientId: string, pluginName: string) =>
@@ -64,8 +64,8 @@ export const createJSPlugin = (plugin: JSPlugin) => post('/js-plugins', plugin)
 export const getJSPlugin = (name: string) => get<JSPlugin>(`/js-plugin/${name}`)
 export const updateJSPlugin = (name: string, plugin: JSPlugin) => put(`/js-plugin/${name}`, plugin)
 export const deleteJSPlugin = (name: string) => del(`/js-plugin/${name}`)
-export const pushJSPluginToClient = (pluginName: string, clientId: string) =>
-  post(`/js-plugin/${pluginName}/push/${clientId}`)
+export const pushJSPluginToClient = (pluginName: string, clientId: string, remotePort?: number) =>
+  post(`/js-plugin/${pluginName}/push/${clientId}`, { remote_port: remotePort || 0 })
 export const updateJSPluginConfig = (name: string, config: Record<string, string>) =>
   put(`/js-plugin/${name}/config`, { config })
 export const setJSPluginEnabled = (name: string, enabled: boolean) =>

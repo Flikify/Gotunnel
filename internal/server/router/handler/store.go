@@ -131,6 +131,7 @@ func (h *StoreHandler) Install(c *gin.Context) {
 		Source:     string(source),
 		Signature:  string(signature),
 		RuleName:   req.PluginName,
+		RemotePort: req.RemotePort,
 		AutoStart:  true,
 	}
 

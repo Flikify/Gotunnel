@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NStatistic, NGrid, NGi,
   NEmpty, NSpin, NIcon, NSwitch, NTabs, NTabPane, useMessage,
-  NSelect, NModal, NInput
+  NSelect, NModal, NInput, NInputNumber
 } from 'naive-ui'
 import { ArrowBackOutline, ExtensionPuzzleOutline, StorefrontOutline, CodeSlashOutline, SettingsOutline } from '@vicons/ionicons5'
 import {
@@ -131,12 +131,34 @@ const loadClients = async () => {
   }
 }
 
-const handlePushJSPlugin = async (pluginName: string, clientId: string) => {
+// JS 插件推送相关
+const showPushModal = ref(false)
+const selectedJSPlugin = ref<JSPlugin | null>(null)
+const pushClientId = ref('')
+const pushRemotePort = ref<number | null>(8080)
+const pushing = ref(false)
+
+const openPushModal = (plugin: JSPlugin) => {
+  selectedJSPlugin.value = plugin
+  pushClientId.value = ''
+  pushRemotePort.value = 8080
+  showPushModal.value = true
+}
+
+const handlePushJSPlugin = async () => {
+  if (!selectedJSPlugin.value || !pushClientId.value) {
+    message.warning('请选择要推送到的客户端')
+    return
+  }
+  pushing.value = true
   try {
-    await pushJSPluginToClient(pluginName, clientId)
-    message.success(`已推送 ${pluginName} 到 ${clientId}`)
-  } catch (e) {
-    message.error('推送失败')
+    await pushJSPluginToClient(selectedJSPlugin.value.name, pushClientId.value, pushRemotePort.value || 0)
+    message.success(`已推送 ${selectedJSPlugin.value.name} 到 ${pushClientId.value}，监听端口: ${pushRemotePort.value || '未指定'}`)
+    showPushModal.value = false
+  } catch (e: any) {
+    message.error(e.response?.data || '推送失败')
+  } finally {
+    pushing.value = false
   }
 }
 
@@ -208,11 +230,13 @@ const toggleJSPlugin = async (plugin: JSPlugin) => {
 const showInstallModal = ref(false)
 const selectedStorePlugin = ref<StorePluginInfo | null>(null)
 const selectedClientId = ref('')
+const storePluginRemotePort = ref<number | null>(8080)
 const installing = ref(false)
 
 const openInstallModal = (plugin: StorePluginInfo) => {
   selectedStorePlugin.value = plugin
   selectedClientId.value = ''
+  storePluginRemotePort.value = 8080
   showInstallModal.value = true
 }
 
@@ -235,7 +259,8 @@ const handleInstallStorePlugin = async () => {
       selectedStorePlugin.value.name,
       selectedStorePlugin.value.download_url,
       selectedStorePlugin.value.signature_url,
-      selectedClientId.value
+      selectedClientId.value,
+      storePluginRemotePort.value || 0
     )
     message.success(`已安装 ${selectedStorePlugin.value.name} 到客户端`)
     showInstallModal.value = false
@@ -404,14 +429,14 @@ onMounted(() => {
                       <template #icon><n-icon><SettingsOutline /></n-icon></template>
                       配置
                     </n-button>
-                    <n-select
+                    <n-button
                       v-if="onlineClients.length > 0"
-                      placeholder="推送到..."
                       size="small"
-                      style="width: 140px;"
-                      :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))"
-                      @update:value="(v: string) => handlePushJSPlugin(plugin.name, v)"
-                    />
+                      type="primary"
+                      @click="openPushModal(plugin)"
+                    >
+                      推送到客户端
+                    </n-button>
                   </n-space>
                 </template>
               </n-card>
@@ -439,6 +464,16 @@ onMounted(() => {
           placeholder="选择要安装到的客户端"
           :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))"
         />
+        <div>
+          <p style="margin: 0 0 8px 0; color: #666; font-size: 13px;">远程端口（服务端监听端口）:</p>
+          <n-input-number
+            v-model:value="storePluginRemotePort"
+            :min="1"
+            :max="65535"
+            placeholder="输入端口号"
+            style="width: 100%;"
+          />
+        </div>
       </n-space>
       <template #footer>
         <n-space justify="end">
@@ -474,6 +509,45 @@ onMounted(() => {
         <n-space justify="end">
           <n-button @click="showJSConfigModal = false">取消</n-button>
           <n-button type="primary" :loading="jsConfigSaving" @click="saveJSPluginConfig">保存</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- JS 插件推送模态框 -->
+    <n-modal v-model:show="showPushModal" preset="card" title="推送插件到客户端" style="width: 400px;">
+      <n-space vertical :size="16">
+        <div v-if="selectedJSPlugin">
+          <p style="margin: 0 0 8px 0;"><strong>插件:</strong> {{ selectedJSPlugin.name }}</p>
+          <p style="margin: 0; color: #666;">{{ selectedJSPlugin.description || '无描述' }}</p>
+        </div>
+        <n-select
+          v-model:value="pushClientId"
+          placeholder="选择要推送到的客户端"
+          :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))"
+        />
+        <div>
+          <p style="margin: 0 0 8px 0; color: #666; font-size: 13px;">远程端口（服务端监听端口）:</p>
+          <n-input-number
+            v-model:value="pushRemotePort"
+            :min="1"
+            :max="65535"
+            placeholder="输入端口号"
+            style="width: 100%;"
+          />
+          <p style="margin: 8px 0 0 0; color: #999; font-size: 12px;">用户可以通过 服务端IP:端口 访问此插件提供的服务</p>
+        </div>
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showPushModal = false">取消</n-button>
+          <n-button
+            type="primary"
+            :loading="pushing"
+            :disabled="!pushClientId"
+            @click="handlePushJSPlugin"
+          >
+            推送
+          </n-button>
         </n-space>
       </template>
     </n-modal>
