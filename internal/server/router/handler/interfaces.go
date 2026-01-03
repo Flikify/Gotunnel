@@ -45,6 +45,8 @@ type ServerInterface interface {
 	// 日志流
 	StartClientLogStream(clientID, sessionID string, lines int, follow bool, level string) (<-chan protocol.LogEntry, error)
 	StopClientLogStream(sessionID string)
+	// 插件状态查询
+	GetClientPluginStatus(clientID string) ([]protocol.PluginStatusEntry, error)
 }
 
 // ConfigField 配置字段

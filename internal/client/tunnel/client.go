@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -248,6 +249,8 @@ func (c *Client) handleStream(stream net.Conn) {
 		go c.handleLogRequest(stream, msg)
 	case protocol.MsgTypeLogStop:
 		c.handleLogStop(stream, msg)
+	case protocol.MsgTypePluginStatusQuery:
+		c.handlePluginStatusQuery(stream, msg)
 	}
 }
 
@@ -911,6 +914,30 @@ func restartClientProcess(path, serverAddr, token, id string) {
 	cmd.Stderr = os.Stderr
 	cmd.Start()
 	os.Exit(0)
+}
+
+// handlePluginStatusQuery 处理插件状态查询
+func (c *Client) handlePluginStatusQuery(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	c.pluginMu.RLock()
+	plugins := make([]protocol.PluginStatusEntry, 0, len(c.runningPlugins))
+	for key := range c.runningPlugins {
+		// key 格式为 "pluginName:ruleName"，只提取 pluginName
+		parts := strings.SplitN(key, ":", 2)
+		pluginName := parts[0]
+		plugins = append(plugins, protocol.PluginStatusEntry{
+			PluginName: pluginName,
+			Running:    true,
+		})
+	}
+	c.pluginMu.RUnlock()
+
+	resp := protocol.PluginStatusQueryResponse{
+		Plugins: plugins,
+	}
+	respMsg, _ := protocol.NewMessage(protocol.MsgTypePluginStatusQueryResp, resp)
+	protocol.WriteMessage(stream, respMsg)
 }
 
 // handleLogRequest 处理日志请求

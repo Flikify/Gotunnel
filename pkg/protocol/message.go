@@ -40,10 +40,12 @@ const (
 	MsgTypePluginConfig   uint8 = 25 // 插件配置同步
 
 	// 客户端插件消息
-	MsgTypeClientPluginStart  uint8 = 40 // 启动客户端插件
-	MsgTypeClientPluginStop   uint8 = 41 // 停止客户端插件
-	MsgTypeClientPluginStatus uint8 = 42 // 客户端插件状态
-	MsgTypeClientPluginConn   uint8 = 43 // 客户端插件连接请求
+	MsgTypeClientPluginStart     uint8 = 40 // 启动客户端插件
+	MsgTypeClientPluginStop      uint8 = 41 // 停止客户端插件
+	MsgTypeClientPluginStatus    uint8 = 42 // 客户端插件状态
+	MsgTypeClientPluginConn      uint8 = 43 // 客户端插件连接请求
+	MsgTypePluginStatusQuery     uint8 = 44 // 查询所有插件状态
+	MsgTypePluginStatusQueryResp uint8 = 45 // 插件状态查询响应
 
 	// JS 插件动态安装
 	MsgTypeJSPluginInstall uint8 = 50 // 安装 JS 插件
@@ -223,6 +225,17 @@ type ClientPluginStatusResponse struct {
 type ClientPluginConnRequest struct {
 	PluginName string `json:"plugin_name"` // 插件名称
 	RuleName   string `json:"rule_name"`   // 规则名称
+}
+
+// PluginStatusEntry 单个插件状态
+type PluginStatusEntry struct {
+	PluginName string `json:"plugin_name"` // 插件名称
+	Running    bool   `json:"running"`     // 是否运行中
+}
+
+// PluginStatusQueryResponse 插件状态查询响应
+type PluginStatusQueryResponse struct {
+	Plugins []PluginStatusEntry `json:"plugins"` // 所有插件状态
 }
 
 // JSPluginInstallRequest JS 插件安装请求

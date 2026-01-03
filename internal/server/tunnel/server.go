@@ -574,6 +574,49 @@ func (s *Server) GetClientStatus(clientID string) (online bool, lastPing string,
 	return false, "", ""
 }
 
+// GetClientPluginStatus 获取客户端插件运行状态
+func (s *Server) GetClientPluginStatus(clientID string) ([]protocol.PluginStatusEntry, error) {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("client %s not online", clientID)
+	}
+
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+
+	// 发送查询请求
+	msg, err := protocol.NewMessage(protocol.MsgTypePluginStatusQuery, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return nil, err
+	}
+
+	// 读取响应
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Type != protocol.MsgTypePluginStatusQueryResp {
+		return nil, fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+
+	var statusResp protocol.PluginStatusQueryResponse
+	if err := resp.ParsePayload(&statusResp); err != nil {
+		return nil, err
+	}
+
+	return statusResp.Plugins, nil
+}
+
 // GetAllClientStatus 获取所有客户端状态
 func (s *Server) GetAllClientStatus() map[string]struct {
 	Online     bool

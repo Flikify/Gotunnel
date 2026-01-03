@@ -115,11 +115,39 @@ func (h *ClientHandler) Get(c *gin.Context) {
 
 	online, lastPing, remoteAddr := h.app.GetServer().GetClientStatus(clientID)
 
+	// 复制插件列表
+	plugins := make([]db.ClientPlugin, len(client.Plugins))
+	copy(plugins, client.Plugins)
+
+	// 如果客户端在线，获取实时插件运行状态
+	if online {
+		if statusList, err := h.app.GetServer().GetClientPluginStatus(clientID); err == nil {
+			// 创建运行中插件的映射
+			runningPlugins := make(map[string]bool)
+			for _, s := range statusList {
+				runningPlugins[s.PluginName] = s.Running
+			}
+			// 更新插件状态
+			for i := range plugins {
+				if running, ok := runningPlugins[plugins[i].Name]; ok {
+					plugins[i].Running = running
+				} else {
+					plugins[i].Running = false
+				}
+			}
+		}
+	} else {
+		// 客户端离线时，所有插件都标记为未运行
+		for i := range plugins {
+			plugins[i].Running = false
+		}
+	}
+
 	resp := dto.ClientResponse{
 		ID:         client.ID,
 		Nickname:   client.Nickname,
 		Rules:      client.Rules,
-		Plugins:    client.Plugins,
+		Plugins:    plugins,
 		Online:     online,
 		LastPing:   lastPing,
 		RemoteAddr: remoteAddr,
