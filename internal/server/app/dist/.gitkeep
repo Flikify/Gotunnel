@@ -1,0 +1,2 @@
+# This file ensures the dist directory exists for go:embed
+# The actual frontend files are built during CI/CD
