@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
+	"github.com/gotunnel/pkg/protocol"
 )
 
 // AppInterface 应用接口
@@ -41,6 +42,9 @@ type ServerInterface interface {
 	RestartClientPlugin(clientID, pluginName, ruleName string) error
 	UpdateClientPluginConfig(clientID, pluginName, ruleName string, config map[string]string, restart bool) error
 	SendUpdateToClient(clientID, downloadURL string) error
+	// 日志流
+	StartClientLogStream(clientID, sessionID string, lines int, follow bool, level string) (<-chan protocol.LogEntry, error)
+	StopClientLogStream(sessionID string)
 }
 
 // ConfigField 配置字段

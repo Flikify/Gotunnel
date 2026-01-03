@@ -60,6 +60,11 @@ const (
 	MsgTypeUpdateApply    uint8 = 73 // 应用更新请求
 	MsgTypeUpdateProgress uint8 = 74 // 更新进度
 	MsgTypeUpdateResult   uint8 = 75 // 更新结果
+
+	// 日志相关消息
+	MsgTypeLogRequest uint8 = 80 // 请求客户端日志
+	MsgTypeLogData    uint8 = 81 // 日志数据
+	MsgTypeLogStop    uint8 = 82 // 停止日志流
 )
 
 // Message 基础消息结构
@@ -303,6 +308,34 @@ type UpdateProgressResponse struct {
 type UpdateResultResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
+}
+
+// LogRequest 日志请求
+type LogRequest struct {
+	SessionID string `json:"session_id"` // 会话 ID
+	Lines     int    `json:"lines"`      // 请求的日志行数
+	Follow    bool   `json:"follow"`     // 是否持续推送新日志
+	Level     string `json:"level"`      // 日志级别过滤
+}
+
+// LogEntry 日志条目
+type LogEntry struct {
+	Timestamp int64  `json:"ts"`    // Unix 时间戳 (毫秒)
+	Level     string `json:"level"` // 日志级别: debug, info, warn, error
+	Message   string `json:"msg"`   // 日志消息
+	Source    string `json:"src"`   // 来源: client, plugin:<name>
+}
+
+// LogData 日志数据
+type LogData struct {
+	SessionID string     `json:"session_id"` // 会话 ID
+	Entries   []LogEntry `json:"entries"`    // 日志条目
+	EOF       bool       `json:"eof"`        // 是否结束
+}
+
+// LogStopRequest 停止日志流请求
+type LogStopRequest struct {
+	SessionID string `json:"session_id"` // 会话 ID
 }
 
 // WriteMessage 写入消息到 writer

@@ -130,3 +130,18 @@ export interface JSPlugin {
 
 // 规则配置模式集合
 export type RuleSchemasMap = Record<string, RuleSchema>
+
+// 日志条目
+export interface LogEntry {
+  ts: number      // Unix 时间戳 (毫秒)
+  level: string   // 日志级别: debug, info, warn, error
+  msg: string     // 日志消息
+  src: string     // 来源: client, plugin:<name>
+}
+
+// 日志流选项
+export interface LogStreamOptions {
+  lines?: number   // 初始日志行数
+  follow?: boolean // 是否持续推送
+  level?: string   // 日志级别过滤
+}

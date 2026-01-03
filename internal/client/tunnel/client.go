@@ -47,6 +47,7 @@ type Client struct {
 	runningPlugins  map[string]plugin.ClientPlugin
 	versionStore    *PluginVersionStore
 	pluginMu        sync.RWMutex
+	logger          *Logger // 日志收集器
 }
 
 // NewClient 创建客户端
@@ -59,12 +60,19 @@ func NewClient(serverAddr, token, id string) *Client {
 	home, _ := os.UserHomeDir()
 	dataDir := filepath.Join(home, ".gotunnel")
 
+	// 初始化日志收集器
+	logger, err := NewLogger(dataDir)
+	if err != nil {
+		log.Printf("[Client] Failed to initialize logger: %v", err)
+	}
+
 	return &Client{
 		ServerAddr:     serverAddr,
 		Token:          token,
 		ID:             id,
 		DataDir:        dataDir,
 		runningPlugins: make(map[string]plugin.ClientPlugin),
+		logger:         logger,
 	}
 }
 
@@ -236,6 +244,10 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handlePluginConfigUpdate(stream, msg)
 	case protocol.MsgTypeUpdateDownload:
 		c.handleUpdateDownload(stream, msg)
+	case protocol.MsgTypeLogRequest:
+		go c.handleLogRequest(stream, msg)
+	case protocol.MsgTypeLogStop:
+		c.handleLogStop(stream, msg)
 	}
 }
 
@@ -899,4 +911,80 @@ func restartClientProcess(path, serverAddr, token, id string) {
 	cmd.Stderr = os.Stderr
 	cmd.Start()
 	os.Exit(0)
+}
+
+// handleLogRequest 处理日志请求
+func (c *Client) handleLogRequest(stream net.Conn, msg *protocol.Message) {
+	if c.logger == nil {
+		stream.Close()
+		return
+	}
+
+	var req protocol.LogRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		stream.Close()
+		return
+	}
+
+	c.logger.Printf("Log request received: session=%s, follow=%v", req.SessionID, req.Follow)
+
+	// 发送历史日志
+	entries := c.logger.GetRecentLogs(req.Lines, req.Level)
+	if len(entries) > 0 {
+		data := protocol.LogData{
+			SessionID: req.SessionID,
+			Entries:   entries,
+			EOF:       !req.Follow,
+		}
+		respMsg, _ := protocol.NewMessage(protocol.MsgTypeLogData, data)
+		if err := protocol.WriteMessage(stream, respMsg); err != nil {
+			stream.Close()
+			return
+		}
+	}
+
+	// 如果不需要持续推送，关闭流
+	if !req.Follow {
+		stream.Close()
+		return
+	}
+
+	// 订阅新日志
+	ch := c.logger.Subscribe(req.SessionID)
+	defer c.logger.Unsubscribe(req.SessionID)
+	defer stream.Close()
+
+	// 持续推送新日志
+	for entry := range ch {
+		// 应用级别过滤
+		if req.Level != "" && entry.Level != req.Level {
+			continue
+		}
+
+		data := protocol.LogData{
+			SessionID: req.SessionID,
+			Entries:   []protocol.LogEntry{entry},
+			EOF:       false,
+		}
+		respMsg, _ := protocol.NewMessage(protocol.MsgTypeLogData, data)
+		if err := protocol.WriteMessage(stream, respMsg); err != nil {
+			return
+		}
+	}
+}
+
+// handleLogStop 处理停止日志流请求
+func (c *Client) handleLogStop(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	if c.logger == nil {
+		return
+	}
+
+	var req protocol.LogStopRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		return
+	}
+
+	c.logger.Unsubscribe(req.SessionID)
 }

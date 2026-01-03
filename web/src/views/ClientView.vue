@@ -9,7 +9,7 @@ import {
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, PowerOutline, AddOutline, SaveOutline, CloseOutline,
-  SettingsOutline, StorefrontOutline, RefreshOutline, StopOutline, PlayOutline
+  SettingsOutline, StorefrontOutline, RefreshOutline, StopOutline, PlayOutline, DocumentTextOutline
 } from '@vicons/ionicons5'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
@@ -17,6 +17,7 @@ import {
   getStorePlugins, installStorePlugin, getRuleSchemas, startClientPlugin, restartClientPlugin, stopClientPlugin, deleteClientPlugin
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
+import LogViewer from '../components/LogViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -87,6 +88,9 @@ const storePlugins = ref<StorePluginInfo[]>([])
 const storeLoading = ref(false)
 const selectedStorePlugin = ref<StorePluginInfo | null>(null)
 const storeInstalling = ref(false)
+
+// 日志查看相关
+const showLogViewer = ref(false)
 
 // 商店插件相关函数
 const openStoreModal = async () => {
@@ -418,6 +422,10 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
               <template #icon><n-icon><PushOutline /></n-icon></template>
               推送配置
             </n-button>
+            <n-button @click="showLogViewer = true">
+              <template #icon><n-icon><DocumentTextOutline /></n-icon></template>
+              查看日志
+            </n-button>
             <n-button @click="openStoreModal">
               <template #icon><n-icon><StorefrontOutline /></n-icon></template>
               从商店安装
@@ -730,6 +738,11 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
           <n-button @click="showStoreModal = false">关闭</n-button>
         </n-space>
       </template>
+    </n-modal>
+
+    <!-- 日志查看模态框 -->
+    <n-modal v-model:show="showLogViewer" preset="card" style="width: 900px; max-width: 95vw;">
+      <LogViewer :client-id="clientId" :visible="showLogViewer" @close="showLogViewer = false" />
     </n-modal>
   </div>
 </template>

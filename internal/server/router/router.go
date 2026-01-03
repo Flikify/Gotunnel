@@ -105,6 +105,10 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		api.GET("/update/check/client", updateHandler.CheckClient)
 		api.POST("/update/apply/server", updateHandler.ApplyServer)
 		api.POST("/update/apply/client", updateHandler.ApplyClient)
+
+		// 日志管理
+		logHandler := handler.NewLogHandler(app)
+		api.GET("/client/:id/logs", logHandler.StreamLogs)
 	}
 }
 

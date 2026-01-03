@@ -65,6 +65,7 @@ type Server struct {
 	listener       net.Listener    // 主监听器
 	shutdown       chan struct{}   // 关闭信号
 	wg             sync.WaitGroup  // 等待所有连接关闭
+	logSessions    *LogSessionManager // 日志会话管理器
 }
 
 // JSPluginEntry JS 插件条目
@@ -102,6 +103,7 @@ func NewServer(cs db.ClientStore, bindAddr string, bindPort int, token string, h
 		clients:     make(map[string]*ClientSession),
 		connSem:     make(chan struct{}, maxConnections),
 		shutdown:    make(chan struct{}),
+		logSessions: NewLogSessionManager(),
 	}
 }
 
@@ -1473,4 +1475,97 @@ func (s *Server) SendUpdateToClient(clientID, downloadURL string) error {
 
 	log.Printf("[Server] Update command sent to client %s: %s", clientID, downloadURL)
 	return nil
+}
+
+// StartClientLogStream 启动客户端日志流
+func (s *Server) StartClientLogStream(clientID, sessionID string, lines int, follow bool, level string) (<-chan protocol.LogEntry, error) {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("client %s not found or not online", clientID)
+	}
+
+	// 打开到客户端的流
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return nil, err
+	}
+
+	// 发送日志请求
+	req := protocol.LogRequest{
+		SessionID: sessionID,
+		Lines:     lines,
+		Follow:    follow,
+		Level:     level,
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeLogRequest, req)
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		stream.Close()
+		return nil, err
+	}
+
+	// 创建会话
+	session := s.logSessions.CreateSession(clientID, sessionID, stream)
+	listener := session.AddListener()
+
+	// 启动 goroutine 读取客户端日志
+	go s.readClientLogs(session, stream)
+
+	return listener, nil
+}
+
+// readClientLogs 读取客户端日志并广播到监听器
+func (s *Server) readClientLogs(session *LogSession, stream net.Conn) {
+	defer s.logSessions.RemoveSession(session.ID)
+
+	for {
+		msg, err := protocol.ReadMessage(stream)
+		if err != nil {
+			return
+		}
+
+		if msg.Type != protocol.MsgTypeLogData {
+			continue
+		}
+
+		var data protocol.LogData
+		if err := msg.ParsePayload(&data); err != nil {
+			continue
+		}
+
+		for _, entry := range data.Entries {
+			session.Broadcast(entry)
+		}
+
+		if data.EOF {
+			return
+		}
+	}
+}
+
+// StopClientLogStream 停止客户端日志流
+func (s *Server) StopClientLogStream(sessionID string) {
+	session := s.logSessions.GetSession(sessionID)
+	if session == nil {
+		return
+	}
+
+	// 发送停止请求到客户端
+	s.mu.RLock()
+	cs, ok := s.clients[session.ClientID]
+	s.mu.RUnlock()
+
+	if ok {
+		stream, err := cs.Session.Open()
+		if err == nil {
+			req := protocol.LogStopRequest{SessionID: sessionID}
+			msg, _ := protocol.NewMessage(protocol.MsgTypeLogStop, req)
+			protocol.WriteMessage(stream, msg)
+			stream.Close()
+		}
+	}
+
+	s.logSessions.RemoveSession(sessionID)
 }

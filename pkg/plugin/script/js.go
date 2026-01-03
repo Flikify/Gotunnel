@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/dop251/goja"
@@ -19,20 +21,27 @@ type JSPlugin struct {
 	source   string
 	vm       *goja.Runtime
 	metadata plugin.Metadata
-	config   map[string]string
-	sandbox  *Sandbox
-	running  bool
-	mu       sync.Mutex
+	config         map[string]string
+	sandbox        *Sandbox
+	running        bool
+	mu             sync.Mutex
+	eventListeners map[string][]func(goja.Value)
+	storagePath    string
 }
 
 // NewJSPlugin 从 JS 源码创建插件
 func NewJSPlugin(name, source string) (*JSPlugin, error) {
 	p := &JSPlugin{
-		name:    name,
-		source:  source,
-		vm:      goja.New(),
-		sandbox: DefaultSandbox(),
+		name:           name,
+		source:         source,
+		vm:             goja.New(),
+		sandbox:        DefaultSandbox(),
+		eventListeners: make(map[string][]func(goja.Value)),
+		storagePath:    filepath.Join("plugin_data", name+".json"),
 	}
+
+	// 确保存储目录存在
+	os.MkdirAll("plugin_data", 0755)
 
 	if err := p.init(); err != nil {
 		return nil, err
@@ -55,7 +64,21 @@ func (p *JSPlugin) init() error {
 
 	// 注入基础 API
 	p.vm.Set("log", p.jsLog)
+	
+	// Config API (兼容旧的 config() 调用，同时支持 config.get/getAll)
 	p.vm.Set("config", p.jsGetConfig)
+	if configObj := p.vm.Get("config"); configObj != nil {
+		obj := configObj.ToObject(p.vm)
+		obj.Set("get", p.jsGetConfig)
+		obj.Set("getAll", p.jsGetAllConfig)
+	}
+
+	// 注入增强 API
+	p.vm.Set("logger", p.createLoggerAPI())
+	p.vm.Set("storage", p.createStorageAPI())
+	p.vm.Set("event", p.createEventAPI())
+	p.vm.Set("request", p.createRequestAPI())
+	p.vm.Set("notify", p.createNotifyAPI())
 
 	// 注入文件 API
 	p.vm.Set("fs", p.createFsAPI())
@@ -117,7 +140,7 @@ func (p *JSPlugin) Metadata() plugin.Metadata {
 // Init 初始化插件配置
 func (p *JSPlugin) Init(config map[string]string) error {
 	p.config = config
-	p.vm.Set("config", config)
+	// p.vm.Set("config", config) // Do not overwrite the config API
 	return nil
 }
 
@@ -471,4 +494,178 @@ func getContentType(path string) string {
 		return ct
 	}
 	return "application/octet-stream"
+}
+
+// =============================================================================
+// Logger API
+// =============================================================================
+
+func (p *JSPlugin) createLoggerAPI() map[string]interface{} {
+	return map[string]interface{}{
+		"info":  func(msg string) { fmt.Printf("[JS:%s][INFO] %s\n", p.name, msg) },
+		"warn":  func(msg string) { fmt.Printf("[JS:%s][WARN] %s\n", p.name, msg) },
+		"error": func(msg string) { fmt.Printf("[JS:%s][ERROR] %s\n", p.name, msg) },
+	}
+}
+
+// =============================================================================
+// Config API Enhancements
+// =============================================================================
+
+func (p *JSPlugin) jsGetAllConfig() map[string]string {
+	if p.config == nil {
+		return map[string]string{}
+	}
+	return p.config
+}
+
+// =============================================================================
+// Storage API
+// =============================================================================
+
+func (p *JSPlugin) createStorageAPI() map[string]interface{} {
+	return map[string]interface{}{
+		"get":    p.storageGet,
+		"set":    p.storageSet,
+		"delete": p.storageDelete,
+		"keys":   p.storageKeys,
+	}
+}
+
+func (p *JSPlugin) loadStorage() map[string]interface{} {
+	data := make(map[string]interface{})
+	if _, err := os.Stat(p.storagePath); err == nil {
+		content, _ := os.ReadFile(p.storagePath)
+		json.Unmarshal(content, &data)
+	}
+	return data
+}
+
+func (p *JSPlugin) saveStorage(data map[string]interface{}) {
+	content, _ := json.MarshalIndent(data, "", "  ")
+	os.WriteFile(p.storagePath, content, 0644)
+}
+
+func (p *JSPlugin) storageGet(key string, def interface{}) interface{} {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	data := p.loadStorage()
+	if v, ok := data[key]; ok {
+		return v
+	}
+	return def
+}
+
+func (p *JSPlugin) storageSet(key string, value interface{}) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	data := p.loadStorage()
+	data[key] = value
+	p.saveStorage(data)
+}
+
+func (p *JSPlugin) storageDelete(key string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	data := p.loadStorage()
+	delete(data, key)
+	p.saveStorage(data)
+}
+
+func (p *JSPlugin) storageKeys() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	data := p.loadStorage()
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// =============================================================================
+// Event API
+// =============================================================================
+
+func (p *JSPlugin) createEventAPI() map[string]interface{} {
+	return map[string]interface{}{
+		"on":   p.eventOn,
+		"emit": p.eventEmit,
+		"off":  p.eventOff,
+	}
+}
+
+func (p *JSPlugin) eventOn(event string, callback func(goja.Value)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.eventListeners[event] = append(p.eventListeners[event], callback)
+}
+
+func (p *JSPlugin) eventEmit(event string, data interface{}) {
+	p.mu.Lock()
+	listeners := p.eventListeners[event]
+	p.mu.Unlock() // 释放锁以允许回调中操作
+
+	val := p.vm.ToValue(data)
+	for _, cb := range listeners {
+		cb(val)
+	}
+}
+
+func (p *JSPlugin) eventOff(event string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.eventListeners, event)
+}
+
+// =============================================================================
+// Request API (HTTP Client)
+// =============================================================================
+
+func (p *JSPlugin) createRequestAPI() map[string]interface{} {
+	return map[string]interface{}{
+		"get":  p.requestGet,
+		"post": p.requestPost,
+	}
+}
+
+func (p *JSPlugin) requestGet(url string) map[string]interface{} {
+	resp, err := http.Get(url)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error(), "status": 0}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return map[string]interface{}{
+		"status": resp.StatusCode,
+		"body":   string(body),
+		"error":  "",
+	}
+}
+
+func (p *JSPlugin) requestPost(url string, contentType, data string) map[string]interface{} {
+	resp, err := http.Post(url, contentType, strings.NewReader(data))
+	if err != nil {
+		return map[string]interface{}{"error": err.Error(), "status": 0}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return map[string]interface{}{
+		"status": resp.StatusCode,
+		"body":   string(body),
+		"error":  "",
+	}
+}
+
+// =============================================================================
+// Notify API
+// =============================================================================
+
+func (p *JSPlugin) createNotifyAPI() map[string]interface{} {
+	return map[string]interface{}{
+		"send": func(title, msg string) {
+			// 目前仅打印到日志，后续对接系统通知
+			fmt.Printf("[NOTIFY][%s] %s: %s\n", p.name, title, msg)
+		},
+	}
 }

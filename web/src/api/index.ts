@@ -1,5 +1,5 @@
-import { get, post, put, del } from '../config/axios'
-import type { ClientConfig, ClientStatus, ClientDetail, ServerStatus, PluginInfo, StorePluginInfo, PluginConfigResponse, JSPlugin, RuleSchemasMap } from '../types'
+import { get, post, put, del, getToken } from '../config/axios'
+import type { ClientConfig, ClientStatus, ClientDetail, ServerStatus, PluginInfo, StorePluginInfo, PluginConfigResponse, JSPlugin, RuleSchemasMap, LogEntry, LogStreamOptions } from '../types'
 
 // 重新导出 token 管理方法
 export { getToken, setToken, removeToken } from '../config/axios'
@@ -104,3 +104,40 @@ export const applyServerUpdate = (downloadUrl: string, restart: boolean = true) 
   post('/update/apply/server', { download_url: downloadUrl, restart })
 export const applyClientUpdate = (clientId: string, downloadUrl: string) =>
   post('/update/apply/client', { client_id: clientId, download_url: downloadUrl })
+
+// 日志流
+export const createLogStream = (
+  clientId: string,
+  options: LogStreamOptions = {},
+  onLog: (entry: LogEntry) => void,
+  onError?: (error: Event) => void
+): EventSource => {
+  const token = getToken()
+  const params = new URLSearchParams()
+  if (token) params.append('token', token)
+  if (options.lines !== undefined) params.append('lines', String(options.lines))
+  if (options.follow !== undefined) params.append('follow', String(options.follow))
+  if (options.level) params.append('level', options.level)
+
+  const url = `/api/client/${clientId}/logs?${params.toString()}`
+  const eventSource = new EventSource(url)
+
+  eventSource.addEventListener('log', (event) => {
+    try {
+      const entry = JSON.parse((event as MessageEvent).data) as LogEntry
+      onLog(entry)
+    } catch (e) {
+      console.error('Failed to parse log entry', e)
+    }
+  })
+
+  eventSource.addEventListener('heartbeat', () => {
+    // Keep-alive, no action needed
+  })
+
+  if (onError) {
+    eventSource.onerror = onError
+  }
+
+  return eventSource
+}

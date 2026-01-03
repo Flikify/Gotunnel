@@ -12,6 +12,14 @@ import (
 func JWTAuth(jwtAuth *auth.JWTAuth) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
+
+		// 支持从 query 参数获取 token (用于 SSE 等不支持自定义 header 的场景)
+		if authHeader == "" {
+			if token := c.Query("token"); token != "" {
+				authHeader = "Bearer " + token
+			}
+		}
+
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    401,

@@ -283,6 +283,88 @@ function handleConn(conn) {
 
 ---
 
+### 增强 API (Enhanced APIs)
+
+GoTunnel v2.0+ 提供了更多强大的 API 能力。
+
+#### `logger` (日志)
+
+推荐使用结构化日志替代简单的 `log()`。
+
+- `logger.info(msg)`
+- `logger.warn(msg)`
+- `logger.error(msg)`
+
+```javascript
+logger.info("Server started");
+logger.error("Connection failed");
+```
+
+#### `config` (配置)
+
+增强的配置获取方式。
+
+- `config.get(key)`: 获取配置值
+- `config.getAll()`: 获取所有配置
+
+```javascript
+var all = config.getAll();
+var port = config.get("port");
+```
+
+#### `storage` (持久化存储)
+
+简单的 Key-Value 存储，数据保存在客户端本地。
+
+- `storage.get(key, default)`
+- `storage.set(key, value)`
+- `storage.delete(key)`
+- `storage.keys()`
+
+```javascript
+storage.set("last_run", Date.now());
+var last = storage.get("last_run", 0);
+```
+
+#### `event` (事件总线)
+
+插件内部或插件间的事件通信。
+
+- `event.on(name, callback)`
+- `event.emit(name, data)`
+- `event.off(name)`
+
+```javascript
+event.on("user_login", function(user) {
+    logger.info("User logged in: " + user);
+});
+event.emit("user_login", "admin");
+```
+
+#### `request` (HTTP 请求)
+
+发起外部 HTTP 请求。
+
+- `request.get(url)`
+- `request.post(url, contentType, body)`
+
+```javascript
+var res = request.get("https://api.ipify.org");
+logger.info("My IP: " + res.body);
+```
+
+#### `notify` (通知)
+
+发送系统通知。
+
+- `notify.send(title, message)`
+
+```javascript
+notify.send("Download Complete", "File saved to disk");
+```
+
+---
+
 ## 示例插件
 
 ### Echo 服务
