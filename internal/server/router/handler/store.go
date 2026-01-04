@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gotunnel/internal/server/db"
-	// removed router import
 	"github.com/gotunnel/internal/server/router/dto"
+	"github.com/gotunnel/pkg/protocol"
 )
 
 // StoreHandler 插件商店处理器
@@ -192,9 +192,26 @@ func (h *StoreHandler) Install(c *gin.Context) {
 		h.app.GetClientStore().UpdateClient(dbClient)
 	}
 
+	// 启动服务端监听器（让外部用户可以通过 RemotePort 访问插件）
+	if req.RemotePort > 0 {
+		pluginRule := protocol.ProxyRule{
+			Name:       req.PluginName,
+			Type:       req.PluginName, // 使用插件名作为类型，让 isClientPlugin 识别
+			RemotePort: req.RemotePort,
+			Enabled:    boolPtr(true),
+		}
+		// 启动监听器（忽略错误，可能端口已被占用）
+		h.app.GetServer().StartPluginRule(req.ClientID, pluginRule)
+	}
+
 	Success(c, gin.H{
 		"status": "ok",
 		"plugin": req.PluginName,
 		"client": req.ClientID,
 	})
+}
+
+// boolPtr 返回 bool 值的指针
+func boolPtr(b bool) *bool {
+	return &b
 }

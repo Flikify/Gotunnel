@@ -47,6 +47,8 @@ type ServerInterface interface {
 	StopClientLogStream(sessionID string)
 	// 插件状态查询
 	GetClientPluginStatus(clientID string) ([]protocol.PluginStatusEntry, error)
+	// 插件规则管理
+	StartPluginRule(clientID string, rule protocol.ProxyRule) error
 }
 
 // ConfigField 配置字段

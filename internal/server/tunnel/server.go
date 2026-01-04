@@ -1227,6 +1227,15 @@ func (s *Server) pushClientInstalledPlugins(cs *ClientSession, alreadyPushed map
 
 		if err := s.InstallJSPluginToClient(cs.ID, req); err != nil {
 			log.Printf("[Server] Failed to restore plugin %s: %v", cp.Name, err)
+		} else if cp.RemotePort > 0 {
+			// 安装成功后启动服务端监听器
+			pluginRule := protocol.ProxyRule{
+				Name:       cp.Name,
+				Type:       cp.Name,
+				RemotePort: cp.RemotePort,
+				Enabled:    boolPtr(true),
+			}
+			s.startClientPluginListener(cs, pluginRule)
 		}
 	}
 }
@@ -1339,6 +1348,30 @@ func (s *Server) sendClientPluginStop(session *yamux.Session, pluginName, ruleNa
 	if status.Running {
 		return fmt.Errorf("plugin still running: %s", status.Error)
 	}
+	return nil
+}
+
+// StartPluginRule 为客户端插件启动服务端监听器
+func (s *Server) StartPluginRule(clientID string, rule protocol.ProxyRule) error {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("client %s not found or not online", clientID)
+	}
+
+	// 检查端口是否已被占用
+	cs.mu.Lock()
+	_, exists := cs.Listeners[rule.RemotePort]
+	cs.mu.Unlock()
+	if exists {
+		// 端口已在监听，无需重复启动
+		return nil
+	}
+
+	// 启动插件监听器
+	s.startClientPluginListener(cs, rule)
 	return nil
 }
 
@@ -1611,4 +1644,9 @@ func (s *Server) StopClientLogStream(sessionID string) {
 	}
 
 	s.logSessions.RemoveSession(sessionID)
+}
+
+// boolPtr 返回 bool 值的指针
+func boolPtr(b bool) *bool {
+	return &b
 }
