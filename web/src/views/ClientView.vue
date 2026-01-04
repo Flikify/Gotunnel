@@ -167,11 +167,14 @@ const saveRename = async () => {
 }
 
 const startEdit = () => {
-  editRules.value = rules.value.map(rule => ({
-    ...rule,
-    type: rule.type || 'tcp',
-    enabled: rule.enabled !== false
-  }))
+  // 只编辑非插件管理的规则
+  editRules.value = rules.value
+    .filter(rule => !rule.plugin_managed)
+    .map(rule => ({
+      ...rule,
+      type: rule.type || 'tcp',
+      enabled: rule.enabled !== false
+    }))
   editing.value = true
 }
 
@@ -191,7 +194,10 @@ const removeRule = (index: number) => {
 
 const saveEdit = async () => {
   try {
-    await updateClient(clientId, { id: clientId, nickname: nickname.value, rules: editRules.value })
+    // 合并插件管理的规则和编辑后的规则
+    const pluginManagedRules = rules.value.filter(r => r.plugin_managed)
+    const allRules = [...pluginManagedRules, ...editRules.value]
+    await updateClient(clientId, { id: clientId, nickname: nickname.value, rules: allRules })
     editing.value = false
     message.success('保存成功')
     await loadClient()
@@ -476,6 +482,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
               <th>远程端口</th>
               <th>类型</th>
               <th>状态</th>
+              <th>来源</th>
             </tr>
           </thead>
           <tbody>
@@ -493,6 +500,10 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                 <n-tag size="small" :type="rule.enabled !== false ? 'success' : 'default'">
                   {{ rule.enabled !== false ? '启用' : '禁用' }}
                 </n-tag>
+              </td>
+              <td>
+                <n-tag v-if="rule.plugin_managed" size="small" type="info">插件</n-tag>
+                <n-tag v-else size="small" type="default">手动</n-tag>
               </td>
             </tr>
           </tbody>

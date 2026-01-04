@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -216,6 +217,11 @@ func (h *StoreHandler) Install(c *gin.Context) {
 
 		// 自动创建代理规则（如果指定了端口）
 		if req.RemotePort > 0 {
+			// 检查端口是否可用
+			if !h.app.GetServer().IsPortAvailable(req.RemotePort, req.ClientID) {
+				InternalError(c, fmt.Sprintf("port %d is already in use", req.RemotePort))
+				return
+			}
 			ruleExists := false
 			for i, r := range dbClient.Rules {
 				if r.Name == req.PluginName {
@@ -226,6 +232,7 @@ func (h *StoreHandler) Install(c *gin.Context) {
 					dbClient.Rules[i].AuthEnabled = req.AuthEnabled
 					dbClient.Rules[i].AuthUsername = req.AuthUsername
 					dbClient.Rules[i].AuthPassword = req.AuthPassword
+					dbClient.Rules[i].PluginManaged = true
 					ruleExists = true
 					break
 				}
@@ -233,13 +240,14 @@ func (h *StoreHandler) Install(c *gin.Context) {
 			if !ruleExists {
 				// 创建新规则
 				dbClient.Rules = append(dbClient.Rules, protocol.ProxyRule{
-					Name:         req.PluginName,
-					Type:         req.PluginName,
-					RemotePort:   req.RemotePort,
-					Enabled:      boolPtr(true),
-					AuthEnabled:  req.AuthEnabled,
-					AuthUsername: req.AuthUsername,
-					AuthPassword: req.AuthPassword,
+					Name:          req.PluginName,
+					Type:          req.PluginName,
+					RemotePort:    req.RemotePort,
+					Enabled:       boolPtr(true),
+					AuthEnabled:   req.AuthEnabled,
+					AuthUsername:  req.AuthUsername,
+					AuthPassword:  req.AuthPassword,
+					PluginManaged: true,
 				})
 			}
 		}

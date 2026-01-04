@@ -7,6 +7,7 @@ export interface ProxyRule {
   type?: string
   enabled?: boolean
   plugin_config?: Record<string, string>
+  plugin_managed?: boolean // 插件管理标记 - 由插件自动创建的规则
 }
 
 // 客户端已安装的插件

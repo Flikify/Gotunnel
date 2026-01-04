@@ -1464,6 +1464,50 @@ func (s *Server) StartPluginRule(clientID string, rule protocol.ProxyRule) error
 	return nil
 }
 
+// StopPluginRule 停止客户端插件的服务端监听器
+func (s *Server) StopPluginRule(clientID string, remotePort int) error {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return nil // 客户端不在线，无需停止
+	}
+
+	cs.mu.Lock()
+	if ln, exists := cs.Listeners[remotePort]; exists {
+		ln.Close()
+		delete(cs.Listeners, remotePort)
+	}
+	cs.mu.Unlock()
+
+	s.portManager.Release(remotePort)
+	return nil
+}
+
+// IsPortAvailable 检查端口是否可用
+func (s *Server) IsPortAvailable(port int, excludeClientID string) bool {
+	// 检查系统端口
+	if !utils.IsPortAvailable(port) {
+		return false
+	}
+	// 检查是否被其他客户端占用
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for clientID, cs := range s.clients {
+		if clientID == excludeClientID {
+			continue
+		}
+		cs.mu.Lock()
+		_, occupied := cs.Listeners[port]
+		cs.mu.Unlock()
+		if occupied {
+			return false
+		}
+	}
+	return true
+}
+
 // ProxyPluginAPIRequest 代理插件 API 请求到客户端
 func (s *Server) ProxyPluginAPIRequest(clientID string, req protocol.PluginAPIRequest) (*protocol.PluginAPIResponse, error) {
 	s.mu.RLock()

@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gotunnel/internal/server/db"
-	// removed router import
 	"github.com/gotunnel/internal/server/router/dto"
+	"github.com/gotunnel/pkg/protocol"
 )
 
 // ClientHandler 客户端处理器
@@ -410,10 +410,14 @@ func (h *ClientHandler) deleteClientPlugin(clientID, pluginID string) error {
 	}
 
 	var newPlugins []db.ClientPlugin
+	var pluginName string
+	var pluginPort int
 	found := false
 	for _, p := range client.Plugins {
 		if p.ID == pluginID {
 			found = true
+			pluginName = p.Name
+			pluginPort = p.RemotePort
 			continue
 		}
 		newPlugins = append(newPlugins, p)
@@ -423,7 +427,22 @@ func (h *ClientHandler) deleteClientPlugin(clientID, pluginID string) error {
 		return fmt.Errorf("plugin %s not found", pluginID)
 	}
 
+	// 删除插件管理的代理规则
+	var newRules []protocol.ProxyRule
+	for _, r := range client.Rules {
+		if r.PluginManaged && r.Name == pluginName {
+			continue // 跳过此插件的规则
+		}
+		newRules = append(newRules, r)
+	}
+
+	// 停止端口监听器
+	if pluginPort > 0 {
+		h.app.GetServer().StopPluginRule(clientID, pluginPort)
+	}
+
 	client.Plugins = newPlugins
+	client.Rules = newRules
 	return h.app.GetClientStore().UpdateClient(client)
 }
 

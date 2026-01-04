@@ -108,6 +108,8 @@ type ProxyRule struct {
 	AuthEnabled  bool   `json:"auth_enabled,omitempty" yaml:"auth_enabled"`
 	AuthUsername string `json:"auth_username,omitempty" yaml:"auth_username"`
 	AuthPassword string `json:"auth_password,omitempty" yaml:"auth_password"`
+	// 插件管理标记 - 由插件自动创建的规则，不允许手动编辑/删除
+	PluginManaged bool `json:"plugin_managed,omitempty" yaml:"plugin_managed"`
 }
 
 // IsEnabled 检查规则是否启用，默认为 true

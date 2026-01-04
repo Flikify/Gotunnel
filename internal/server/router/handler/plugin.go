@@ -254,13 +254,19 @@ func (h *PluginHandler) UpdateClientConfig(c *gin.Context) {
 	// 更新插件配置
 	found := false
 	portChanged := false
+	var oldPort, newPort int
 	for i, p := range client.Plugins {
 		if p.Name == pluginName {
+			oldPort = client.Plugins[i].RemotePort
 			// 提取 remote_port 并单独处理
 			if portStr, ok := req.Config["remote_port"]; ok {
-				var newPort int
 				fmt.Sscanf(portStr, "%d", &newPort)
-				if newPort > 0 && newPort != client.Plugins[i].RemotePort {
+				if newPort > 0 && newPort != oldPort {
+					// 检查新端口是否可用
+					if !h.app.GetServer().IsPortAvailable(newPort, clientID) {
+						BadRequest(c, fmt.Sprintf("port %d is already in use", newPort))
+						return
+					}
 					client.Plugins[i].RemotePort = newPort
 					portChanged = true
 				}
@@ -277,6 +283,20 @@ func (h *PluginHandler) UpdateClientConfig(c *gin.Context) {
 		return
 	}
 
+	// 如果端口变更，同步更新代理规则
+	if portChanged {
+		for i, r := range client.Rules {
+			if r.Name == pluginName && r.PluginManaged {
+				client.Rules[i].RemotePort = newPort
+				break
+			}
+		}
+		// 停止旧端口监听器
+		if oldPort > 0 {
+			h.app.GetServer().StopPluginRule(clientID, oldPort)
+		}
+	}
+
 	// 保存到数据库
 	if err := h.app.GetClientStore().UpdateClient(client); err != nil {
 		InternalError(c, err.Error())
@@ -287,7 +307,6 @@ func (h *PluginHandler) UpdateClientConfig(c *gin.Context) {
 	online, _, _ := h.app.GetServer().GetClientStatus(clientID)
 	if online {
 		if err := h.app.GetServer().SyncPluginConfigToClient(clientID, pluginName, req.Config); err != nil {
-			// 配置已保存，但同步失败，返回警告
 			PartialSuccess(c, gin.H{"status": "partial", "port_changed": portChanged}, "config saved but sync failed: "+err.Error())
 			return
 		}
