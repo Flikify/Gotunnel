@@ -49,6 +49,8 @@ type ServerInterface interface {
 	GetClientPluginStatus(clientID string) ([]protocol.PluginStatusEntry, error)
 	// 插件规则管理
 	StartPluginRule(clientID string, rule protocol.ProxyRule) error
+	// 插件 API 代理
+	ProxyPluginAPIRequest(clientID string, req protocol.PluginAPIRequest) (*protocol.PluginAPIResponse, error)
 }
 
 // ConfigField 配置字段

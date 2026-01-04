@@ -155,15 +155,16 @@ func (h *StoreHandler) Install(c *gin.Context) {
 	dbClient, err := h.app.GetClientStore().GetClient(req.ClientID)
 	if err == nil {
 		// 检查插件是否已存在
-		exists := false
+		pluginExists := false
 		for i, p := range dbClient.Plugins {
 			if p.Name == req.PluginName {
 				dbClient.Plugins[i].Enabled = true
-				exists = true
+				dbClient.Plugins[i].RemotePort = req.RemotePort
+				pluginExists = true
 				break
 			}
 		}
-		if !exists {
+		if !pluginExists {
 			version := req.Version
 			if version == "" {
 				version = "1.0.0"
@@ -189,16 +190,50 @@ func (h *StoreHandler) Install(c *gin.Context) {
 				ConfigSchema: configSchema,
 			})
 		}
+
+		// 自动创建代理规则（如果指定了端口）
+		if req.RemotePort > 0 {
+			ruleExists := false
+			for i, r := range dbClient.Rules {
+				if r.Name == req.PluginName {
+					// 更新现有规则
+					dbClient.Rules[i].Type = req.PluginName
+					dbClient.Rules[i].RemotePort = req.RemotePort
+					dbClient.Rules[i].Enabled = boolPtr(true)
+					dbClient.Rules[i].AuthEnabled = req.AuthEnabled
+					dbClient.Rules[i].AuthUsername = req.AuthUsername
+					dbClient.Rules[i].AuthPassword = req.AuthPassword
+					ruleExists = true
+					break
+				}
+			}
+			if !ruleExists {
+				// 创建新规则
+				dbClient.Rules = append(dbClient.Rules, protocol.ProxyRule{
+					Name:         req.PluginName,
+					Type:         req.PluginName,
+					RemotePort:   req.RemotePort,
+					Enabled:      boolPtr(true),
+					AuthEnabled:  req.AuthEnabled,
+					AuthUsername: req.AuthUsername,
+					AuthPassword: req.AuthPassword,
+				})
+			}
+		}
+
 		h.app.GetClientStore().UpdateClient(dbClient)
 	}
 
 	// 启动服务端监听器（让外部用户可以通过 RemotePort 访问插件）
 	if req.RemotePort > 0 {
 		pluginRule := protocol.ProxyRule{
-			Name:       req.PluginName,
-			Type:       req.PluginName, // 使用插件名作为类型，让 isClientPlugin 识别
-			RemotePort: req.RemotePort,
-			Enabled:    boolPtr(true),
+			Name:         req.PluginName,
+			Type:         req.PluginName, // 使用插件名作为类型，让 isClientPlugin 识别
+			RemotePort:   req.RemotePort,
+			Enabled:      boolPtr(true),
+			AuthEnabled:  req.AuthEnabled,
+			AuthUsername: req.AuthUsername,
+			AuthPassword: req.AuthPassword,
 		}
 		// 启动监听器（忽略错误，可能端口已被占用）
 		h.app.GetServer().StartPluginRule(req.ClientID, pluginRule)

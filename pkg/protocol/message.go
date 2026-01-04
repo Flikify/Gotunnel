@@ -67,6 +67,10 @@ const (
 	MsgTypeLogRequest uint8 = 80 // 请求客户端日志
 	MsgTypeLogData    uint8 = 81 // 日志数据
 	MsgTypeLogStop    uint8 = 82 // 停止日志流
+
+	// 插件 API 路由消息
+	MsgTypePluginAPIRequest  uint8 = 90 // 插件 API 请求
+	MsgTypePluginAPIResponse uint8 = 91 // 插件 API 响应
 )
 
 // Message 基础消息结构
@@ -100,6 +104,10 @@ type ProxyRule struct {
 	PluginName    string            `json:"plugin_name,omitempty" yaml:"plugin_name"`
 	PluginVersion string            `json:"plugin_version,omitempty" yaml:"plugin_version"`
 	PluginConfig  map[string]string `json:"plugin_config,omitempty" yaml:"plugin_config"`
+	// HTTP Basic Auth 字段 (用于独立端口模式)
+	AuthEnabled  bool   `json:"auth_enabled,omitempty" yaml:"auth_enabled"`
+	AuthUsername string `json:"auth_username,omitempty" yaml:"auth_username"`
+	AuthPassword string `json:"auth_password,omitempty" yaml:"auth_password"`
 }
 
 // IsEnabled 检查规则是否启用，默认为 true
@@ -349,6 +357,24 @@ type LogData struct {
 // LogStopRequest 停止日志流请求
 type LogStopRequest struct {
 	SessionID string `json:"session_id"` // 会话 ID
+}
+
+// PluginAPIRequest 插件 API 请求
+type PluginAPIRequest struct {
+	PluginName string            `json:"plugin_name"` // 插件名称
+	Method     string            `json:"method"`      // HTTP 方法: GET, POST, PUT, DELETE
+	Path       string            `json:"path"`        // 路由路径
+	Query      string            `json:"query"`       // 查询参数
+	Headers    map[string]string `json:"headers"`     // 请求头
+	Body       string            `json:"body"`        // 请求体
+}
+
+// PluginAPIResponse 插件 API 响应
+type PluginAPIResponse struct {
+	Status  int               `json:"status"`  // HTTP 状态码
+	Headers map[string]string `json:"headers"` // 响应头
+	Body    string            `json:"body"`    // 响应体
+	Error   string            `json:"error"`   // 错误信息
 }
 
 // WriteMessage 写入消息到 writer

@@ -27,6 +27,7 @@ type JSPlugin struct {
 	mu             sync.Mutex
 	eventListeners map[string][]func(goja.Value)
 	storagePath    string
+	apiHandlers    map[string]map[string]goja.Callable // method -> path -> handler
 }
 
 // NewJSPlugin 从 JS 源码创建插件
@@ -38,6 +39,7 @@ func NewJSPlugin(name, source string) (*JSPlugin, error) {
 		sandbox:        DefaultSandbox(),
 		eventListeners: make(map[string][]func(goja.Value)),
 		storagePath:    filepath.Join("plugin_data", name+".json"),
+		apiHandlers:    make(map[string]map[string]goja.Callable),
 	}
 
 	// 确保存储目录存在
@@ -85,6 +87,9 @@ func (p *JSPlugin) init() error {
 
 	// 注入 HTTP API
 	p.vm.Set("http", p.createHttpAPI())
+
+	// 注入路由 API
+	p.vm.Set("api", p.createRouteAPI())
 
 	// 执行脚本
 	_, err := p.vm.RunString(p.source)
@@ -668,4 +673,140 @@ func (p *JSPlugin) createNotifyAPI() map[string]interface{} {
 			fmt.Printf("[NOTIFY][%s] %s: %s\n", p.name, title, msg)
 		},
 	}
+}
+
+// =============================================================================
+// Route API (用于 Web API 代理)
+// =============================================================================
+
+func (p *JSPlugin) createRouteAPI() map[string]interface{} {
+	return map[string]interface{}{
+		"handle": p.apiHandle,
+		"get":    func(path string, handler goja.Callable) { p.apiRegister("GET", path, handler) },
+		"post":   func(path string, handler goja.Callable) { p.apiRegister("POST", path, handler) },
+		"put":    func(path string, handler goja.Callable) { p.apiRegister("PUT", path, handler) },
+		"delete": func(path string, handler goja.Callable) { p.apiRegister("DELETE", path, handler) },
+	}
+}
+
+// apiHandle 注册 API 路由处理函数
+func (p *JSPlugin) apiHandle(method, path string, handler goja.Callable) {
+	p.apiRegister(method, path, handler)
+}
+
+// apiRegister 注册 API 路由
+func (p *JSPlugin) apiRegister(method, path string, handler goja.Callable) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.apiHandlers[method] == nil {
+		p.apiHandlers[method] = make(map[string]goja.Callable)
+	}
+	p.apiHandlers[method][path] = handler
+	fmt.Printf("[JS:%s] Registered API: %s %s\n", p.name, method, path)
+}
+
+// HandleAPIRequest 处理 API 请求
+func (p *JSPlugin) HandleAPIRequest(method, path, query string, headers map[string]string, body string) (int, map[string]string, string, error) {
+	p.mu.Lock()
+	handlers := p.apiHandlers[method]
+	p.mu.Unlock()
+
+	if handlers == nil {
+		return 404, nil, `{"error":"method not allowed"}`, nil
+	}
+
+	// 查找匹配的路由
+	var handler goja.Callable
+	var matchedPath string
+
+	for registeredPath, h := range handlers {
+		if matchRoute(registeredPath, path) {
+			handler = h
+			matchedPath = registeredPath
+			break
+		}
+	}
+
+	if handler == nil {
+		return 404, nil, `{"error":"route not found"}`, nil
+	}
+
+	// 构建请求对象
+	reqObj := map[string]interface{}{
+		"method":  method,
+		"path":    path,
+		"pattern": matchedPath,
+		"query":   query,
+		"headers": headers,
+		"body":    body,
+		"params":  extractParams(matchedPath, path),
+	}
+
+	// 调用处理函数
+	result, err := handler(goja.Undefined(), p.vm.ToValue(reqObj))
+	if err != nil {
+		return 500, nil, fmt.Sprintf(`{"error":"%s"}`, err.Error()), nil
+	}
+
+	// 解析响应
+	if result == nil || goja.IsUndefined(result) || goja.IsNull(result) {
+		return 200, nil, "", nil
+	}
+
+	respObj := result.ToObject(p.vm)
+	status := 200
+	if s := respObj.Get("status"); s != nil && !goja.IsUndefined(s) {
+		status = int(s.ToInteger())
+	}
+
+	respHeaders := make(map[string]string)
+	if h := respObj.Get("headers"); h != nil && !goja.IsUndefined(h) {
+		hObj := h.ToObject(p.vm)
+		for _, key := range hObj.Keys() {
+			respHeaders[key] = hObj.Get(key).String()
+		}
+	}
+
+	respBody := ""
+	if b := respObj.Get("body"); b != nil && !goja.IsUndefined(b) {
+		respBody = b.String()
+	}
+
+	return status, respHeaders, respBody, nil
+}
+
+// matchRoute 匹配路由 (支持简单的路径参数)
+func matchRoute(pattern, path string) bool {
+	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
+	pathParts := strings.Split(strings.Trim(path, "/"), "/")
+
+	if len(patternParts) != len(pathParts) {
+		return false
+	}
+
+	for i, part := range patternParts {
+		if strings.HasPrefix(part, ":") {
+			continue // 路径参数，匹配任意值
+		}
+		if part != pathParts[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// extractParams 提取路径参数
+func extractParams(pattern, path string) map[string]string {
+	params := make(map[string]string)
+	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
+	pathParts := strings.Split(strings.Trim(path, "/"), "/")
+
+	for i, part := range patternParts {
+		if strings.HasPrefix(part, ":") && i < len(pathParts) {
+			paramName := strings.TrimPrefix(part, ":")
+			params[paramName] = pathParts[i]
+		}
+	}
+	return params
 }

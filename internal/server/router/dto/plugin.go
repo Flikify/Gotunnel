@@ -106,6 +106,10 @@ type StoreInstallRequest struct {
 	ClientID     string        `json:"client_id" binding:"required"`
 	RemotePort   int           `json:"remote_port"`
 	ConfigSchema []ConfigField `json:"config_schema,omitempty"`
+	// HTTP Basic Auth 配置
+	AuthEnabled  bool   `json:"auth_enabled,omitempty"`
+	AuthUsername string `json:"auth_username,omitempty"`
+	AuthPassword string `json:"auth_password,omitempty"`
 }
 
 // JSPluginPushRequest 推送 JS 插件到客户端请求

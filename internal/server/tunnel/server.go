@@ -3,11 +3,13 @@ package tunnel
 import (
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -1123,6 +1125,16 @@ func (s *Server) acceptClientPluginConns(cs *ClientSession, ln net.Listener, rul
 func (s *Server) handleClientPluginConn(cs *ClientSession, conn net.Conn, rule protocol.ProxyRule) {
 	defer conn.Close()
 
+	// 如果启用了 HTTP Basic Auth，先进行认证
+	var bufferedData []byte
+	if rule.AuthEnabled {
+		authenticated, data := s.checkHTTPBasicAuth(conn, rule.AuthUsername, rule.AuthPassword)
+		if !authenticated {
+			return
+		}
+		bufferedData = data
+	}
+
 	stream, err := cs.Session.Open()
 	if err != nil {
 		log.Printf("[Server] Open stream error: %v", err)
@@ -1139,7 +1151,82 @@ func (s *Server) handleClientPluginConn(cs *ClientSession, conn net.Conn, rule p
 		return
 	}
 
+	// 如果有缓冲的数据（已读取的 HTTP 请求头），先发送给客户端
+	if len(bufferedData) > 0 {
+		if _, err := stream.Write(bufferedData); err != nil {
+			return
+		}
+	}
+
 	relay.Relay(conn, stream)
+}
+
+// checkHTTPBasicAuth 检查 HTTP Basic Auth
+// 返回 (认证成功, 已读取的数据)
+func (s *Server) checkHTTPBasicAuth(conn net.Conn, username, password string) (bool, []byte) {
+	// 设置读取超时
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	defer conn.SetReadDeadline(time.Time{}) // 重置超时
+
+	// 读取 HTTP 请求头
+	buf := make([]byte, 8192) // 增大缓冲区以处理更大的请求头
+	n, err := conn.Read(buf)
+	if err != nil {
+		return false, nil
+	}
+
+	data := buf[:n]
+	request := string(data)
+
+	// 解析 Authorization 头
+	authHeader := ""
+	lines := strings.Split(request, "\r\n")
+	for _, line := range lines {
+		if strings.HasPrefix(strings.ToLower(line), "authorization:") {
+			authHeader = strings.TrimSpace(line[14:])
+			break
+		}
+	}
+
+	// 检查 Basic Auth
+	if authHeader == "" || !strings.HasPrefix(authHeader, "Basic ") {
+		s.sendHTTPUnauthorized(conn)
+		return false, nil
+	}
+
+	// 解码 Base64
+	encoded := authHeader[6:]
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		s.sendHTTPUnauthorized(conn)
+		return false, nil
+	}
+
+	// 解析 username:password
+	credentials := string(decoded)
+	parts := strings.SplitN(credentials, ":", 2)
+	if len(parts) != 2 {
+		s.sendHTTPUnauthorized(conn)
+		return false, nil
+	}
+
+	if parts[0] != username || parts[1] != password {
+		s.sendHTTPUnauthorized(conn)
+		return false, nil
+	}
+
+	return true, data
+}
+
+// sendHTTPUnauthorized 发送 401 未授权响应
+func (s *Server) sendHTTPUnauthorized(conn net.Conn) {
+	response := "HTTP/1.1 401 Unauthorized\r\n" +
+		"WWW-Authenticate: Basic realm=\"GoTunnel Plugin\"\r\n" +
+		"Content-Type: text/plain\r\n" +
+		"Content-Length: 12\r\n" +
+		"\r\n" +
+		"Unauthorized"
+	conn.Write([]byte(response))
 }
 
 // autoPushJSPlugins 自动推送 JS 插件到客户端
@@ -1373,6 +1460,52 @@ func (s *Server) StartPluginRule(clientID string, rule protocol.ProxyRule) error
 	// 启动插件监听器
 	s.startClientPluginListener(cs, rule)
 	return nil
+}
+
+// ProxyPluginAPIRequest 代理插件 API 请求到客户端
+func (s *Server) ProxyPluginAPIRequest(clientID string, req protocol.PluginAPIRequest) (*protocol.PluginAPIResponse, error) {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("client %s not found or not online", clientID)
+	}
+
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return nil, fmt.Errorf("open stream: %w", err)
+	}
+	defer stream.Close()
+
+	// 设置超时（30秒）
+	stream.SetDeadline(time.Now().Add(30 * time.Second))
+
+	// 发送 API 请求
+	msg, err := protocol.NewMessage(protocol.MsgTypePluginAPIRequest, req)
+	if err != nil {
+		return nil, err
+	}
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return nil, err
+	}
+
+	// 读取响应
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.Type != protocol.MsgTypePluginAPIResponse {
+		return nil, fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+
+	var apiResp protocol.PluginAPIResponse
+	if err := resp.ParsePayload(&apiResp); err != nil {
+		return nil, err
+	}
+
+	return &apiResp, nil
 }
 
 // RestartClientPlugin 重启客户端 JS 插件
