@@ -248,6 +248,7 @@ type PluginStatusQueryResponse struct {
 
 // JSPluginInstallRequest JS 插件安装请求
 type JSPluginInstallRequest struct {
+	PluginID   string            `json:"plugin_id"`   // 插件实例唯一 ID
 	PluginName string            `json:"plugin_name"` // 插件名称
 	Source     string            `json:"source"`      // JS 源码
 	Signature  string            `json:"signature"`   // 官方签名 (Base64)
@@ -361,7 +362,8 @@ type LogStopRequest struct {
 
 // PluginAPIRequest 插件 API 请求
 type PluginAPIRequest struct {
-	PluginName string            `json:"plugin_name"` // 插件名称
+	PluginID   string            `json:"plugin_id"`   // 插件实例唯一 ID
+	PluginName string            `json:"plugin_name"` // 插件名称 (向后兼容)
 	Method     string            `json:"method"`      // HTTP 方法: GET, POST, PUT, DELETE
 	Path       string            `json:"path"`        // 路由路径
 	Query      string            `json:"query"`       // 查询参数

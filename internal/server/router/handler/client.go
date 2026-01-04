@@ -333,25 +333,43 @@ func (h *ClientHandler) InstallPlugins(c *gin.Context) {
 // @Produce json
 // @Security Bearer
 // @Param id path string true "客户端ID"
-// @Param pluginName path string true "插件名称"
+// @Param pluginID path string true "插件实例ID"
 // @Param action path string true "操作类型" Enums(start, stop, restart, config, delete)
 // @Param request body dto.ClientPluginActionRequest false "操作参数"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
-// @Router /api/client/{id}/plugin/{pluginName}/{action} [post]
+// @Router /api/client/{id}/plugin/{pluginID}/{action} [post]
 func (h *ClientHandler) PluginAction(c *gin.Context) {
 	clientID := c.Param("id")
-	pluginName := c.Param("pluginName")
+	pluginID := c.Param("pluginID")
 	action := c.Param("action")
 
 	var req dto.ClientPluginActionRequest
 	c.ShouldBindJSON(&req) // 忽略错误，使用默认值
 
+	// 通过 pluginID 查找插件信息
+	client, err := h.app.GetClientStore().GetClient(clientID)
+	if err != nil {
+		NotFound(c, "client not found")
+		return
+	}
+
+	var pluginName string
+	for _, p := range client.Plugins {
+		if p.ID == pluginID {
+			pluginName = p.Name
+			break
+		}
+	}
+	if pluginName == "" {
+		NotFound(c, "plugin not found")
+		return
+	}
+
 	if req.RuleName == "" {
 		req.RuleName = pluginName
 	}
 
-	var err error
 	switch action {
 	case "start":
 		err = h.app.GetServer().StartClientPlugin(clientID, pluginName, req.RuleName)
@@ -366,7 +384,7 @@ func (h *ClientHandler) PluginAction(c *gin.Context) {
 		}
 		err = h.app.GetServer().UpdateClientPluginConfig(clientID, pluginName, req.RuleName, req.Config, req.Restart)
 	case "delete":
-		err = h.deleteClientPlugin(clientID, pluginName)
+		err = h.deleteClientPlugin(clientID, pluginID)
 	default:
 		BadRequest(c, "unknown action: "+action)
 		return
@@ -378,13 +396,14 @@ func (h *ClientHandler) PluginAction(c *gin.Context) {
 	}
 
 	Success(c, gin.H{
-		"status": "ok",
-		"action": action,
-		"plugin": pluginName,
+		"status":    "ok",
+		"action":    action,
+		"plugin_id": pluginID,
+		"plugin":    pluginName,
 	})
 }
 
-func (h *ClientHandler) deleteClientPlugin(clientID, pluginName string) error {
+func (h *ClientHandler) deleteClientPlugin(clientID, pluginID string) error {
 	client, err := h.app.GetClientStore().GetClient(clientID)
 	if err != nil {
 		return fmt.Errorf("client not found")
@@ -393,7 +412,7 @@ func (h *ClientHandler) deleteClientPlugin(clientID, pluginName string) error {
 	var newPlugins []db.ClientPlugin
 	found := false
 	for _, p := range client.Plugins {
-		if p.Name == pluginName {
+		if p.ID == pluginID {
 			found = true
 			continue
 		}
@@ -401,7 +420,7 @@ func (h *ClientHandler) deleteClientPlugin(clientID, pluginName string) error {
 	}
 
 	if !found {
-		return fmt.Errorf("plugin %s not found", pluginName)
+		return fmt.Errorf("plugin %s not found", pluginID)
 	}
 
 	client.Plugins = newPlugins

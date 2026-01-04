@@ -550,10 +550,15 @@ func (c *Client) handleJSPluginInstall(stream net.Conn, msg *protocol.Message) {
 		return
 	}
 
-	c.logf("[Client] Installing JS plugin: %s", req.PluginName)
+	c.logf("[Client] Installing JS plugin: %s (ID: %s)", req.PluginName, req.PluginID)
+
+	// 使用 PluginID 作为 key（如果有），否则回退到 pluginName:ruleName
+	key := req.PluginID
+	if key == "" {
+		key = req.PluginName + ":" + req.RuleName
+	}
 
 	// 如果插件已经在运行，先停止它
-	key := req.PluginName + ":" + req.RuleName
 	c.pluginMu.Lock()
 	if existingHandler, ok := c.runningPlugins[key]; ok {
 		c.logf("[Client] Stopping existing plugin %s before reinstall", key)
@@ -625,12 +630,16 @@ func (c *Client) startJSPlugin(handler plugin.ClientPlugin, req protocol.JSPlugi
 		return
 	}
 
-	key := req.PluginName + ":" + req.RuleName
+	// 使用 PluginID 作为 key（如果有），否则回退到 pluginName:ruleName
+	key := req.PluginID
+	if key == "" {
+		key = req.PluginName + ":" + req.RuleName
+	}
 	c.pluginMu.Lock()
 	c.runningPlugins[key] = handler
 	c.pluginMu.Unlock()
 
-	c.logf("[Client] JS plugin %s started at %s", req.PluginName, localAddr)
+	c.logf("[Client] JS plugin %s (ID: %s) started at %s", req.PluginName, req.PluginID, localAddr)
 }
 
 // verifyJSPluginSignature 验证 JS 插件签名
@@ -1055,16 +1064,25 @@ func (c *Client) handlePluginAPIRequest(stream net.Conn, msg *protocol.Message) 
 		return
 	}
 
-	c.logf("[Client] Plugin API request: %s %s for plugin %s", req.Method, req.Path, req.PluginName)
+	c.logf("[Client] Plugin API request: %s %s for plugin %s (ID: %s)", req.Method, req.Path, req.PluginName, req.PluginID)
 
 	// 查找运行中的插件
 	c.pluginMu.RLock()
 	var handler plugin.ClientPlugin
-	for key, p := range c.runningPlugins {
-		// key 格式为 "pluginName:ruleName"
-		if strings.HasPrefix(key, req.PluginName+":") {
-			handler = p
-			break
+
+	// 优先使用 PluginID 查找
+	if req.PluginID != "" {
+		handler = c.runningPlugins[req.PluginID]
+	}
+
+	// 如果没找到，尝试通过 PluginName 匹配（向后兼容）
+	if handler == nil && req.PluginName != "" {
+		for key, p := range c.runningPlugins {
+			// key 可能是 PluginID 或 "pluginName:ruleName" 格式
+			if strings.HasPrefix(key, req.PluginName+":") {
+				handler = p
+				break
+			}
 		}
 	}
 	c.pluginMu.RUnlock()

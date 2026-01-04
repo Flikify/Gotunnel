@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/internal/server/router/dto"
 	"github.com/gotunnel/pkg/protocol"
@@ -125,8 +126,24 @@ func (h *StoreHandler) Install(c *gin.Context) {
 		return
 	}
 
+	// 检查插件是否已存在，决定使用已有 ID 还是生成新 ID
+	pluginID := ""
+	dbClient, err := h.app.GetClientStore().GetClient(req.ClientID)
+	if err == nil {
+		for _, p := range dbClient.Plugins {
+			if p.Name == req.PluginName && p.ID != "" {
+				pluginID = p.ID
+				break
+			}
+		}
+	}
+	if pluginID == "" {
+		pluginID = uuid.New().String()
+	}
+
 	// 安装到客户端
 	installReq := JSPluginInstallRequest{
+		PluginID:   pluginID,
 		PluginName: req.PluginName,
 		Source:     string(source),
 		Signature:  string(signature),
@@ -152,14 +169,19 @@ func (h *StoreHandler) Install(c *gin.Context) {
 	h.app.GetJSPluginStore().SaveJSPlugin(jsPlugin)
 
 	// 将插件信息保存到客户端记录
-	dbClient, err := h.app.GetClientStore().GetClient(req.ClientID)
+	// 重新获取 dbClient（可能已被修改）
+	dbClient, err = h.app.GetClientStore().GetClient(req.ClientID)
 	if err == nil {
-		// 检查插件是否已存在
+		// 检查插件是否已存在（通过名称匹配）
 		pluginExists := false
 		for i, p := range dbClient.Plugins {
 			if p.Name == req.PluginName {
 				dbClient.Plugins[i].Enabled = true
 				dbClient.Plugins[i].RemotePort = req.RemotePort
+				// 确保有 ID
+				if dbClient.Plugins[i].ID == "" {
+					dbClient.Plugins[i].ID = pluginID
+				}
 				pluginExists = true
 				break
 			}
@@ -183,6 +205,7 @@ func (h *StoreHandler) Install(c *gin.Context) {
 				})
 			}
 			dbClient.Plugins = append(dbClient.Plugins, db.ClientPlugin{
+				ID:           pluginID,
 				Name:         req.PluginName,
 				Version:      version,
 				Enabled:      true,
@@ -240,9 +263,10 @@ func (h *StoreHandler) Install(c *gin.Context) {
 	}
 
 	Success(c, gin.H{
-		"status": "ok",
-		"plugin": req.PluginName,
-		"client": req.ClientID,
+		"status":    "ok",
+		"plugin":    req.PluginName,
+		"plugin_id": pluginID,
+		"client":    req.ClientID,
 	})
 }
 

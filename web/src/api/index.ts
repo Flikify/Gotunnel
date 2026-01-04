@@ -30,17 +30,17 @@ export const installPluginsToClient = (id: string, plugins: string[]) =>
 // 规则配置模式
 export const getRuleSchemas = () => get<RuleSchemasMap>('/rule-schemas')
 
-// 客户端插件控制
-export const startClientPlugin = (clientId: string, pluginName: string, ruleName: string) =>
-  post(`/client/${clientId}/plugin/${pluginName}/start`, { rule_name: ruleName })
-export const stopClientPlugin = (clientId: string, pluginName: string, ruleName: string) =>
-  post(`/client/${clientId}/plugin/${pluginName}/stop`, { rule_name: ruleName })
-export const restartClientPlugin = (clientId: string, pluginName: string, ruleName: string) =>
-  post(`/client/${clientId}/plugin/${pluginName}/restart`, { rule_name: ruleName })
-export const deleteClientPlugin = (clientId: string, pluginName: string) =>
-  post(`/client/${clientId}/plugin/${pluginName}/delete`)
-export const updateClientPluginConfigWithRestart = (clientId: string, pluginName: string, ruleName: string, config: Record<string, string>, restart: boolean) =>
-  post(`/client/${clientId}/plugin/${pluginName}/config`, { rule_name: ruleName, config, restart })
+// 客户端插件控制（使用 pluginID）
+export const startClientPlugin = (clientId: string, pluginId: string, ruleName: string) =>
+  post(`/client/${clientId}/plugin/${pluginId}/start`, { rule_name: ruleName })
+export const stopClientPlugin = (clientId: string, pluginId: string, ruleName: string) =>
+  post(`/client/${clientId}/plugin/${pluginId}/stop`, { rule_name: ruleName })
+export const restartClientPlugin = (clientId: string, pluginId: string, ruleName: string) =>
+  post(`/client/${clientId}/plugin/${pluginId}/restart`, { rule_name: ruleName })
+export const deleteClientPlugin = (clientId: string, pluginId: string) =>
+  post(`/client/${clientId}/plugin/${pluginId}/delete`)
+export const updateClientPluginConfigWithRestart = (clientId: string, pluginId: string, ruleName: string, config: Record<string, string>, restart: boolean) =>
+  post(`/client/${clientId}/plugin/${pluginId}/config`, { rule_name: ruleName, config, restart })
 
 // 插件管理
 export const getPlugins = () => get<PluginInfo[]>('/plugins')
@@ -70,6 +70,23 @@ export const updateJSPluginConfig = (name: string, config: Record<string, string
   put(`/js-plugin/${name}/config`, { config })
 export const setJSPluginEnabled = (name: string, enabled: boolean) =>
   post(`/js-plugin/${name}/${enabled ? 'enable' : 'disable'}`)
+
+// 插件 API 代理（通过 pluginID 调用插件自定义 API）
+export const callPluginAPI = <T = any>(clientId: string, pluginId: string, method: string, route: string, body?: any) => {
+  const path = `/client/${clientId}/plugin-api/${pluginId}${route.startsWith('/') ? route : '/' + route}`
+  switch (method.toUpperCase()) {
+    case 'GET':
+      return get<T>(path)
+    case 'POST':
+      return post<T>(path, body)
+    case 'PUT':
+      return put<T>(path, body)
+    case 'DELETE':
+      return del<T>(path)
+    default:
+      return get<T>(path)
+  }
+}
 
 // 更新管理
 export interface UpdateInfo {

@@ -15,6 +15,7 @@ type ConfigField struct {
 
 // ClientPlugin 客户端已安装的插件
 type ClientPlugin struct {
+	ID           string            `json:"id"`                   // 插件实例唯一 ID
 	Name         string            `json:"name"`
 	Version      string            `json:"version"`
 	Enabled      bool              `json:"enabled"`

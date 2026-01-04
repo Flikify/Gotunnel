@@ -278,7 +278,7 @@ const handleStartPlugin = async (plugin: ClientPlugin) => {
   const rule = rules.value.find(r => r.type === plugin.name)
   const ruleName = rule?.name || plugin.name
   try {
-    await startClientPlugin(clientId, plugin.name, ruleName)
+    await startClientPlugin(clientId, plugin.id, ruleName)
     message.success(`已启动 ${plugin.name}`)
     plugin.running = true
   } catch (e: any) {
@@ -292,7 +292,7 @@ const handleRestartPlugin = async (plugin: ClientPlugin) => {
   const rule = rules.value.find(r => r.type === plugin.name)
   const ruleName = rule?.name || plugin.name
   try {
-    await restartClientPlugin(clientId, plugin.name, ruleName)
+    await restartClientPlugin(clientId, plugin.id, ruleName)
     message.success(`已重启 ${plugin.name}`)
     plugin.running = true
   } catch (e: any) {
@@ -305,7 +305,7 @@ const handleStopPlugin = async (plugin: ClientPlugin) => {
   const rule = rules.value.find(r => r.type === plugin.name)
   const ruleName = rule?.name || plugin.name
   try {
-    await stopClientPlugin(clientId, plugin.name, ruleName)
+    await stopClientPlugin(clientId, plugin.id, ruleName)
     message.success(`已停止 ${plugin.name}`)
     plugin.running = false
   } catch (e: any) {
@@ -316,7 +316,7 @@ const handleStopPlugin = async (plugin: ClientPlugin) => {
 const toggleClientPlugin = async (plugin: ClientPlugin) => {
   const newEnabled = !plugin.enabled
   const updatedPlugins = clientPlugins.value.map(p =>
-    p.name === plugin.name ? { ...p, enabled: newEnabled } : p
+    p.id === plugin.id ? { ...p, enabled: newEnabled } : p
   )
   try {
     await updateClient(clientId, {
@@ -377,7 +377,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
     negativeText: '取消',
     onPositiveClick: async () => {
       try {
-        await deleteClientPlugin(clientId, plugin.name)
+        await deleteClientPlugin(clientId, plugin.id)
         message.success(`已删除 ${plugin.name}`)
         await loadClient()
       } catch (e: any) {
@@ -596,7 +596,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="plugin in clientPlugins" :key="plugin.name">
+          <tr v-for="plugin in clientPlugins" :key="plugin.id">
             <td>{{ plugin.name }}</td>
             <td>v{{ plugin.version }}</td>
             <td>

@@ -27,16 +27,16 @@ func NewPluginAPIHandler(app AppInterface) *PluginAPIHandler {
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param clientID path string true "客户端 ID"
-// @Param pluginName path string true "插件名称"
+// @Param id path string true "客户端 ID"
+// @Param pluginID path string true "插件实例 ID"
 // @Param route path string true "插件路由"
 // @Success 200 {object} object
 // @Failure 404 {object} Response
 // @Failure 502 {object} Response
-// @Router /api/client/{clientID}/plugin/{pluginName}/{route} [get]
+// @Router /api/client/{id}/plugin-api/{pluginID}/{route} [get]
 func (h *PluginAPIHandler) ProxyRequest(c *gin.Context) {
-	clientID := c.Param("clientID")
-	pluginName := c.Param("pluginName")
+	clientID := c.Param("id")
+	pluginID := c.Param("pluginID")
 	route := c.Param("route")
 
 	// 确保路由以 / 开头
@@ -68,12 +68,12 @@ func (h *PluginAPIHandler) ProxyRequest(c *gin.Context) {
 
 	// 构建 API 请求
 	apiReq := protocol.PluginAPIRequest{
-		PluginName: pluginName,
-		Method:     c.Request.Method,
-		Path:       route,
-		Query:      c.Request.URL.RawQuery,
-		Headers:    headers,
-		Body:       body,
+		PluginID: pluginID,
+		Method:   c.Request.Method,
+		Path:     route,
+		Query:    c.Request.URL.RawQuery,
+		Headers:  headers,
+		Body:     body,
 	}
 
 	// 发送请求到客户端

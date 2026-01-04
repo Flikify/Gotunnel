@@ -68,7 +68,7 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		api.POST("/client/:id/disconnect", clientHandler.Disconnect)
 		api.POST("/client/:id/restart", clientHandler.Restart)
 		api.POST("/client/:id/install-plugins", clientHandler.InstallPlugins)
-		api.POST("/client/:id/plugin/:pluginName/:action", clientHandler.PluginAction)
+		api.POST("/client/:id/plugin/:pluginID/:action", clientHandler.PluginAction)
 
 		// 配置管理
 		configHandler := handler.NewConfigHandler(app)
@@ -112,7 +112,7 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 
 		// 插件 API 代理 (通过 Web API 访问客户端插件)
 		pluginAPIHandler := handler.NewPluginAPIHandler(app)
-		api.Any("/client/:clientID/plugin/:pluginName/*route", pluginAPIHandler.ProxyRequest)
+		api.Any("/client/:id/plugin-api/:pluginID/*route", pluginAPIHandler.ProxyRequest)
 	}
 }
 

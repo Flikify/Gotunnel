@@ -84,6 +84,7 @@ type PluginInfo struct {
 
 // JSPluginInstallRequest JS 插件安装请求
 type JSPluginInstallRequest struct {
+	PluginID   string            `json:"plugin_id"`
 	PluginName string            `json:"plugin_name"`
 	Source     string            `json:"source"`
 	Signature  string            `json:"signature"`

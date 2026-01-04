@@ -11,11 +11,13 @@ export interface ProxyRule {
 
 // 客户端已安装的插件
 export interface ClientPlugin {
+  id: string           // 插件实例唯一 ID
   name: string
   version: string
   enabled: boolean
   running: boolean
   config?: Record<string, string>
+  remote_port?: number // 远程监听端口
 }
 
 // 插件配置字段

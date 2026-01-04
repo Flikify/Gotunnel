@@ -991,6 +991,7 @@ func (s *Server) InstallJSPluginToClient(clientID string, req router.JSPluginIns
 	defer stream.Close()
 
 	installReq := protocol.JSPluginInstallRequest{
+		PluginID:   req.PluginID,
 		PluginName: req.PluginName,
 		Source:     req.Source,
 		Signature:  req.Signature,
@@ -1304,6 +1305,7 @@ func (s *Server) pushClientInstalledPlugins(cs *ClientSession, alreadyPushed map
 		}
 
 		req := router.JSPluginInstallRequest{
+			PluginID:   cp.ID,
 			PluginName: cp.Name,
 			Source:     jsPlugin.Source,
 			Signature:  jsPlugin.Signature,
