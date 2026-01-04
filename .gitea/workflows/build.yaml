@@ -11,7 +11,7 @@ on:
 jobs:
   # --- 任务 1: 构建前端 ---
   build-frontend:
-    runs-on: node-latest
+    runs-on: node
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
   # --- 任务 2: 构建多平台二进制文件 ---
   build-binaries:
     needs: build-frontend
-    runs-on: golang-latest
+    runs-on: golang
     strategy:
       fail-fast: false
       matrix:
