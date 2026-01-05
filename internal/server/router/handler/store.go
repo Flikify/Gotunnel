@@ -179,6 +179,9 @@ func (h *StoreHandler) Install(c *gin.Context) {
 			if p.Name == req.PluginName {
 				dbClient.Plugins[i].Enabled = true
 				dbClient.Plugins[i].RemotePort = req.RemotePort
+				dbClient.Plugins[i].AuthEnabled = req.AuthEnabled
+				dbClient.Plugins[i].AuthUsername = req.AuthUsername
+				dbClient.Plugins[i].AuthPassword = req.AuthPassword
 				// 确保有 ID
 				if dbClient.Plugins[i].ID == "" {
 					dbClient.Plugins[i].ID = pluginID
@@ -212,6 +215,9 @@ func (h *StoreHandler) Install(c *gin.Context) {
 				Enabled:      true,
 				RemotePort:   req.RemotePort,
 				ConfigSchema: configSchema,
+				AuthEnabled:  req.AuthEnabled,
+				AuthUsername: req.AuthUsername,
+				AuthPassword: req.AuthPassword,
 			})
 		}
 

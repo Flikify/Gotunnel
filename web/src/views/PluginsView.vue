@@ -231,10 +231,18 @@ const showInstallModal = ref(false)
 const selectedStorePlugin = ref<StorePluginInfo | null>(null)
 const selectedClientId = ref('')
 const installing = ref(false)
+const installRemotePort = ref<number | null>(8080)
+const installAuthEnabled = ref(false)
+const installAuthUsername = ref('')
+const installAuthPassword = ref('')
 
 const openInstallModal = (plugin: StorePluginInfo) => {
   selectedStorePlugin.value = plugin
   selectedClientId.value = ''
+  installRemotePort.value = 8080
+  installAuthEnabled.value = false
+  installAuthUsername.value = ''
+  installAuthPassword.value = ''
   showInstallModal.value = true
 }
 
@@ -258,11 +266,14 @@ const handleInstallStorePlugin = async () => {
       selectedStorePlugin.value.download_url,
       selectedStorePlugin.value.signature_url,
       selectedClientId.value,
-      8080, // 默认端口，可在配置中修改
+      installRemotePort.value || 8080,
       selectedStorePlugin.value.version,
-      selectedStorePlugin.value.config_schema
+      selectedStorePlugin.value.config_schema,
+      installAuthEnabled.value,
+      installAuthUsername.value,
+      installAuthPassword.value
     )
-    message.success(`已安装 ${selectedStorePlugin.value.name}，可在客户端配置中修改端口和其他设置`)
+    message.success(`已安装 ${selectedStorePlugin.value.name}`)
     showInstallModal.value = false
   } catch (e: any) {
     message.error(e.response?.data || '安装失败')
@@ -453,7 +464,7 @@ onMounted(() => {
     -->
 
     <!-- 安装商店插件模态框 -->
-    <n-modal v-model:show="showInstallModal" preset="card" title="安装插件" style="width: 400px;">
+    <n-modal v-model:show="showInstallModal" preset="card" title="安装插件" style="width: 450px;">
       <n-space vertical :size="16">
         <div v-if="selectedStorePlugin">
           <p style="margin: 0 0 8px 0;"><strong>插件:</strong> {{ selectedStorePlugin.name }}</p>
@@ -464,7 +475,26 @@ onMounted(() => {
           placeholder="选择要安装到的客户端"
           :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))"
         />
-        <p style="margin: 0; color: #999; font-size: 12px;">安装后可在客户端详情页配置端口和其他设置</p>
+        <div>
+          <p style="margin: 0 0 8px 0; color: #666; font-size: 13px;">远程端口:</p>
+          <n-input-number
+            v-model:value="installRemotePort"
+            :min="1"
+            :max="65535"
+            placeholder="输入端口号"
+            style="width: 100%;"
+          />
+        </div>
+        <div>
+          <n-space align="center" :size="8">
+            <n-switch v-model:value="installAuthEnabled" />
+            <span style="color: #666;">启用 HTTP Basic Auth</span>
+          </n-space>
+        </div>
+        <template v-if="installAuthEnabled">
+          <n-input v-model:value="installAuthUsername" placeholder="用户名" />
+          <n-input v-model:value="installAuthPassword" type="password" placeholder="密码" show-password-on="click" />
+        </template>
       </n-space>
       <template #footer>
         <n-space justify="end">

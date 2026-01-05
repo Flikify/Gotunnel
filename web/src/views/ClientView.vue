@@ -88,6 +88,14 @@ const storePlugins = ref<StorePluginInfo[]>([])
 const storeLoading = ref(false)
 const storeInstalling = ref<string | null>(null) // 正在安装的插件名称
 
+// 安装配置模态框
+const showInstallConfigModal = ref(false)
+const installPlugin = ref<StorePluginInfo | null>(null)
+const installRemotePort = ref<number | null>(8080)
+const installAuthEnabled = ref(false)
+const installAuthUsername = ref('')
+const installAuthPassword = ref('')
+
 // 日志查看相关
 const showLogViewer = ref(false)
 
@@ -111,11 +119,34 @@ const handleInstallStorePlugin = async (plugin: StorePluginInfo) => {
     message.error('该插件没有下载地址')
     return
   }
+  // 打开配置模态框
+  installPlugin.value = plugin
+  installRemotePort.value = 8080
+  installAuthEnabled.value = false
+  installAuthUsername.value = ''
+  installAuthPassword.value = ''
+  showInstallConfigModal.value = true
+}
 
-  storeInstalling.value = plugin.name
+const confirmInstallPlugin = async () => {
+  if (!installPlugin.value) return
+
+  storeInstalling.value = installPlugin.value.name
   try {
-    await installStorePlugin(plugin.name, plugin.download_url, plugin.signature_url || '', clientId, 8080, plugin.version, plugin.config_schema)
-    message.success(`已安装 ${plugin.name}，可在配置中修改端口和其他设置`)
+    await installStorePlugin(
+      installPlugin.value.name,
+      installPlugin.value.download_url || '',
+      installPlugin.value.signature_url || '',
+      clientId,
+      installRemotePort.value || 8080,
+      installPlugin.value.version,
+      installPlugin.value.config_schema,
+      installAuthEnabled.value,
+      installAuthUsername.value,
+      installAuthPassword.value
+    )
+    message.success(`已安装 ${installPlugin.value.name}`)
+    showInstallConfigModal.value = false
     showStoreModal.value = false
     await loadClient()
   } catch (e: any) {
@@ -744,6 +775,44 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
       <template #footer>
         <n-space justify="end">
           <n-button @click="showStoreModal = false">关闭</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 安装配置模态框 -->
+    <n-modal v-model:show="showInstallConfigModal" preset="card" title="安装配置" style="width: 450px;">
+      <n-space vertical :size="16">
+        <div v-if="installPlugin">
+          <p style="margin: 0 0 8px 0;"><strong>插件:</strong> {{ installPlugin.name }}</p>
+          <p style="margin: 0; color: #666;">{{ installPlugin.description }}</p>
+        </div>
+        <div>
+          <p style="margin: 0 0 8px 0; color: #666; font-size: 13px;">远程端口:</p>
+          <n-input-number
+            v-model:value="installRemotePort"
+            :min="1"
+            :max="65535"
+            placeholder="输入端口号"
+            style="width: 100%;"
+          />
+        </div>
+        <div>
+          <n-space align="center" :size="8">
+            <n-switch v-model:value="installAuthEnabled" />
+            <span style="color: #666;">启用 HTTP Basic Auth</span>
+          </n-space>
+        </div>
+        <template v-if="installAuthEnabled">
+          <n-input v-model:value="installAuthUsername" placeholder="用户名" />
+          <n-input v-model:value="installAuthPassword" type="password" placeholder="密码" show-password-on="click" />
+        </template>
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showInstallConfigModal = false">取消</n-button>
+          <n-button type="primary" :loading="!!storeInstalling" @click="confirmInstallPlugin">
+            安装
+          </n-button>
         </n-space>
       </template>
     </n-modal>

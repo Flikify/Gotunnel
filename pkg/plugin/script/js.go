@@ -174,9 +174,12 @@ func (p *JSPlugin) Start() (string, error) {
 func (p *JSPlugin) HandleConn(conn net.Conn) error {
 	defer conn.Close()
 
+	// goja Runtime 不是线程安全的，需要加锁
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	// 创建连接包装器
 	jsConn := newJSConn(conn)
-	p.vm.Set("conn", jsConn)
 
 	fn, ok := goja.AssertFunction(p.vm.Get("handleConn"))
 	if !ok {

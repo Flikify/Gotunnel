@@ -15,14 +15,17 @@ type ConfigField struct {
 
 // ClientPlugin 客户端已安装的插件
 type ClientPlugin struct {
-	ID           string            `json:"id"`                   // 插件实例唯一 ID
+	ID           string            `json:"id"`                      // 插件实例唯一 ID
 	Name         string            `json:"name"`
 	Version      string            `json:"version"`
 	Enabled      bool              `json:"enabled"`
-	Running      bool              `json:"running"`              // 运行状态
-	Config       map[string]string `json:"config,omitempty"`     // 插件配置
-	RemotePort   int               `json:"remote_port,omitempty"`// 远程监听端口
+	Running      bool              `json:"running"`                 // 运行状态
+	Config       map[string]string `json:"config,omitempty"`        // 插件配置
+	RemotePort   int               `json:"remote_port,omitempty"`   // 远程监听端口
 	ConfigSchema []ConfigField     `json:"config_schema,omitempty"` // 配置模式
+	AuthEnabled  bool              `json:"auth_enabled,omitempty"`  // 是否启用认证
+	AuthUsername string            `json:"auth_username,omitempty"` // 认证用户名
+	AuthPassword string            `json:"auth_password,omitempty"` // 认证密码
 }
 
 // Client 客户端数据

@@ -1319,10 +1319,13 @@ func (s *Server) pushClientInstalledPlugins(cs *ClientSession, alreadyPushed map
 		} else if cp.RemotePort > 0 {
 			// 安装成功后启动服务端监听器
 			pluginRule := protocol.ProxyRule{
-				Name:       cp.Name,
-				Type:       cp.Name,
-				RemotePort: cp.RemotePort,
-				Enabled:    boolPtr(true),
+				Name:         cp.Name,
+				Type:         cp.Name,
+				RemotePort:   cp.RemotePort,
+				Enabled:      boolPtr(true),
+				AuthEnabled:  cp.AuthEnabled,
+				AuthUsername: cp.AuthUsername,
+				AuthPassword: cp.AuthPassword,
 			}
 			s.startClientPluginListener(cs, pluginRule)
 		}

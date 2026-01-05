@@ -49,8 +49,30 @@ export const disablePlugin = (name: string) => post(`/plugin/${name}/disable`)
 
 // 扩展商店
 export const getStorePlugins = () => get<{ plugins: StorePluginInfo[] }>('/store/plugins')
-export const installStorePlugin = (pluginName: string, downloadUrl: string, signatureUrl: string, clientId: string, remotePort?: number, version?: string, configSchema?: ConfigField[]) =>
-  post('/store/install', { plugin_name: pluginName, version: version || '', download_url: downloadUrl, signature_url: signatureUrl, client_id: clientId, remote_port: remotePort || 0, config_schema: configSchema || [] })
+export const installStorePlugin = (
+  pluginName: string,
+  downloadUrl: string,
+  signatureUrl: string,
+  clientId: string,
+  remotePort?: number,
+  version?: string,
+  configSchema?: ConfigField[],
+  authEnabled?: boolean,
+  authUsername?: string,
+  authPassword?: string
+) =>
+  post('/store/install', {
+    plugin_name: pluginName,
+    version: version || '',
+    download_url: downloadUrl,
+    signature_url: signatureUrl,
+    client_id: clientId,
+    remote_port: remotePort || 0,
+    config_schema: configSchema || [],
+    auth_enabled: authEnabled || false,
+    auth_username: authUsername || '',
+    auth_password: authPassword || ''
+  })
 
 // 客户端插件配置
 export const getClientPluginConfig = (clientId: string, pluginName: string) =>
