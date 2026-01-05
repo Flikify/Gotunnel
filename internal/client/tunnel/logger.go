@@ -104,12 +104,8 @@ func (l *Logger) log(level LogLevel, source, format string, args ...interface{})
 		Source:    source,
 	}
 
-	// 输出到标准输出
-	fmt.Printf("%s [%s] [%s] %s\n",
-		time.Now().Format("2006-01-02 15:04:05"),
-		entry.Level,
-		entry.Source,
-		entry.Message)
+	// 注意：不在这里输出到标准输出，因为调用方（logf/logErrorf/logWarnf）已经调用了 log.Print
+	// 这里只负责：缓冲区存储、文件写入、订阅者通知
 
 	// 添加到环形缓冲区
 	l.bufferMu.Lock()

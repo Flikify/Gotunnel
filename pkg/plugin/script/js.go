@@ -390,7 +390,7 @@ func (p *JSPlugin) createHttpAPI() map[string]interface{} {
 }
 
 // httpServe 启动 HTTP 服务处理连接
-func (p *JSPlugin) httpServe(conn net.Conn, handler func(map[string]interface{}) map[string]interface{}) {
+func (p *JSPlugin) httpServe(conn net.Conn, handler goja.Callable) {
 	defer conn.Close()
 
 	buf := make([]byte, 4096)
@@ -400,7 +400,28 @@ func (p *JSPlugin) httpServe(conn net.Conn, handler func(map[string]interface{})
 	}
 
 	req := parseHTTPRequest(buf[:n])
-	resp := handler(req)
+
+	// 调用 JS handler 函数
+	result, err := handler(goja.Undefined(), p.vm.ToValue(req))
+	if err != nil {
+		fmt.Printf("[JS:%s] HTTP handler error: %v\n", p.name, err)
+		conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+		return
+	}
+
+	// 将结果转换为 map
+	if result == nil || goja.IsUndefined(result) || goja.IsNull(result) {
+		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+		return
+	}
+
+	resp := make(map[string]interface{})
+	respObj := result.ToObject(p.vm)
+	for _, key := range respObj.Keys() {
+		val := respObj.Get(key)
+		resp[key] = val.Export()
+	}
+
 	writeHTTPResponse(conn, resp)
 }
 
