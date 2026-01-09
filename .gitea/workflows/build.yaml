@@ -15,43 +15,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      # 使用本地目录缓存（而非 actions/cache）
-      - name: Cache Node modules
-        run: |
-          CACHE_DIR="/data/cache/node-modules"
-          CACHE_KEY="node-modules-${{ hashFiles('web/package-lock.json') }}"
-          
-          mkdir -p "$CACHE_DIR"
-          
-          # 如果缓存存在且匹配，恢复缓存
-          if [ -d "$CACHE_DIR/$CACHE_KEY" ]; then
-            echo "Cache hit: $CACHE_KEY"
-            cp -r "$CACHE_DIR/$CACHE_KEY" web/node_modules
-          else
-            echo "Cache miss: $CACHE_KEY"
-            # 清理旧缓存
-            rm -rf "$CACHE_DIR"/*
-          fi
-      
+      # 直接挂载宿主机的缓存目录
       - name: Build Frontend
         run: |
           cd web
-          npm ci --prefer-offline --no-audit
-          npm run build
-      
-      # 保存缓存到本地目录
-      - name: Save Node modules cache
-        if: always()
-        run: |
-          CACHE_DIR="/data/cache/node-modules"
-          CACHE_KEY="node-modules-${{ hashFiles('web/package-lock.json') }}"
-          
-          if [ -d "web/node_modules" ]; then
-            mkdir -p "$CACHE_DIR"
-            rm -rf "$CACHE_DIR/$CACHE_KEY"
-            cp -r web/node_modules "$CACHE_DIR/$CACHE_KEY"
-            echo "Cache saved: $CACHE_KEY"
+          # 使用共享的 node_modules 缓存
+          if [ -d /data/cache/node_modules_cache ]; then
+            echo "Restoring node_modules from cache..."
+            cp -r /data/cache/node_modules_cache/node_modules . 2>/dev/null || true
           fi
+          
+          npm ci --prefer-offline --no-audit
+          
+          # 保存缓存
+          mkdir -p /data/cache/node_modules_cache
+          cp -r node_modules /data/cache/node_modules_cache/ 2>/dev/null || true
+          
+          npm run build
       
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v3
@@ -67,7 +47,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ... 你的 matrix 配置保持不变 ...
+          - { goos: linux, goarch: amd64, target: server, upx: true }
+          - { goos: linux, goarch: amd64, target: client, upx: true }
+          - { goos: linux, goarch: arm64, target: server, upx: true }
+          - { goos: linux, goarch: arm64, target: client, upx: true }
+          - { goos: linux, goarch: arm, goarm: 7, target: server, upx: true }
+          - { goos: linux, goarch: arm, goarm: 7, target: client, upx: true }
+          - { goos: windows, goarch: amd64, target: server, upx: true }
+          - { goos: windows, goarch: amd64, target: client, upx: true }
+          - { goos: windows, goarch: arm64, target: server, upx: false }
+          - { goos: darwin, goarch: amd64, target: server, upx: false }
+          - { goos: darwin, goarch: arm64, target: server, upx: false }
     
     steps:
       - name: Install Dependencies
@@ -83,23 +73,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      # 使用本地目录缓存 Go 模块
-      - name: Cache Go modules
+      # 使用挂载卷缓存 Go 模块
+      - name: Setup Go Cache
         run: |
-          CACHE_DIR="/data/cache/go-modules"
-          CACHE_KEY="go-${{ runner.os }}-${{ hashFiles('go.sum') }}"
+          # 创建缓存目录
+          mkdir -p /data/cache/go-pkg-mod
+          mkdir -p /data/cache/go-build-cache
+          mkdir -p ~/go/pkg/mod
+          mkdir -p ~/.cache/go-build
           
-          mkdir -p "$CACHE_DIR"
+          # 恢复缓存（使用硬链接以节省空间和时间）
+          if [ -d /data/cache/go-pkg-mod ] && [ "$(ls -A /data/cache/go-pkg-mod)" ]; then
+            echo "Restoring Go pkg cache..."
+            cp -al /data/cache/go-pkg-mod/* ~/go/pkg/mod/ 2>/dev/null || true
+          fi
           
-          if [ -d "$CACHE_DIR/$CACHE_KEY" ]; then
-            echo "Cache hit: $CACHE_KEY"
-            mkdir -p ~/go/pkg/mod
-            mkdir -p ~/.cache/go-build
-            [ -d "$CACHE_DIR/$CACHE_KEY/mod" ] && cp -r "$CACHE_DIR/$CACHE_KEY/mod"/* ~/go/pkg/mod/ 2>/dev/null || true
-            [ -d "$CACHE_DIR/$CACHE_KEY/build" ] && cp -r "$CACHE_DIR/$CACHE_KEY/build"/* ~/.cache/go-build/ 2>/dev/null || true
-          else
-            echo "Cache miss: $CACHE_KEY"
-            rm -rf "$CACHE_DIR"/*
+          if [ -d /data/cache/go-build-cache ] && [ "$(ls -A /data/cache/go-build-cache)" ]; then
+            echo "Restoring Go build cache..."
+            cp -al /data/cache/go-build-cache/* ~/.cache/go-build/ 2>/dev/null || true
           fi
       
       - name: Download Go dependencies
@@ -130,19 +121,16 @@ jobs:
           
           echo "CURRENT_FILENAME=${FILENAME}" >> $GITHUB_ENV
       
-      # 保存 Go 模块缓存
-      - name: Save Go modules cache
+      # 保存 Go 缓存（异步，不阻塞主流程）
+      - name: Save Go Cache
         if: always()
         run: |
-          CACHE_DIR="/data/cache/go-modules"
-          CACHE_KEY="go-${{ runner.os }}-${{ hashFiles('go.sum') }}"
+          # 只在缓存有更新时保存（使用 rsync 可以更高效）
+          rsync -a --delete ~/go/pkg/mod/ /data/cache/go-pkg-mod/ 2>/dev/null || \
+            cp -r ~/go/pkg/mod/* /data/cache/go-pkg-mod/ 2>/dev/null || true
           
-          mkdir -p "$CACHE_DIR/$CACHE_KEY"
-          
-          [ -d ~/go/pkg/mod ] && cp -r ~/go/pkg/mod "$CACHE_DIR/$CACHE_KEY/" 2>/dev/null || true
-          [ -d ~/.cache/go-build ] && cp -r ~/.cache/go-build "$CACHE_DIR/$CACHE_KEY/" 2>/dev/null || true
-          
-          echo "Cache saved: $CACHE_KEY"
+          rsync -a --delete ~/.cache/go-build/ /data/cache/go-build-cache/ 2>/dev/null || \
+            cp -r ~/.cache/go-build/* /data/cache/go-build-cache/ 2>/dev/null || true
       
       - name: Run UPX Compression
         if: matrix.upx == true
