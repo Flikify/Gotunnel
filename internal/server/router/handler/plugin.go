@@ -209,7 +209,7 @@ func (h *PluginHandler) GetClientConfig(c *gin.Context) {
 	schemaFields = append(schemaFields, dto.ConfigField{
 		Key:         "auth_enabled",
 		Label:       "启用认证",
-		Type:        "boolean",
+		Type:        "bool",
 		Description: "启用 HTTP Basic Auth 保护",
 	}, dto.ConfigField{
 		Key:         "auth_username",
