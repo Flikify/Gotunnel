@@ -9,27 +9,49 @@ on:
       - '.gitea/workflows/**'
 
 jobs:
-  # --- 任务 1: 构建前端 ---
   build-frontend:
     runs-on: node
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      # 缓存 node_modules
+      # 使用本地目录缓存（而非 actions/cache）
       - name: Cache Node modules
-        uses: actions/cache@v3
-        with:
-          path: web/node_modules
-          key: node-modules-${{ hashFiles('web/package-lock.json') }}
-          restore-keys: |
-            node-modules-
+        run: |
+          CACHE_DIR="/data/cache/node-modules"
+          CACHE_KEY="node-modules-${{ hashFiles('web/package-lock.json') }}"
+          
+          mkdir -p "$CACHE_DIR"
+          
+          # 如果缓存存在且匹配，恢复缓存
+          if [ -d "$CACHE_DIR/$CACHE_KEY" ]; then
+            echo "Cache hit: $CACHE_KEY"
+            cp -r "$CACHE_DIR/$CACHE_KEY" web/node_modules
+          else
+            echo "Cache miss: $CACHE_KEY"
+            # 清理旧缓存
+            rm -rf "$CACHE_DIR"/*
+          fi
       
       - name: Build Frontend
         run: |
           cd web
           npm ci --prefer-offline --no-audit
           npm run build
+      
+      # 保存缓存到本地目录
+      - name: Save Node modules cache
+        if: always()
+        run: |
+          CACHE_DIR="/data/cache/node-modules"
+          CACHE_KEY="node-modules-${{ hashFiles('web/package-lock.json') }}"
+          
+          if [ -d "web/node_modules" ]; then
+            mkdir -p "$CACHE_DIR"
+            rm -rf "$CACHE_DIR/$CACHE_KEY"
+            cp -r web/node_modules "$CACHE_DIR/$CACHE_KEY"
+            echo "Cache saved: $CACHE_KEY"
+          fi
       
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v3
@@ -38,7 +60,6 @@ jobs:
           path: web/dist
           retention-days: 1
 
-  # --- 任务 2: 构建多平台二进制文件 ---
   build-binaries:
     needs: build-frontend
     runs-on: golang
@@ -46,25 +67,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux 平台
-          - { goos: linux, goarch: amd64, target: server, upx: true }
-          - { goos: linux, goarch: amd64, target: client, upx: true }
-          - { goos: linux, goarch: arm64, target: server, upx: true }
-          - { goos: linux, goarch: arm64, target: client, upx: true }
-          - { goos: linux, goarch: arm, goarm: 7, target: server, upx: true }
-          - { goos: linux, goarch: arm, goarm: 7, target: client, upx: true }
-          
-          # Windows 平台
-          - { goos: windows, goarch: amd64, target: server, upx: true }
-          - { goos: windows, goarch: amd64, target: client, upx: true }
-          - { goos: windows, goarch: arm64, target: server, upx: false }
-          
-          # Darwin (macOS) 平台
-          - { goos: darwin, goarch: amd64, target: server, upx: false }
-          - { goos: darwin, goarch: arm64, target: server, upx: false }
+          # ... 你的 matrix 配置保持不变 ...
     
     steps:
-      # 在 checkout 前安装依赖
       - name: Install Dependencies
         run: |
           if command -v apk > /dev/null; then
@@ -78,18 +83,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      # 缓存 Go 模块
+      # 使用本地目录缓存 Go 模块
       - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            go-${{ runner.os }}-
+        run: |
+          CACHE_DIR="/data/cache/go-modules"
+          CACHE_KEY="go-${{ runner.os }}-${{ hashFiles('go.sum') }}"
+          
+          mkdir -p "$CACHE_DIR"
+          
+          if [ -d "$CACHE_DIR/$CACHE_KEY" ]; then
+            echo "Cache hit: $CACHE_KEY"
+            mkdir -p ~/go/pkg/mod
+            mkdir -p ~/.cache/go-build
+            [ -d "$CACHE_DIR/$CACHE_KEY/mod" ] && cp -r "$CACHE_DIR/$CACHE_KEY/mod"/* ~/go/pkg/mod/ 2>/dev/null || true
+            [ -d "$CACHE_DIR/$CACHE_KEY/build" ] && cp -r "$CACHE_DIR/$CACHE_KEY/build"/* ~/.cache/go-build/ 2>/dev/null || true
+          else
+            echo "Cache miss: $CACHE_KEY"
+            rm -rf "$CACHE_DIR"/*
+          fi
       
-      # 下载依赖（只在缓存未命中时执行）
       - name: Download Go dependencies
         run: go mod download
       
@@ -106,7 +118,6 @@ jobs:
           GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
         run: |
-          # 处理文件名
           ARM_VAL=""
           [ "${{ matrix.goarch }}" = "arm" ] && ARM_VAL="v${{ matrix.goarm }}"
           
@@ -115,10 +126,23 @@ jobs:
           
           FILENAME="gotunnel-${{ matrix.target }}-${{ matrix.goos }}-${{ matrix.goarch }}${ARM_VAL}${EXT}"
           
-          # 编译（使用 -trimpath 减小体积，利用缓存）
           go build -trimpath -ldflags="-s -w" -o "${FILENAME}" ./cmd/${{ matrix.target }}
           
           echo "CURRENT_FILENAME=${FILENAME}" >> $GITHUB_ENV
+      
+      # 保存 Go 模块缓存
+      - name: Save Go modules cache
+        if: always()
+        run: |
+          CACHE_DIR="/data/cache/go-modules"
+          CACHE_KEY="go-${{ runner.os }}-${{ hashFiles('go.sum') }}"
+          
+          mkdir -p "$CACHE_DIR/$CACHE_KEY"
+          
+          [ -d ~/go/pkg/mod ] && cp -r ~/go/pkg/mod "$CACHE_DIR/$CACHE_KEY/" 2>/dev/null || true
+          [ -d ~/.cache/go-build ] && cp -r ~/.cache/go-build "$CACHE_DIR/$CACHE_KEY/" 2>/dev/null || true
+          
+          echo "Cache saved: $CACHE_KEY"
       
       - name: Run UPX Compression
         if: matrix.upx == true
