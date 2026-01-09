@@ -1317,6 +1317,14 @@ func (s *Server) pushClientInstalledPlugins(cs *ClientSession, alreadyPushed map
 		if err := s.InstallJSPluginToClient(cs.ID, req); err != nil {
 			log.Printf("[Server] Failed to restore plugin %s: %v", cp.Name, err)
 		} else if cp.RemotePort > 0 {
+			// 检查端口是否已在监听（避免重复启动）
+			cs.mu.Lock()
+			_, exists := cs.Listeners[cp.RemotePort]
+			cs.mu.Unlock()
+			if exists {
+				continue
+			}
+
 			// 安装成功后启动服务端监听器
 			pluginRule := protocol.ProxyRule{
 				Name:         cp.Name,

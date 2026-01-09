@@ -399,8 +399,10 @@ func (p *JSPlugin) httpServe(conn net.Conn, handler goja.Callable) {
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
 	if err != nil {
+		fmt.Printf("[JS:%s] httpServe read error: %v\n", p.name, err)
 		return
 	}
+	fmt.Printf("[JS:%s] httpServe read %d bytes\n", p.name, n)
 
 	req := parseHTTPRequest(buf[:n])
 
