@@ -394,7 +394,7 @@ func (p *JSPlugin) createHttpAPI() map[string]interface{} {
 
 // httpServe 启动 HTTP 服务处理连接
 func (p *JSPlugin) httpServe(conn net.Conn, handler goja.Callable) {
-	defer conn.Close()
+	// 注意：不要在这里关闭连接，HandleConn 会负责关闭
 
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)

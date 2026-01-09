@@ -205,6 +205,24 @@ func (h *PluginHandler) GetClientConfig(c *gin.Context) {
 		Description: "服务端监听端口，修改后需重启插件生效",
 	}}, schemaFields...)
 
+	// 添加 Auth 配置字段
+	schemaFields = append(schemaFields, dto.ConfigField{
+		Key:         "auth_enabled",
+		Label:       "启用认证",
+		Type:        "boolean",
+		Description: "启用 HTTP Basic Auth 保护",
+	}, dto.ConfigField{
+		Key:         "auth_username",
+		Label:       "认证用户名",
+		Type:        "string",
+		Description: "HTTP Basic Auth 用户名",
+	}, dto.ConfigField{
+		Key:         "auth_password",
+		Label:       "认证密码",
+		Type:        "password",
+		Description: "HTTP Basic Auth 密码",
+	})
+
 	// 构建配置值
 	config := clientPlugin.Config
 	if config == nil {
@@ -214,6 +232,14 @@ func (h *PluginHandler) GetClientConfig(c *gin.Context) {
 	if clientPlugin.RemotePort > 0 {
 		config["remote_port"] = fmt.Sprintf("%d", clientPlugin.RemotePort)
 	}
+	// 将 Auth 配置加入
+	if clientPlugin.AuthEnabled {
+		config["auth_enabled"] = "true"
+	} else {
+		config["auth_enabled"] = "false"
+	}
+	config["auth_username"] = clientPlugin.AuthUsername
+	config["auth_password"] = clientPlugin.AuthPassword
 
 	Success(c, dto.PluginConfigResponse{
 		PluginName: pluginName,
@@ -254,6 +280,7 @@ func (h *PluginHandler) UpdateClientConfig(c *gin.Context) {
 	// 更新插件配置
 	found := false
 	portChanged := false
+	authChanged := false
 	var oldPort, newPort int
 	for i, p := range client.Plugins {
 		if p.Name == pluginName {
@@ -271,6 +298,29 @@ func (h *PluginHandler) UpdateClientConfig(c *gin.Context) {
 					portChanged = true
 				}
 				delete(req.Config, "remote_port") // 不保存到 Config map
+			}
+			// 提取 Auth 配置并单独处理
+			if authEnabledStr, ok := req.Config["auth_enabled"]; ok {
+				newAuthEnabled := authEnabledStr == "true"
+				if newAuthEnabled != client.Plugins[i].AuthEnabled {
+					client.Plugins[i].AuthEnabled = newAuthEnabled
+					authChanged = true
+				}
+				delete(req.Config, "auth_enabled")
+			}
+			if authUsername, ok := req.Config["auth_username"]; ok {
+				if authUsername != client.Plugins[i].AuthUsername {
+					client.Plugins[i].AuthUsername = authUsername
+					authChanged = true
+				}
+				delete(req.Config, "auth_username")
+			}
+			if authPassword, ok := req.Config["auth_password"]; ok {
+				if authPassword != client.Plugins[i].AuthPassword {
+					client.Plugins[i].AuthPassword = authPassword
+					authChanged = true
+				}
+				delete(req.Config, "auth_password")
 			}
 			client.Plugins[i].Config = req.Config
 			found = true
@@ -294,6 +344,23 @@ func (h *PluginHandler) UpdateClientConfig(c *gin.Context) {
 		// 停止旧端口监听器
 		if oldPort > 0 {
 			h.app.GetServer().StopPluginRule(clientID, oldPort)
+		}
+	}
+
+	// 如果 Auth 配置变更，同步更新代理规则
+	if authChanged {
+		for i, p := range client.Plugins {
+			if p.Name == pluginName {
+				for j, r := range client.Rules {
+					if r.Name == pluginName && r.PluginManaged {
+						client.Rules[j].AuthEnabled = client.Plugins[i].AuthEnabled
+						client.Rules[j].AuthUsername = client.Plugins[i].AuthUsername
+						client.Rules[j].AuthPassword = client.Plugins[i].AuthPassword
+						break
+					}
+				}
+				break
+			}
 		}
 	}
 
