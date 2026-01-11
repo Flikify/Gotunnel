@@ -1048,11 +1048,14 @@ func (s *Server) startClientPluginListener(cs *ClientSession, rule protocol.Prox
 		return
 	}
 
-	// 发送启动命令到客户端
-	if err := s.sendClientPluginStart(cs.Session, rule); err != nil {
-		log.Printf("[Server] Failed to start client plugin %s: %v", rule.Type, err)
-		s.portManager.Release(rule.RemotePort)
-		return
+	// 只有非 JS 插件才需要发送启动命令
+	// JS 插件已经通过 JSPluginInstall 安装并启动，PluginID 不为空表示是 JS 插件
+	if rule.PluginID == "" {
+		if err := s.sendClientPluginStart(cs.Session, rule); err != nil {
+			log.Printf("[Server] Failed to start client plugin %s: %v", rule.Type, err)
+			s.portManager.Release(rule.RemotePort)
+			return
+		}
 	}
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", rule.RemotePort))
