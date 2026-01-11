@@ -1,6 +1,7 @@
 package script
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -17,10 +19,10 @@ import (
 
 // JSPlugin JavaScript 脚本插件
 type JSPlugin struct {
-	name     string
-	source   string
-	vm       *goja.Runtime
-	metadata plugin.Metadata
+	name           string
+	source         string
+	vm             *goja.Runtime
+	metadata       plugin.Metadata
 	config         map[string]string
 	sandbox        *Sandbox
 	running        bool
@@ -66,7 +68,7 @@ func (p *JSPlugin) init() error {
 
 	// 注入基础 API
 	p.vm.Set("log", p.jsLog)
-	
+
 	// Config API (兼容旧的 config() 调用，同时支持 config.get/getAll)
 	p.vm.Set("config", p.jsGetConfig)
 	if configObj := p.vm.Get("config"); configObj != nil {
@@ -396,15 +398,63 @@ func (p *JSPlugin) createHttpAPI() map[string]interface{} {
 func (p *JSPlugin) httpServe(conn net.Conn, handler goja.Callable) {
 	// 注意：不要在这里关闭连接，HandleConn 会负责关闭
 
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
+	// Use bufio to read the request properly
+	reader := bufio.NewReader(conn)
+
+	// 1. Read Request Line
+	line, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Printf("[JS:%s] httpServe read error: %v\n", p.name, err)
 		return
 	}
-	fmt.Printf("[JS:%s] httpServe read %d bytes\n", p.name, n)
+	line = strings.TrimSpace(line)
+	parts := strings.Split(line, " ")
+	if len(parts) < 2 {
+		fmt.Printf("[JS:%s] Invalid request line: %s\n", p.name, line)
+		return
+	}
+	method := parts[0]
+	path := parts[1]
 
-	req := parseHTTPRequest(buf[:n])
+	fmt.Printf("[JS:%s] Request: %s %s\n", p.name, method, path)
+
+	// 2. Read Headers
+	headers := make(map[string]string)
+	contentLength := 0
+	for {
+		hLine, err := reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		hLine = strings.TrimSpace(hLine)
+		if hLine == "" {
+			break
+		}
+		if idx := strings.Index(hLine, ":"); idx > 0 {
+			key := strings.TrimSpace(hLine[:idx])
+			val := strings.TrimSpace(hLine[idx+1:])
+			headers[strings.ToLower(key)] = val
+			if strings.ToLower(key) == "content-length" {
+				contentLength, _ = strconv.Atoi(val)
+			}
+		}
+	}
+
+	// 3. Read Body
+	body := ""
+	if contentLength > 0 {
+		bodyBuf := make([]byte, contentLength)
+		if _, err := io.ReadFull(reader, bodyBuf); err == nil {
+			body = string(bodyBuf)
+		}
+	}
+
+	req := map[string]interface{}{
+		"method":  method,
+		"path":    path,
+		"headers": headers,
+		"body":    body,
+	}
 
 	// 调用 JS handler 函数
 	result, err := handler(goja.Undefined(), p.vm.ToValue(req))
@@ -452,30 +502,9 @@ func (p *JSPlugin) httpSendFile(conn net.Conn, filePath string) {
 	io.Copy(conn, f)
 }
 
-// parseHTTPRequest 解析 HTTP 请求
+// parseHTTPRequest is deprecated, logic moved to httpServe
 func parseHTTPRequest(data []byte) map[string]interface{} {
-	lines := string(data)
-	req := map[string]interface{}{
-		"method": "GET",
-		"path":   "/",
-		"body":   "",
-	}
-
-	// 解析请求行
-	if idx := indexOf(lines, " "); idx > 0 {
-		req["method"] = lines[:idx]
-		rest := lines[idx+1:]
-		if idx2 := indexOf(rest, " "); idx2 > 0 {
-			req["path"] = rest[:idx2]
-		}
-	}
-
-	// 解析 body
-	if idx := indexOf(lines, "\r\n\r\n"); idx > 0 {
-		req["body"] = lines[idx+4:]
-	}
-
-	return req
+	return nil
 }
 
 // writeHTTPResponse 写入 HTTP 响应
