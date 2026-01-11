@@ -601,7 +601,6 @@ func (c *Client) handleJSPluginInstall(stream net.Conn, msg *protocol.Message) {
 	}
 
 	c.logf("[Client] JS plugin %s installed", req.PluginName)
-	c.sendJSPluginResult(stream, req.PluginName, true, "")
 
 	// 保存版本信息（防止降级攻击）
 	if c.versionStore != nil {
@@ -611,10 +610,13 @@ func (c *Client) handleJSPluginInstall(stream net.Conn, msg *protocol.Message) {
 		}
 	}
 
-	// 自动启动
+	// 先启动插件，再发送安装结果
+	// 这样服务端收到结果后启动监听器时，客户端插件已经准备好了
 	if req.AutoStart {
 		c.startJSPlugin(jsPlugin, req)
 	}
+
+	c.sendJSPluginResult(stream, req.PluginName, true, "")
 }
 
 // sendJSPluginResult 发送 JS 插件安装结果

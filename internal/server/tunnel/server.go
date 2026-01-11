@@ -1607,13 +1607,15 @@ func (s *Server) reinstallJSPlugin(clientID, pluginName, ruleName string) error 
 		return fmt.Errorf("client not found: %w", err)
 	}
 
-	// 合并配置
+	// 合并配置并获取 PluginID
 	config := jsPlugin.Config
 	if config == nil {
 		config = make(map[string]string)
 	}
+	var pluginID string
 	for _, cp := range client.Plugins {
 		if cp.Name == pluginName {
+			pluginID = cp.ID
 			for k, v := range cp.Config {
 				config[k] = v
 			}
@@ -1621,9 +1623,10 @@ func (s *Server) reinstallJSPlugin(clientID, pluginName, ruleName string) error 
 		}
 	}
 
-	log.Printf("[Server] Reinstalling JS plugin %s to client %s", pluginName, clientID)
+	log.Printf("[Server] Reinstalling JS plugin %s (ID: %s) to client %s", pluginName, pluginID, clientID)
 
 	req := router.JSPluginInstallRequest{
+		PluginID:   pluginID,
 		PluginName: pluginName,
 		Source:     jsPlugin.Source,
 		Signature:  jsPlugin.Signature,
