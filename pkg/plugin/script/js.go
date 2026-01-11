@@ -401,83 +401,91 @@ func (p *JSPlugin) httpServe(conn net.Conn, handler goja.Callable) {
 	// Use bufio to read the request properly
 	reader := bufio.NewReader(conn)
 
-	// 1. Read Request Line
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Printf("[JS:%s] httpServe read error: %v\n", p.name, err)
-		return
-	}
-	line = strings.TrimSpace(line)
-	parts := strings.Split(line, " ")
-	if len(parts) < 2 {
-		fmt.Printf("[JS:%s] Invalid request line: %s\n", p.name, line)
-		return
-	}
-	method := parts[0]
-	path := parts[1]
-
-	fmt.Printf("[JS:%s] Request: %s %s\n", p.name, method, path)
-
-	// 2. Read Headers
-	headers := make(map[string]string)
-	contentLength := 0
 	for {
-		hLine, err := reader.ReadString('\n')
+		// 1. Read Request Line
+		line, err := reader.ReadString('\n')
 		if err != nil {
-			break
+			if err != io.EOF {
+				fmt.Printf("[JS:%s] httpServe read error: %v\n", p.name, err)
+			}
+			return
 		}
-		hLine = strings.TrimSpace(hLine)
-		if hLine == "" {
-			break
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
-		if idx := strings.Index(hLine, ":"); idx > 0 {
-			key := strings.TrimSpace(hLine[:idx])
-			val := strings.TrimSpace(hLine[idx+1:])
-			headers[strings.ToLower(key)] = val
-			if strings.ToLower(key) == "content-length" {
-				contentLength, _ = strconv.Atoi(val)
+
+		parts := strings.Split(line, " ")
+		if len(parts) < 2 {
+			fmt.Printf("[JS:%s] Invalid request line: %s\n", p.name, line)
+			return
+		}
+		method := parts[0]
+		path := parts[1]
+
+		fmt.Printf("[JS:%s] Request: %s %s\n", p.name, method, path)
+
+		// 2. Read Headers
+		headers := make(map[string]string)
+		contentLength := 0
+		for {
+			hLine, err := reader.ReadString('\n')
+			if err != nil {
+				break
+			}
+			hLine = strings.TrimSpace(hLine)
+			if hLine == "" {
+				break
+			}
+			if idx := strings.Index(hLine, ":"); idx > 0 {
+				key := strings.TrimSpace(hLine[:idx])
+				val := strings.TrimSpace(hLine[idx+1:])
+				headers[strings.ToLower(key)] = val
+				if strings.ToLower(key) == "content-length" {
+					contentLength, _ = strconv.Atoi(val)
+				}
 			}
 		}
-	}
 
-	// 3. Read Body
-	body := ""
-	if contentLength > 0 {
-		bodyBuf := make([]byte, contentLength)
-		if _, err := io.ReadFull(reader, bodyBuf); err == nil {
-			body = string(bodyBuf)
+		// 3. Read Body
+		body := ""
+		if contentLength > 0 {
+			bodyBuf := make([]byte, contentLength)
+			if _, err := io.ReadFull(reader, bodyBuf); err == nil {
+				body = string(bodyBuf)
+			}
 		}
-	}
 
-	req := map[string]interface{}{
-		"method":  method,
-		"path":    path,
-		"headers": headers,
-		"body":    body,
-	}
+		req := map[string]interface{}{
+			"method":  method,
+			"path":    path,
+			"headers": headers,
+			"body":    body,
+		}
 
-	// 调用 JS handler 函数
-	result, err := handler(goja.Undefined(), p.vm.ToValue(req))
-	if err != nil {
-		fmt.Printf("[JS:%s] HTTP handler error: %v\n", p.name, err)
-		conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
-		return
-	}
+		// 调用 JS handler 函数
+		result, err := handler(goja.Undefined(), p.vm.ToValue(req))
+		if err != nil {
+			fmt.Printf("[JS:%s] HTTP handler error: %v\n", p.name, err)
+			conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n"))
+			return
+		}
 
-	// 将结果转换为 map
-	if result == nil || goja.IsUndefined(result) || goja.IsNull(result) {
-		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
-		return
-	}
+		// 将结果转换为 map
+		if result == nil || goja.IsUndefined(result) || goja.IsNull(result) {
+			conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"))
+			continue
+		}
 
-	resp := make(map[string]interface{})
-	respObj := result.ToObject(p.vm)
-	for _, key := range respObj.Keys() {
-		val := respObj.Get(key)
-		resp[key] = val.Export()
-	}
+		resp := make(map[string]interface{})
+		respObj := result.ToObject(p.vm)
+		for _, key := range respObj.Keys() {
+			val := respObj.Get(key)
+			resp[key] = val.Export()
+		}
 
-	writeHTTPResponse(conn, resp)
+		writeHTTPResponse(conn, resp)
+	}
 }
 
 func (p *JSPlugin) httpJSON(data interface{}) string {
