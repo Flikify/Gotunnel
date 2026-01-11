@@ -1003,10 +1003,14 @@ func (c *Client) handlePluginStatusQuery(stream net.Conn, msg *protocol.Message)
 
 	c.pluginMu.RLock()
 	plugins := make([]protocol.PluginStatusEntry, 0, len(c.runningPlugins))
-	for key := range c.runningPlugins {
-		// key 格式为 "pluginName:ruleName"，只提取 pluginName
-		parts := strings.SplitN(key, ":", 2)
-		pluginName := parts[0]
+	for key, handler := range c.runningPlugins {
+		// 从插件的 Metadata 获取真正的插件名称
+		pluginName := handler.Metadata().Name
+		// 如果 Metadata 没有名称，回退到从 key 解析
+		if pluginName == "" {
+			parts := strings.SplitN(key, ":", 2)
+			pluginName = parts[0]
+		}
 		plugins = append(plugins, protocol.PluginStatusEntry{
 			PluginName: pluginName,
 			Running:    true,
