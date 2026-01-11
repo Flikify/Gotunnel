@@ -372,17 +372,17 @@ func (h *ClientHandler) PluginAction(c *gin.Context) {
 
 	switch action {
 	case "start":
-		err = h.app.GetServer().StartClientPlugin(clientID, pluginName, req.RuleName)
+		err = h.app.GetServer().StartClientPlugin(clientID, pluginID, pluginName, req.RuleName)
 	case "stop":
-		err = h.app.GetServer().StopClientPlugin(clientID, pluginName, req.RuleName)
+		err = h.app.GetServer().StopClientPlugin(clientID, pluginID, pluginName, req.RuleName)
 	case "restart":
-		err = h.app.GetServer().RestartClientPlugin(clientID, pluginName, req.RuleName)
+		err = h.app.GetServer().RestartClientPlugin(clientID, pluginID, pluginName, req.RuleName)
 	case "config":
 		if req.Config == nil {
 			BadRequest(c, "config required")
 			return
 		}
-		err = h.app.GetServer().UpdateClientPluginConfig(clientID, pluginName, req.RuleName, req.Config, req.Restart)
+		err = h.app.GetServer().UpdateClientPluginConfig(clientID, pluginID, pluginName, req.RuleName, req.Config, req.Restart)
 	case "delete":
 		err = h.deleteClientPlugin(clientID, pluginID)
 	default:

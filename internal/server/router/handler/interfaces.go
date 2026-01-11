@@ -37,10 +37,10 @@ type ServerInterface interface {
 	SyncPluginConfigToClient(clientID string, pluginName string, config map[string]string) error
 	InstallJSPluginToClient(clientID string, req JSPluginInstallRequest) error
 	RestartClient(clientID string) error
-	StartClientPlugin(clientID, pluginName, ruleName string) error
-	StopClientPlugin(clientID, pluginName, ruleName string) error
-	RestartClientPlugin(clientID, pluginName, ruleName string) error
-	UpdateClientPluginConfig(clientID, pluginName, ruleName string, config map[string]string, restart bool) error
+	StartClientPlugin(clientID, pluginID, pluginName, ruleName string) error
+	StopClientPlugin(clientID, pluginID, pluginName, ruleName string) error
+	RestartClientPlugin(clientID, pluginID, pluginName, ruleName string) error
+	UpdateClientPluginConfig(clientID, pluginID, pluginName, ruleName string, config map[string]string, restart bool) error
 	SendUpdateToClient(clientID, downloadURL string) error
 	// 日志流
 	StartClientLogStream(clientID, sessionID string, lines int, follow bool, level string) (<-chan protocol.LogEntry, error)

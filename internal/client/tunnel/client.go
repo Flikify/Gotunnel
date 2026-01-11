@@ -525,13 +525,24 @@ func (c *Client) handleClientPluginConn(stream net.Conn, msg *protocol.Message) 
 		return
 	}
 
-	key := req.PluginName + ":" + req.RuleName
 	c.pluginMu.RLock()
-	handler, ok := c.runningPlugins[key]
+	var handler plugin.ClientPlugin
+	var ok bool
+
+	// 优先使用 PluginID 查找
+	if req.PluginID != "" {
+		handler, ok = c.runningPlugins[req.PluginID]
+	}
+
+	// 如果没找到，回退到 pluginName:ruleName
+	if !ok {
+		key := req.PluginName + ":" + req.RuleName
+		handler, ok = c.runningPlugins[key]
+	}
 	c.pluginMu.RUnlock()
 
 	if !ok {
-		c.logWarnf("[Client] Plugin %s not running", key)
+		c.logWarnf("[Client] Plugin %s (ID: %s) not running", req.PluginName, req.PluginID)
 		stream.Close()
 		return
 	}
@@ -696,10 +707,25 @@ func (c *Client) handleClientPluginStop(stream net.Conn, msg *protocol.Message) 
 		return
 	}
 
-	key := req.PluginName + ":" + req.RuleName
-
 	c.pluginMu.Lock()
-	handler, ok := c.runningPlugins[key]
+	var handler plugin.ClientPlugin
+	var key string
+	var ok bool
+
+	// 优先使用 PluginID 查找
+	if req.PluginID != "" {
+		handler, ok = c.runningPlugins[req.PluginID]
+		if ok {
+			key = req.PluginID
+		}
+	}
+
+	// 如果没找到，回退到 pluginName:ruleName
+	if !ok {
+		key = req.PluginName + ":" + req.RuleName
+		handler, ok = c.runningPlugins[key]
+	}
+
 	if ok {
 		if err := handler.Stop(); err != nil {
 			c.logErrorf("[Client] Plugin %s stop error: %v", key, err)
@@ -754,12 +780,27 @@ func (c *Client) handlePluginConfigUpdate(stream net.Conn, msg *protocol.Message
 		return
 	}
 
-	key := req.PluginName + ":" + req.RuleName
-	c.logf("[Client] Config update for plugin %s", key)
-
 	c.pluginMu.RLock()
-	handler, ok := c.runningPlugins[key]
+	var handler plugin.ClientPlugin
+	var key string
+	var ok bool
+
+	// 优先使用 PluginID 查找
+	if req.PluginID != "" {
+		handler, ok = c.runningPlugins[req.PluginID]
+		if ok {
+			key = req.PluginID
+		}
+	}
+
+	// 如果没找到，回退到 pluginName:ruleName
+	if !ok {
+		key = req.PluginName + ":" + req.RuleName
+		handler, ok = c.runningPlugins[key]
+	}
 	c.pluginMu.RUnlock()
+
+	c.logf("[Client] Config update for plugin %s", key)
 
 	if !ok {
 		c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, false, "plugin not running")

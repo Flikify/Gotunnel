@@ -235,6 +235,7 @@ func (h *StoreHandler) Install(c *gin.Context) {
 					dbClient.Rules[i].Type = req.PluginName
 					dbClient.Rules[i].RemotePort = req.RemotePort
 					dbClient.Rules[i].Enabled = boolPtr(true)
+					dbClient.Rules[i].PluginID = pluginID
 					dbClient.Rules[i].AuthEnabled = req.AuthEnabled
 					dbClient.Rules[i].AuthUsername = req.AuthUsername
 					dbClient.Rules[i].AuthPassword = req.AuthPassword
@@ -250,6 +251,7 @@ func (h *StoreHandler) Install(c *gin.Context) {
 					Type:          req.PluginName,
 					RemotePort:    req.RemotePort,
 					Enabled:       boolPtr(true),
+					PluginID:      pluginID,
 					AuthEnabled:   req.AuthEnabled,
 					AuthUsername:  req.AuthUsername,
 					AuthPassword:  req.AuthPassword,
@@ -268,6 +270,7 @@ func (h *StoreHandler) Install(c *gin.Context) {
 			Type:         req.PluginName, // 使用插件名作为类型，让 isClientPlugin 识别
 			RemotePort:   req.RemotePort,
 			Enabled:      boolPtr(true),
+			PluginID:     pluginID,
 			AuthEnabled:  req.AuthEnabled,
 			AuthUsername: req.AuthUsername,
 			AuthPassword: req.AuthPassword,

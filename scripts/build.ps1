@@ -37,6 +37,7 @@ $Platforms = @(
     @{OS="darwin"; Arch="amd64"},
     @{OS="darwin"; Arch="arm64"}
 )
+)
 
 # 颜色输出函数
 function Write-Info {

@@ -1126,14 +1126,18 @@ func (s *Server) acceptClientPluginConns(cs *ClientSession, ln net.Listener, rul
 func (s *Server) handleClientPluginConn(cs *ClientSession, conn net.Conn, rule protocol.ProxyRule) {
 	defer conn.Close()
 
+	log.Printf("[Server] handleClientPluginConn: plugin=%s, auth=%v", rule.Type, rule.AuthEnabled)
+
 	// 如果启用了 HTTP Basic Auth，先进行认证
 	var bufferedData []byte
 	if rule.AuthEnabled {
 		authenticated, data := s.checkHTTPBasicAuth(conn, rule.AuthUsername, rule.AuthPassword)
 		if !authenticated {
+			log.Printf("[Server] Auth failed for plugin %s", rule.Type)
 			return
 		}
 		bufferedData = data
+		log.Printf("[Server] Auth success, buffered %d bytes", len(bufferedData))
 	}
 
 	stream, err := cs.Session.Open()
@@ -1144,6 +1148,7 @@ func (s *Server) handleClientPluginConn(cs *ClientSession, conn net.Conn, rule p
 	defer stream.Close()
 
 	req := protocol.ClientPluginConnRequest{
+		PluginID:   rule.PluginID,
 		PluginName: rule.Type,
 		RuleName:   rule.Name,
 	}
@@ -1331,6 +1336,7 @@ func (s *Server) pushClientInstalledPlugins(cs *ClientSession, alreadyPushed map
 				Type:         cp.Name,
 				RemotePort:   cp.RemotePort,
 				Enabled:      boolPtr(true),
+				PluginID:     cp.ID,
 				AuthEnabled:  cp.AuthEnabled,
 				AuthUsername: cp.AuthUsername,
 				AuthPassword: cp.AuthPassword,
@@ -1386,7 +1392,7 @@ func (s *Server) RestartClient(clientID string) error {
 }
 
 // StartClientPlugin 启动客户端插件
-func (s *Server) StartClientPlugin(clientID, pluginName, ruleName string) error {
+func (s *Server) StartClientPlugin(clientID, pluginID, pluginName, ruleName string) error {
 	s.mu.RLock()
 	_, ok := s.clients[clientID]
 	s.mu.RUnlock()
@@ -1400,7 +1406,7 @@ func (s *Server) StartClientPlugin(clientID, pluginName, ruleName string) error 
 }
 
 // StopClientPlugin 停止客户端插件
-func (s *Server) StopClientPlugin(clientID, pluginName, ruleName string) error {
+func (s *Server) StopClientPlugin(clientID, pluginID, pluginName, ruleName string) error {
 	s.mu.RLock()
 	cs, ok := s.clients[clientID]
 	s.mu.RUnlock()
@@ -1409,11 +1415,11 @@ func (s *Server) StopClientPlugin(clientID, pluginName, ruleName string) error {
 		return fmt.Errorf("client %s not found or not online", clientID)
 	}
 
-	return s.sendClientPluginStop(cs.Session, pluginName, ruleName)
+	return s.sendClientPluginStop(cs.Session, pluginID, pluginName, ruleName)
 }
 
 // sendClientPluginStop 发送客户端插件停止命令
-func (s *Server) sendClientPluginStop(session *yamux.Session, pluginName, ruleName string) error {
+func (s *Server) sendClientPluginStop(session *yamux.Session, pluginID, pluginName, ruleName string) error {
 	stream, err := session.Open()
 	if err != nil {
 		return err
@@ -1421,6 +1427,7 @@ func (s *Server) sendClientPluginStop(session *yamux.Session, pluginName, ruleNa
 	defer stream.Close()
 
 	req := protocol.ClientPluginStopRequest{
+		PluginID:   pluginID,
 		PluginName: pluginName,
 		RuleName:   ruleName,
 	}
@@ -1566,7 +1573,7 @@ func (s *Server) ProxyPluginAPIRequest(clientID string, req protocol.PluginAPIRe
 }
 
 // RestartClientPlugin 重启客户端 JS 插件
-func (s *Server) RestartClientPlugin(clientID, pluginName, ruleName string) error {
+func (s *Server) RestartClientPlugin(clientID, pluginID, pluginName, ruleName string) error {
 	s.mu.RLock()
 	_, ok := s.clients[clientID]
 	s.mu.RUnlock()
@@ -1670,7 +1677,7 @@ func (s *Server) sendJSPluginRestart(session *yamux.Session, pluginName, ruleNam
 }
 
 // UpdateClientPluginConfig 更新客户端插件配置
-func (s *Server) UpdateClientPluginConfig(clientID, pluginName, ruleName string, config map[string]string, restart bool) error {
+func (s *Server) UpdateClientPluginConfig(clientID, pluginID, pluginName, ruleName string, config map[string]string, restart bool) error {
 	s.mu.RLock()
 	cs, ok := s.clients[clientID]
 	s.mu.RUnlock()
@@ -1687,6 +1694,7 @@ func (s *Server) UpdateClientPluginConfig(clientID, pluginName, ruleName string,
 	defer stream.Close()
 
 	req := protocol.PluginConfigUpdateRequest{
+		PluginID:   pluginID,
 		PluginName: pluginName,
 		RuleName:   ruleName,
 		Config:     config,

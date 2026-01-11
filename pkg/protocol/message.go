@@ -101,6 +101,7 @@ type ProxyRule struct {
 	RemotePort int    `json:"remote_port" yaml:"remote_port"` // 服务端监听端口
 	Enabled    *bool  `json:"enabled,omitempty" yaml:"enabled"` // 是否启用，默认为 true
 	// Plugin 支持字段
+	PluginID      string            `json:"plugin_id,omitempty" yaml:"plugin_id"` // 插件实例ID
 	PluginName    string            `json:"plugin_name,omitempty" yaml:"plugin_name"`
 	PluginVersion string            `json:"plugin_version,omitempty" yaml:"plugin_version"`
 	PluginConfig  map[string]string `json:"plugin_config,omitempty" yaml:"plugin_config"`
@@ -218,8 +219,9 @@ type ClientPluginStartRequest struct {
 
 // ClientPluginStopRequest 停止客户端插件请求
 type ClientPluginStopRequest struct {
-	PluginName string `json:"plugin_name"` // 插件名称
-	RuleName   string `json:"rule_name"`   // 规则名称
+	PluginID   string `json:"plugin_id,omitempty"` // 插件ID（优先使用）
+	PluginName string `json:"plugin_name"`         // 插件名称
+	RuleName   string `json:"rule_name"`           // 规则名称
 }
 
 // ClientPluginStatusResponse 客户端插件状态响应
@@ -233,8 +235,9 @@ type ClientPluginStatusResponse struct {
 
 // ClientPluginConnRequest 客户端插件连接请求
 type ClientPluginConnRequest struct {
-	PluginName string `json:"plugin_name"` // 插件名称
-	RuleName   string `json:"rule_name"`   // 规则名称
+	PluginID   string `json:"plugin_id,omitempty"` // 插件ID（优先使用）
+	PluginName string `json:"plugin_name"`         // 插件名称
+	RuleName   string `json:"rule_name"`           // 规则名称
 }
 
 // PluginStatusEntry 单个插件状态
@@ -280,10 +283,11 @@ type ClientRestartResponse struct {
 
 // PluginConfigUpdateRequest 插件配置更新请求
 type PluginConfigUpdateRequest struct {
-	PluginName string            `json:"plugin_name"` // 插件名称
-	RuleName   string            `json:"rule_name"`   // 规则名称
-	Config     map[string]string `json:"config"`      // 新配置
-	Restart    bool              `json:"restart"`     // 是否重启插件
+	PluginID   string            `json:"plugin_id,omitempty"` // 插件ID（优先使用）
+	PluginName string            `json:"plugin_name"`         // 插件名称
+	RuleName   string            `json:"rule_name"`           // 规则名称
+	Config     map[string]string `json:"config"`              // 新配置
+	Restart    bool              `json:"restart"`             // 是否重启插件
 }
 
 // PluginConfigUpdateResponse 插件配置更新响应
