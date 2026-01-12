@@ -395,7 +395,18 @@ func (p *JSPlugin) createHttpAPI() map[string]interface{} {
 }
 
 // httpServe 启动 HTTP 服务处理连接
-func (p *JSPlugin) httpServe(conn net.Conn, handler goja.Callable) {
+func (p *JSPlugin) httpServe(connObj interface{}, handler goja.Callable) {
+	// 从 jsConn 包装器中提取原始 net.Conn
+	var conn net.Conn
+	if jc, ok := connObj.(*jsConn); ok {
+		conn = jc.conn
+	} else if nc, ok := connObj.(net.Conn); ok {
+		conn = nc
+	} else {
+		fmt.Printf("[JS:%s] httpServe: invalid conn type: %T\n", p.name, connObj)
+		return
+	}
+
 	// 注意：不要在这里关闭连接，HandleConn 会负责关闭
 
 	// Use bufio to read the request properly
@@ -493,7 +504,18 @@ func (p *JSPlugin) httpJSON(data interface{}) string {
 	return string(b)
 }
 
-func (p *JSPlugin) httpSendFile(conn net.Conn, filePath string) {
+func (p *JSPlugin) httpSendFile(connObj interface{}, filePath string) {
+	// 从 jsConn 包装器中提取原始 net.Conn
+	var conn net.Conn
+	if jc, ok := connObj.(*jsConn); ok {
+		conn = jc.conn
+	} else if nc, ok := connObj.(net.Conn); ok {
+		conn = nc
+	} else {
+		fmt.Printf("[JS:%s] httpSendFile: invalid conn type: %T\n", p.name, connObj)
+		return
+	}
+
 	f, err := os.Open(filePath)
 	if err != nil {
 		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
