@@ -147,7 +147,23 @@ func (p *JSPlugin) Metadata() plugin.Metadata {
 // Init 初始化插件配置
 func (p *JSPlugin) Init(config map[string]string) error {
 	p.config = config
-	// p.vm.Set("config", config) // Do not overwrite the config API
+
+	// 根据 root_path 配置设置沙箱允许的路径
+	if rootPath := config["root_path"]; rootPath != "" {
+		absPath, err := filepath.Abs(rootPath)
+		if err == nil {
+			p.sandbox.AllowedPaths = append(p.sandbox.AllowedPaths, absPath)
+			p.sandbox.WritablePaths = append(p.sandbox.WritablePaths, absPath)
+		}
+	} else {
+		// 如果没有配置 root_path，默认允许访问当前目录
+		cwd, err := os.Getwd()
+		if err == nil {
+			p.sandbox.AllowedPaths = append(p.sandbox.AllowedPaths, cwd)
+			p.sandbox.WritablePaths = append(p.sandbox.WritablePaths, cwd)
+		}
+	}
+
 	return nil
 }
 
