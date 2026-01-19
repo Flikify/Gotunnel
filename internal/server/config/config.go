@@ -32,7 +32,7 @@ type PluginStoreSettings struct {
 }
 
 // 默认插件仓库 URL
-const DefaultPluginStoreURL = "https://git.92coco.cn:8443/flik/GoTunnel-Plugins/raw/branch/main/store.json"
+const DefaultPluginStoreURL = "https://git.92coco.cn/flik/GoTunnel-Plugins/raw/branch/main/store.json"
 
 // GetPluginStoreURL 获取插件仓库 URL
 func (s *PluginStoreSettings) GetPluginStoreURL() string {
