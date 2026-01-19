@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NTable, NEmpty,
   NFormItem, NInput, NInputNumber, NSelect, NModal, NSwitch,
-  NIcon, useMessage, useDialog, NSpin
+  NIcon, useMessage, useDialog, NSpin, NAlert
 } from 'naive-ui'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
@@ -198,14 +198,11 @@ const saveRename = async () => {
 }
 
 const startEdit = () => {
-  // 只编辑非插件管理的规则
-  editRules.value = rules.value
-    .filter(rule => !rule.plugin_managed)
-    .map(rule => ({
-      ...rule,
-      type: rule.type || 'tcp',
-      enabled: rule.enabled !== false
-    }))
+  editRules.value = rules.value.map(rule => ({
+    ...rule,
+    type: rule.type || 'tcp',
+    enabled: rule.enabled !== false
+  }))
   editing.value = true
 }
 
@@ -226,9 +223,7 @@ const removeRule = (index: number) => {
 const saveEdit = async () => {
   try {
     // 合并插件管理的规则和编辑后的规则
-    const pluginManagedRules = rules.value.filter(r => r.plugin_managed)
-    const allRules = [...pluginManagedRules, ...editRules.value]
-    await updateClient(clientId, { id: clientId, nickname: nickname.value, rules: allRules })
+    await updateClient(clientId, { id: clientId, nickname: nickname.value, rules: editRules.value })
     editing.value = false
     message.success('保存成功')
     await loadClient()
@@ -545,27 +540,30 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
       <template v-else>
         <n-space vertical :size="12">
           <n-card v-for="(rule, i) in editRules" :key="i" size="small">
+            <n-alert v-if="rule.plugin_managed" type="info" show-icon style="margin-bottom: 12px">
+              此规则由插件创建，禁止修改。如需修改请前往插件管理页面。
+            </n-alert>
             <n-space align="center" wrap>
               <n-form-item label="启用" :show-feedback="false">
-                <n-switch v-model:value="rule.enabled" />
+                <n-switch v-model:value="rule.enabled" :disabled="!!rule.plugin_managed" />
               </n-form-item>
               <n-form-item label="名称" :show-feedback="false">
-                <n-input v-model:value="rule.name" placeholder="规则名称" />
+                <n-input v-model:value="rule.name" placeholder="规则名称" :disabled="!!rule.plugin_managed" />
               </n-form-item>
               <n-form-item label="类型" :show-feedback="false">
-                <n-select v-model:value="rule.type" :options="typeOptions" style="width: 140px;" />
+                <n-select v-model:value="rule.type" :options="typeOptions" style="width: 140px;" :disabled="!!rule.plugin_managed" />
               </n-form-item>
               <!-- 仅 tcp/udp 显示本地地址 -->
               <template v-if="needsLocalAddr(rule.type || 'tcp')">
                 <n-form-item label="本地IP" :show-feedback="false">
-                  <n-input v-model:value="rule.local_ip" placeholder="127.0.0.1" />
+                  <n-input v-model:value="rule.local_ip" placeholder="127.0.0.1" :disabled="!!rule.plugin_managed" />
                 </n-form-item>
                 <n-form-item label="本地端口" :show-feedback="false">
-                  <n-input-number v-model:value="rule.local_port" :show-button="false" />
+                  <n-input-number v-model:value="rule.local_port" :show-button="false" :disabled="!!rule.plugin_managed" />
                 </n-form-item>
               </template>
               <n-form-item label="远程端口" :show-feedback="false">
-                <n-input-number v-model:value="rule.remote_port" :show-button="false" />
+                <n-input-number v-model:value="rule.remote_port" :show-button="false" :disabled="!!rule.plugin_managed" />
               </n-form-item>
               <!-- 插件额外字段 -->
               <template v-for="field in getExtraFields(rule.type || '')" :key="field.key">
@@ -576,6 +574,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                     :value="rule.plugin_config?.[field.key] || field.default || ''"
                     @update:value="(v: string) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v }"
                     :placeholder="field.description"
+                    :disabled="!!rule.plugin_managed"
                   />
                   <!-- 密码输入 -->
                   <n-input
@@ -585,6 +584,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                     type="password"
                     show-password-on="click"
                     :placeholder="field.description"
+                    :disabled="!!rule.plugin_managed"
                   />
                   <!-- 数字输入 -->
                   <n-input-number
@@ -594,12 +594,14 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                     :placeholder="field.description"
                     :show-button="false"
                     style="width: 120px;"
+                    :disabled="!!rule.plugin_managed"
                   />
                   <!-- 布尔开关 -->
                   <n-switch
                     v-else-if="field.type === 'bool'"
                     :value="rule.plugin_config?.[field.key] === 'true'"
                     @update:value="(v: boolean) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = String(v) }"
+                    :disabled="!!rule.plugin_managed"
                   />
                   <!-- 下拉选择 -->
                   <n-select
@@ -608,10 +610,11 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                     @update:value="(v: string) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v }"
                     :options="(field.options || []).map(o => ({ label: o, value: o }))"
                     style="width: 120px;"
+                    :disabled="!!rule.plugin_managed"
                   />
                 </n-form-item>
               </template>
-              <n-button v-if="editRules.length > 1" quaternary type="error" @click="removeRule(i)">
+              <n-button v-if="editRules.length > 1 && !rule.plugin_managed" quaternary type="error" @click="removeRule(i)">
                 <template #icon><n-icon><TrashOutline /></n-icon></template>
               </n-button>
             </n-space>
