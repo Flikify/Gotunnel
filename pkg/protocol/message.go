@@ -95,10 +95,10 @@ type AuthResponse struct {
 // ProxyRule 代理规则
 type ProxyRule struct {
 	Name       string `json:"name" yaml:"name"`
-	Type       string `json:"type" yaml:"type"`               // 内置: tcp, udp, http, https; 插件: socks5 等
-	LocalIP    string `json:"local_ip" yaml:"local_ip"`       // tcp/udp 模式使用
-	LocalPort  int    `json:"local_port" yaml:"local_port"`   // tcp/udp 模式使用
-	RemotePort int    `json:"remote_port" yaml:"remote_port"` // 服务端监听端口
+	Type       string `json:"type" yaml:"type"`                 // 内置: tcp, udp, http, https, websocket; 插件: socks5 等
+	LocalIP    string `json:"local_ip" yaml:"local_ip"`         // tcp/udp 模式使用
+	LocalPort  int    `json:"local_port" yaml:"local_port"`     // tcp/udp 模式使用
+	RemotePort int    `json:"remote_port" yaml:"remote_port"`   // 服务端监听端口
 	Enabled    *bool  `json:"enabled,omitempty" yaml:"enabled"` // 是否启用，默认为 true
 	// Plugin 支持字段
 	PluginID      string            `json:"plugin_id,omitempty" yaml:"plugin_id"` // 插件实例ID
@@ -150,11 +150,11 @@ type ProxyConnectResult struct {
 
 // PluginMetadata Plugin 元数据（协议层）
 type PluginMetadata struct {
-	Name        string   `json:"name"`
-	Version     string   `json:"version"`
-	Checksum    string   `json:"checksum"`
-	Size        int64    `json:"size"`
-	Description string   `json:"description,omitempty"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Checksum    string `json:"checksum"`
+	Size        int64  `json:"size"`
+	Description string `json:"description,omitempty"`
 }
 
 // PluginListRequest 请求可用 plugins

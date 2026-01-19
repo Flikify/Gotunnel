@@ -61,12 +61,12 @@ type Server struct {
 	mu             sync.RWMutex
 	tlsConfig      *tls.Config
 	pluginRegistry *plugin.Registry
-	jsPlugins      []JSPluginEntry // 配置的 JS 插件
-	connSem        chan struct{}   // 连接数信号量
-	activeConns    int64           // 当前活跃连接数
-	listener       net.Listener    // 主监听器
-	shutdown       chan struct{}   // 关闭信号
-	wg             sync.WaitGroup  // 等待所有连接关闭
+	jsPlugins      []JSPluginEntry    // 配置的 JS 插件
+	connSem        chan struct{}      // 连接数信号量
+	activeConns    int64              // 当前活跃连接数
+	listener       net.Listener       // 主监听器
+	shutdown       chan struct{}      // 关闭信号
+	wg             sync.WaitGroup     // 等待所有连接关闭
 	logSessions    *LogSessionManager // 日志会话管理器
 }
 
@@ -82,14 +82,14 @@ type JSPluginEntry struct {
 
 // ClientSession 客户端会话
 type ClientSession struct {
-	ID          string
-	RemoteAddr  string // 客户端 IP 地址
-	Session     *yamux.Session
-	Rules       []protocol.ProxyRule
-	Listeners   map[int]net.Listener
-	UDPConns    map[int]*net.UDPConn // UDP 连接
-	LastPing    time.Time
-	mu          sync.Mutex
+	ID         string
+	RemoteAddr string // 客户端 IP 地址
+	Session    *yamux.Session
+	Rules      []protocol.ProxyRule
+	Listeners  map[int]net.Listener
+	UDPConns   map[int]*net.UDPConn // UDP 连接
+	LastPing   time.Time
+	mu         sync.Mutex
 }
 
 // NewServer 创建服务端
@@ -452,6 +452,9 @@ func (s *Server) startProxyListeners(cs *ClientSession) {
 		case "http", "https":
 			log.Printf("[Server] HTTP proxy %s on :%d", rule.Name, rule.RemotePort)
 			go s.acceptProxyServerConns(cs, ln, rule)
+		case "websocket":
+			log.Printf("[Server] Websocket proxy %s on :%d", rule.Name, rule.RemotePort)
+			go s.acceptWebsocketConns(cs, ln, rule)
 		default:
 			log.Printf("[Server] TCP proxy %s: :%d -> %s:%d",
 				rule.Name, rule.RemotePort, rule.LocalIP, rule.LocalPort)

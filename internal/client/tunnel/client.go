@@ -30,36 +30,41 @@ const (
 	reconnectDelay   = 5 * time.Second
 	disconnectDelay  = 3 * time.Second
 	udpBufferSize    = 65535
-	idFileName       = ".gotunnel_id"
+	idFileName       = "id"
 )
 
 // Client 隧道客户端
 type Client struct {
-	ServerAddr      string
-	Token           string
-	ID              string
-	TLSEnabled      bool
-	TLSConfig       *tls.Config
-	DataDir         string // 数据目录
-	session         *yamux.Session
-	rules           []protocol.ProxyRule
-	mu              sync.RWMutex
-	pluginRegistry  *plugin.Registry
-	runningPlugins  map[string]plugin.ClientPlugin
-	versionStore    *PluginVersionStore
-	pluginMu        sync.RWMutex
-	logger          *Logger // 日志收集器
+	ServerAddr     string
+	Token          string
+	ID             string
+	TLSEnabled     bool
+	TLSConfig      *tls.Config
+	DataDir        string // 数据目录
+	session        *yamux.Session
+	rules          []protocol.ProxyRule
+	mu             sync.RWMutex
+	pluginRegistry *plugin.Registry
+	runningPlugins map[string]plugin.ClientPlugin
+	versionStore   *PluginVersionStore
+	pluginMu       sync.RWMutex
+	logger         *Logger // 日志收集器
 }
 
 // NewClient 创建客户端
 func NewClient(serverAddr, token, id string) *Client {
-	if id == "" {
-		id = loadClientID()
-	}
-
 	// 默认数据目录
 	home, _ := os.UserHomeDir()
 	dataDir := filepath.Join(home, ".gotunnel")
+
+	// 确保数据目录存在
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		log.Printf("[Client] Failed to create data dir: %v", err)
+	}
+
+	if id == "" {
+		id = loadClientID(dataDir)
+	}
 
 	// 初始化日志收集器
 	logger, err := NewLogger(dataDir)
@@ -88,17 +93,13 @@ func (c *Client) InitVersionStore() error {
 }
 
 // getIDFilePath 获取 ID 文件路径
-func getIDFilePath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return idFileName
-	}
-	return filepath.Join(home, idFileName)
+func getIDFilePath(dataDir string) string {
+	return filepath.Join(dataDir, idFileName)
 }
 
 // loadClientID 从本地文件加载客户端 ID
-func loadClientID() string {
-	data, err := os.ReadFile(getIDFilePath())
+func loadClientID(dataDir string) string {
+	data, err := os.ReadFile(getIDFilePath(dataDir))
 	if err != nil {
 		return ""
 	}
@@ -106,8 +107,8 @@ func loadClientID() string {
 }
 
 // saveClientID 保存客户端 ID 到本地文件
-func saveClientID(id string) {
-	if err := os.WriteFile(getIDFilePath(), []byte(id), 0600); err != nil {
+func saveClientID(dataDir, id string) {
+	if err := os.WriteFile(getIDFilePath(dataDir), []byte(id), 0600); err != nil {
 		log.Printf("[Client] Failed to save client ID: %v", err)
 	}
 }
@@ -201,7 +202,7 @@ func (c *Client) connect() error {
 	// 如果服务端分配了新 ID，则更新并保存
 	if authResp.ClientID != "" && authResp.ClientID != c.ID {
 		c.ID = authResp.ClientID
-		saveClientID(c.ID)
+		saveClientID(c.DataDir, c.ID)
 		c.logf("[Client] New ID assigned and saved: %s", c.ID)
 	}
 
