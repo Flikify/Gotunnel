@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, h, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
-import { NLayout, NLayoutHeader, NLayoutContent, NMenu, NButton, NSpace, NTag, NIcon, NConfigProvider, NMessageProvider, NDialogProvider } from 'naive-ui'
-import { HomeOutline, ExtensionPuzzleOutline, LogOutOutline } from '@vicons/ionicons5'
+import {
+  NLayout, NLayoutHeader, NLayoutContent, NLayoutSider, NMenu,
+  NButton, NIcon, NConfigProvider, NMessageProvider,
+  NDialogProvider, NGlobalStyle, type GlobalThemeOverrides
+} from 'naive-ui'
+import {
+  HomeOutline, ExtensionPuzzleOutline, LogOutOutline,
+  ServerOutline, MenuOutline
+} from '@vicons/ionicons5'
 import type { MenuOption } from 'naive-ui'
 import { getServerStatus, removeToken, getToken } from './api'
 
@@ -10,17 +17,18 @@ const router = useRouter()
 const route = useRoute()
 const serverInfo = ref({ bind_addr: '', bind_port: 0 })
 const clientCount = ref(0)
+const collapsed = ref(false)
 
 const isLoginPage = computed(() => route.path === '/login')
 
 const menuOptions: MenuOption[] = [
   {
-    label: '客户端',
+    label: 'Dashboard',
     key: '/',
     icon: () => h(NIcon, null, { default: () => h(HomeOutline) })
   },
   {
-    label: '插件',
+    label: 'Plugins Store',
     key: '/plugins',
     icon: () => h(NIcon, null, { default: () => h(ExtensionPuzzleOutline) })
   }
@@ -46,7 +54,6 @@ const fetchServerStatus = async () => {
   }
 }
 
-// 监听路由变化，离开登录页时获取状态
 watch(() => route.path, (newPath, oldPath) => {
   if (oldPath === '/login' && newPath !== '/login') {
     fetchServerStatus()
@@ -61,45 +68,156 @@ const logout = () => {
   removeToken()
   router.push('/login')
 }
+
+// Theme Overrides
+const themeOverrides: GlobalThemeOverrides = {
+  common: {
+    primaryColor: '#18a058',
+    primaryColorHover: '#36ad6a',
+    primaryColorPressed: '#0c7a43',
+  },
+  Layout: {
+    siderColor: '#f7fcf9',
+    headerColor: '#ffffff'
+  }
+}
 </script>
 
 <template>
-  <n-config-provider>
+  <n-config-provider :theme-overrides="themeOverrides">
+    <n-global-style />
     <n-dialog-provider>
       <n-message-provider>
-        <n-layout v-if="!isLoginPage" style="min-height: 100vh;">
-        <n-layout-header bordered style="height: 64px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 32px;">
-            <div style="font-size: 20px; font-weight: 600; color: #18a058; cursor: pointer;" @click="router.push('/')">
-              GoTunnel
+        <n-layout v-if="!isLoginPage" class="main-layout" has-sider position="absolute">
+          <n-layout-sider
+            bordered
+            collapse-mode="width"
+            :collapsed-width="64"
+            :width="240"
+            :collapsed="collapsed"
+            show-trigger
+            @collapse="collapsed = true"
+            @expand="collapsed = false"
+            style="background: #f9fafb;"
+          >
+            <div class="logo-container">
+              <n-icon size="32" color="#18a058"><ServerOutline /></n-icon>
+              <span v-if="!collapsed" class="logo-text">GoTunnel</span>
             </div>
             <n-menu
-              mode="horizontal"
+              :collapsed="collapsed"
+              :collapsed-width="64"
+              :collapsed-icon-size="22"
               :options="menuOptions"
               :value="activeKey"
               @update:value="handleMenuUpdate"
             />
-          </div>
-          <n-space align="center" :size="16">
-            <n-tag type="info" round>
-              {{ serverInfo.bind_addr }}:{{ serverInfo.bind_port }}
-            </n-tag>
-            <n-tag type="success" round>
-              {{ clientCount }} 客户端
-            </n-tag>
-            <n-button quaternary circle @click="logout">
-              <template #icon>
-                <n-icon><LogOutOutline /></n-icon>
-              </template>
-            </n-button>
-          </n-space>
-        </n-layout-header>
-        <n-layout-content content-style="padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%;">
-          <RouterView />
-        </n-layout-content>
-      </n-layout>
-      <RouterView v-else />
-    </n-message-provider>
+            <div v-if="!collapsed" class="server-status-card">
+               <div class="status-item">
+                 <span class="label">Server:</span>
+                 <span class="value">{{ serverInfo.bind_addr }}:{{ serverInfo.bind_port }}</span>
+               </div>
+               <div class="status-item">
+                 <span class="label">Clients:</span>
+                 <span class="value">{{ clientCount }}</span>
+               </div>
+            </div>
+          </n-layout-sider>
+
+          <n-layout>
+            <n-layout-header bordered class="header">
+              <div class="header-content">
+                <n-button quaternary circle size="large" @click="collapsed = !collapsed" class="mobile-toggle">
+                  <template #icon><n-icon><MenuOutline /></n-icon></template>
+                </n-button>
+                <div class="header-right">
+                   <n-button quaternary @click="logout">
+                    <template #icon><n-icon><LogOutOutline /></n-icon></template>
+                    Logout
+                  </n-button>
+                </div>
+              </div>
+            </n-layout-header>
+            <n-layout-content content-style="padding: 24px; background-color: #f0f2f5; min-height: calc(100vh - 64px);">
+              <RouterView />
+            </n-layout-content>
+          </n-layout>
+        </n-layout>
+        <RouterView v-else />
+      </n-message-provider>
     </n-dialog-provider>
   </n-config-provider>
 </template>
+
+<style scoped>
+.main-layout {
+  height: 100vh;
+}
+
+.logo-container {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-bottom: 1px solid #efeff5;
+  overflow: hidden;
+}
+
+.logo-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: #18a058;
+  white-space: nowrap;
+}
+
+.header {
+  height: 64px;
+  background: white;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+}
+
+.header-content {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.server-status-card {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  padding: 20px;
+  background: #f0fdf4;
+  border-top: 1px solid #d1fae5;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.status-item .label {
+  color: #64748b;
+}
+
+.status-item .value {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.mobile-toggle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-toggle {
+    display: inline-flex;
+  }
+}
+</style>

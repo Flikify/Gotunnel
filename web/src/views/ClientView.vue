@@ -3,13 +3,14 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NTable, NEmpty,
-  NFormItem, NInput, NInputNumber, NSelect, NModal, NSwitch,
-  NIcon, useMessage, useDialog, NSpin, NAlert
+  NForm, NFormItem, NInput, NInputNumber, NSelect, NModal, NSwitch,
+  NIcon, useMessage, useDialog, NSpin, NGrid, NGridItem,
+  NStatistic, NDivider, NTooltip, NDropdown, type FormInst, type FormRules
 } from 'naive-ui'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
-  PushOutline, PowerOutline, AddOutline, SaveOutline, CloseOutline,
-  SettingsOutline, StorefrontOutline, RefreshOutline, StopOutline, PlayOutline, DocumentTextOutline
+  PushOutline, AddOutline, StorefrontOutline, DocumentTextOutline,
+  ExtensionPuzzleOutline, SettingsOutline, OpenOutline
 } from '@vicons/ionicons5'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
@@ -25,35 +26,17 @@ const message = useMessage()
 const dialog = useDialog()
 const clientId = route.params.id as string
 
+// Data
 const online = ref(false)
 const lastPing = ref('')
 const remoteAddr = ref('')
 const nickname = ref('')
 const rules = ref<ProxyRule[]>([])
 const clientPlugins = ref<ClientPlugin[]>([])
-const editing = ref(false)
-const editRules = ref<ProxyRule[]>([])
+const loading = ref(false)
 
-// 重命名相关
-const showRenameModal = ref(false)
-const renameValue = ref('')
-
-// 内置类型
-const builtinTypes = [
-  { label: 'TCP', value: 'tcp' },
-  { label: 'UDP', value: 'udp' },
-  { label: 'HTTP', value: 'http' },
-  { label: 'HTTPS', value: 'https' },
-  { label: 'SOCKS5', value: 'socks5' }
-]
-
-// 规则类型选项（内置 + 插件）
-const typeOptions = ref([...builtinTypes])
-
-// 插件 RuleSchema 映射（包含内置类型和插件类型）
+// Rule Schemas
 const pluginRuleSchemas = ref<RuleSchemasMap>({})
-
-// 加载规则配置模式
 const loadRuleSchemas = async () => {
   try {
     const { data } = await getRuleSchemas()
@@ -63,32 +46,194 @@ const loadRuleSchemas = async () => {
   }
 }
 
-// 判断类型是否需要本地地址
+// Built-in Types (Added WebSocket)
+const builtinTypes = [
+  { label: 'TCP', value: 'tcp' },
+  { label: 'UDP', value: 'udp' },
+  { label: 'HTTP', value: 'http' },
+  { label: 'HTTPS', value: 'https' },
+  { label: 'SOCKS5', value: 'socks5' },
+  { label: 'WebSocket', value: 'websocket' }
+]
+
+// Modal Control for Rules
+const showRuleModal = ref(false)
+const ruleModalType = ref<'create' | 'edit'>('create')
+const ruleFormRef = ref<FormInst | null>(null)
+// Default Rule Model
+const defaultRule = {
+  name: '',
+  local_ip: '127.0.0.1',
+  local_port: 80,
+  remote_port: 0, // 0 means unset/placeholder
+  type: 'tcp',
+  enabled: true,
+  plugin_config: {} as Record<string, string>
+}
+const ruleForm = ref<ProxyRule>({ ...defaultRule })
+
+// Helper: Check if type needs local addr
 const needsLocalAddr = (type: string) => {
   const schema = pluginRuleSchemas.value[type]
-  return schema?.needs_local_addr ?? true // 默认需要
+  return schema?.needs_local_addr ?? true
 }
 
-// 获取类型的额外字段
 const getExtraFields = (type: string): ConfigField[] => {
   const schema = pluginRuleSchemas.value[type]
   return schema?.extra_fields || []
 }
 
-// 插件配置相关
-const showConfigModal = ref(false)
-const configPluginName = ref('')
-const configSchema = ref<ConfigField[]>([])
-const configValues = ref<Record<string, string>>({})
-const configLoading = ref(false)
+// Validation Rules
+const ruleValidationRules: FormRules = {
+  name: { required: true, message: '请输入规则名称', trigger: 'blur' },
+  type: { required: true, message: '请选择类型', trigger: ['blur', 'change'] },
+  remote_port: [
+    { required: true, type: 'number', message: '请输入远程端口', trigger: ['blur', 'change'] },
+    { type: 'number', min: 1, max: 65535, message: '端口范围 1-65535', trigger: ['blur', 'change'] }
+  ],
+  local_ip: {
+    required: true,
+    validator(_rule, value) {
+      if (needsLocalAddr(ruleForm.value.type || 'tcp')) {
+        if (!value) return new Error('请输入本地IP')
+      }
+      return true
+    },
+    trigger: 'blur'
+  },
+  local_port: {
+    required: true,
+    validator(_rule, value) {
+      if (needsLocalAddr(ruleForm.value.type || 'tcp')) {
+        if (!value && value !== 0) return new Error('请输入本地端口')
+        if (typeof value === 'number' && (value < 1 || value > 65535)) return new Error('端口范围 1-65535')
+      }
+      return true
+    },
+    trigger: ['blur', 'change']
+  }
+}
 
-// 商店插件安装相关
+// Actions
+const loadClient = async () => {
+  loading.value = true
+  try {
+    const { data } = await getClient(clientId)
+    online.value = data.online
+    lastPing.value = data.last_ping || ''
+    remoteAddr.value = data.remote_addr || ''
+    nickname.value = data.nickname || ''
+    rules.value = data.rules || []
+    clientPlugins.value = data.plugins || []
+  } catch (e) {
+    message.error('加载客户端信息失败')
+    console.error(e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// Client Rename
+const showRenameModal = ref(false)
+const renameValue = ref('')
+const openRenameModal = () => {
+  renameValue.value = nickname.value
+  showRenameModal.value = true
+}
+const saveRename = async () => {
+  try {
+    await updateClient(clientId, {
+      id: clientId,
+      nickname: renameValue.value,
+      rules: rules.value
+    })
+    nickname.value = renameValue.value
+    showRenameModal.value = false
+    message.success('重命名成功')
+  } catch (e) {
+    message.error('重命名失败')
+  }
+}
+
+// Rule Management
+const openCreateRule = () => {
+  ruleModalType.value = 'create'
+  ruleForm.value = { ...defaultRule, remote_port: 8080 } // Reset
+  showRuleModal.value = true
+}
+
+const openEditRule = (rule: ProxyRule) => {
+  if (rule.plugin_managed) return
+  ruleModalType.value = 'edit'
+  // Deep copy to avoid modifying original until saved
+  ruleForm.value = JSON.parse(JSON.stringify(rule))
+  showRuleModal.value = true
+}
+
+const handleDeleteRule = (rule: ProxyRule) => {
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除规则 "${rule.name}" 吗？`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const newRules = rules.value.filter(r => r.name !== rule.name)
+      await saveRules(newRules)
+    }
+  })
+}
+
+const saveRules = async (newRules: ProxyRule[]) => {
+  try {
+    await updateClient(clientId, {
+      id: clientId,
+      nickname: nickname.value,
+      rules: newRules
+    })
+    rules.value = newRules
+    message.success('规则保存成功')
+    if (online.value) {
+      await pushConfigToClient(clientId)
+      message.success('配置已推送到客户端')
+    }
+  } catch (e: any) {
+    message.error('保存失败: ' + (e.response?.data || e.message))
+    await loadClient() // Revert on failure
+  }
+}
+
+const handleRuleSubmit = (e: MouseEvent) => {
+  e.preventDefault()
+  ruleFormRef.value?.validate(async (errors) => {
+    if (!errors) {
+      // Logic to merge rule
+      let newRules = [...rules.value]
+      if (ruleModalType.value === 'create') {
+        // Check duplicate name
+        if (newRules.some(r => r.name === ruleForm.value.name)) {
+          message.error('规则名称已存在')
+          return
+        }
+        newRules.push({ ...ruleForm.value })
+      } else {
+        const index = newRules.findIndex(r => r.name === ruleForm.value.name)
+        if (index > -1) {
+          newRules[index] = { ...ruleForm.value }
+        }
+      }
+      await saveRules(newRules)
+      showRuleModal.value = false
+    } else {
+      message.error('请检查表单填写')
+    }
+  })
+}
+
+// Store & Plugin Logic
 const showStoreModal = ref(false)
 const storePlugins = ref<StorePluginInfo[]>([])
 const storeLoading = ref(false)
-const storeInstalling = ref<string | null>(null) // 正在安装的插件名称
-
-// 安装配置模态框
+const storeInstalling = ref<string | null>(null)
 const showInstallConfigModal = ref(false)
 const installPlugin = ref<StorePluginInfo | null>(null)
 const installRemotePort = ref<number | null>(8080)
@@ -96,41 +241,25 @@ const installAuthEnabled = ref(false)
 const installAuthUsername = ref('')
 const installAuthPassword = ref('')
 
-// 日志查看相关
-const showLogViewer = ref(false)
-
-// 商店插件相关函数
 const openStoreModal = async () => {
   showStoreModal.value = true
   storeLoading.value = true
   try {
     const { data } = await getStorePlugins()
-    storePlugins.value = (data.plugins || []).filter(p => p.download_url)
+    storePlugins.value = (data.plugins || []).filter((p: any) => p.download_url)
   } catch (e) {
-    console.error('Failed to load store plugins', e)
-    message.error('加载商店插件失败')
+    message.error('加载商店失败')
   } finally {
     storeLoading.value = false
   }
 }
-
-const handleInstallStorePlugin = async (plugin: StorePluginInfo) => {
-  if (!plugin.download_url) {
-    message.error('该插件没有下载地址')
-    return
-  }
-  // 打开配置模态框
+const handleInstallStorePlugin = (plugin: StorePluginInfo) => {
   installPlugin.value = plugin
   installRemotePort.value = 8080
-  installAuthEnabled.value = false
-  installAuthUsername.value = ''
-  installAuthPassword.value = ''
   showInstallConfigModal.value = true
 }
-
 const confirmInstallPlugin = async () => {
   if (!installPlugin.value) return
-
   storeInstalling.value = installPlugin.value.name
   try {
     await installStorePlugin(
@@ -156,193 +285,12 @@ const confirmInstallPlugin = async () => {
   }
 }
 
-const loadClient = async () => {
-  try {
-    const { data } = await getClient(clientId)
-    online.value = data.online
-    lastPing.value = data.last_ping || ''
-    remoteAddr.value = data.remote_addr || ''
-    nickname.value = data.nickname || ''
-    rules.value = data.rules || []
-    clientPlugins.value = data.plugins || []
-  } catch (e) {
-    console.error('Failed to load client', e)
-  }
-}
-
-onMounted(() => {
-  loadRuleSchemas() // 加载内置协议配置模式
-  loadClient()
-})
-
-// 打开重命名弹窗
-const openRenameModal = () => {
-  renameValue.value = nickname.value
-  showRenameModal.value = true
-}
-
-// 保存重命名
-const saveRename = async () => {
-  try {
-    await updateClient(clientId, {
-      id: clientId,
-      nickname: renameValue.value,
-      rules: rules.value
-    })
-    nickname.value = renameValue.value
-    showRenameModal.value = false
-    message.success('重命名成功')
-  } catch (e) {
-    message.error('重命名失败')
-  }
-}
-
-const startEdit = () => {
-  editRules.value = rules.value.map(rule => ({
-    ...rule,
-    type: rule.type || 'tcp',
-    enabled: rule.enabled !== false
-  }))
-  editing.value = true
-}
-
-const cancelEdit = () => {
-  editing.value = false
-}
-
-const addRule = () => {
-  editRules.value.push({
-    name: '', local_ip: '127.0.0.1', local_port: 80, remote_port: 8080, type: 'tcp', enabled: true
-  })
-}
-
-const removeRule = (index: number) => {
-  editRules.value.splice(index, 1)
-}
-
-const saveEdit = async () => {
-  try {
-    // 合并插件管理的规则和编辑后的规则
-    await updateClient(clientId, { id: clientId, nickname: nickname.value, rules: editRules.value })
-    editing.value = false
-    message.success('保存成功')
-    await loadClient()
-    // 如果客户端在线，自动推送配置
-    if (online.value) {
-      try {
-        await pushConfigToClient(clientId)
-        message.success('配置已自动推送到客户端')
-      } catch (e: any) {
-        message.warning('配置已保存，但推送失败: ' + (e.response?.data || '未知错误'))
-      }
-    }
-  } catch (e) {
-    message.error('保存失败')
-  }
-}
-
-const confirmDelete = () => {
-  dialog.warning({
-    title: '确认删除',
-    content: '确定要删除此客户端吗？',
-    positiveText: '删除',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        await deleteClient(clientId)
-        message.success('删除成功')
-        router.push('/')
-      } catch (e) {
-        message.error('删除失败')
-      }
-    }
-  })
-}
-
-const pushConfig = async () => {
-  try {
-    await pushConfigToClient(clientId)
-    message.success('配置已推送')
-  } catch (e: any) {
-    message.error(e.response?.data || '推送失败')
-  }
-}
-
-const disconnect = () => {
-  dialog.warning({
-    title: '确认断开',
-    content: '确定要断开此客户端连接吗？',
-    positiveText: '断开',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        await disconnectClient(clientId)
-        online.value = false
-        message.success('已断开连接')
-      } catch (e: any) {
-        message.error(e.response?.data || '断开失败')
-      }
-    }
-  })
-}
-
-// 重启客户端
-const handleRestartClient = () => {
-  dialog.warning({
-    title: '确认重启',
-    content: '确定要重启此客户端吗？客户端将断开连接并自动重连。',
-    positiveText: '重启',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        await restartClient(clientId)
-        message.success('重启命令已发送，客户端将自动重连')
-        setTimeout(() => loadClient(), 3000)
-      } catch (e: any) {
-        message.error(e.response?.data || '重启失败')
-      }
-    }
-  })
-}
-
-// 启动客户端插件
-const handleStartPlugin = async (plugin: ClientPlugin) => {
-  const rule = rules.value.find(r => r.type === plugin.name)
-  const ruleName = rule?.name || plugin.name
-  try {
-    await startClientPlugin(clientId, plugin.id, ruleName)
-    message.success(`已启动 ${plugin.name}`)
-    plugin.running = true
-  } catch (e: any) {
-    message.error(e.message || '启动失败')
-  }
-}
-
-// 重启客户端插件
-const handleRestartPlugin = async (plugin: ClientPlugin) => {
-  // 找到使用此插件的规则
-  const rule = rules.value.find(r => r.type === plugin.name)
-  const ruleName = rule?.name || plugin.name
-  try {
-    await restartClientPlugin(clientId, plugin.id, ruleName)
-    message.success(`已重启 ${plugin.name}`)
-    plugin.running = true
-  } catch (e: any) {
-    message.error(e.message || '重启失败')
-  }
-}
-
-// 停止客户端插件
-const handleStopPlugin = async (plugin: ClientPlugin) => {
-  const rule = rules.value.find(r => r.type === plugin.name)
-  const ruleName = rule?.name || plugin.name
-  try {
-    await stopClientPlugin(clientId, plugin.id, ruleName)
-    message.success(`已停止 ${plugin.name}`)
-    plugin.running = false
-  } catch (e: any) {
-    message.error(e.message || '停止失败')
-  }
+// Plugin Actions
+const handleOpenPlugin = (plugin: ClientPlugin) => {
+  if (!plugin.remote_port) return
+  const hostname = window.location.hostname
+  const url = `http://${hostname}:${plugin.remote_port}`
+  window.open(url, '_blank')
 }
 
 const toggleClientPlugin = async (plugin: ClientPlugin) => {
@@ -364,33 +312,35 @@ const toggleClientPlugin = async (plugin: ClientPlugin) => {
   }
 }
 
-// 打开插件配置模态框
+// Plugin Config Modal
+const showConfigModal = ref(false)
+const configPluginName = ref('')
+const configSchema = ref<ConfigField[]>([])
+const configValues = ref<Record<string, string>>({})
+const configLoading = ref(false)
 const openConfigModal = async (plugin: ClientPlugin) => {
   configPluginName.value = plugin.name
   configLoading.value = true
   showConfigModal.value = true
-
   try {
     const { data } = await getClientPluginConfig(clientId, plugin.name)
     configSchema.value = data.schema || []
     configValues.value = { ...data.config }
-    // 填充默认值
-    for (const field of configSchema.value) {
-      if (field.default && !configValues.value[field.key]) {
-        configValues.value[field.key] = field.default
+    // Fill defaults
+    configSchema.value.forEach(f => {
+      if (f.default && !configValues.value[f.key]) {
+        configValues.value[f.key] = f.default
       }
-    }
-  } catch (e: any) {
-    message.error(e.response?.data || '加载配置失败')
+    })
+  } catch (e) {
+    message.error('加载配置失败')
     showConfigModal.value = false
   } finally {
     configLoading.value = false
   }
 }
-
-// 保存插件配置
 const savePluginConfig = async () => {
-  try {
+   try {
     await updateClientPluginConfig(clientId, configPluginName.value, configValues.value)
     message.success('配置已保存')
     showConfigModal.value = false
@@ -400,429 +350,387 @@ const savePluginConfig = async () => {
   }
 }
 
-// 删除客户端插件
+// Standard Client Actions
+const confirmDelete = () => {
+    dialog.warning({
+        title: '确认删除', content: '确定要删除此客户端吗？',
+        positiveText: '删除', negativeText: '取消',
+        onPositiveClick: async () => {
+            await deleteClient(clientId); router.push('/')
+        }
+    })
+}
+const disconnect = () => {
+     dialog.warning({
+        title: '确认断开', content: '确定要断开连接吗？',
+        positiveText: '断开', negativeText: '取消',
+        onPositiveClick: async () => {
+            await disconnectClient(clientId); loadClient()
+        }
+    })
+}
+const handleRestartClient = () => {
+     dialog.warning({
+        title: '确认重启', content: '确定要重启客户端吗？',
+        positiveText: '重启', negativeText: '取消',
+        onPositiveClick: async () => {
+            await restartClient(clientId); message.success('重启命令已发送'); setTimeout(loadClient, 3000)
+        }
+    })
+}
+
+// Lifecycle
+onMounted(() => {
+  loadRuleSchemas()
+  loadClient()
+})
+
+// Log Viewer
+const showLogViewer = ref(false)
+
+// Plugin Status Actions
+const handleStartPlugin = async (plugin: ClientPlugin) => {
+    const rule = rules.value.find(r => r.type === plugin.name)
+    const ruleName = rule?.name || plugin.name
+    try { await startClientPlugin(clientId, plugin.id, ruleName); message.success('已启动'); plugin.running = true } catch(e:any){ message.error(e.message) }
+}
+const handleRestartPlugin = async (plugin: ClientPlugin) => {
+    const rule = rules.value.find(r => r.type === plugin.name)
+    const ruleName = rule?.name || plugin.name
+    try { await restartClientPlugin(clientId, plugin.id, ruleName); message.success('已重启'); plugin.running = true } catch(e:any){ message.error(e.message)}
+}
+const handleStopPlugin = async (plugin: ClientPlugin) => {
+    const rule = rules.value.find(r => r.type === plugin.name)
+    const ruleName = rule?.name || plugin.name
+    try { await stopClientPlugin(clientId, plugin.id, ruleName); message.success('已停止'); plugin.running = false } catch(e:any){ message.error(e.message)}
+}
 const handleDeletePlugin = (plugin: ClientPlugin) => {
-  dialog.warning({
-    title: '确认删除',
-    content: `确定要删除插件 ${plugin.name} 吗？`,
-    positiveText: '删除',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        await deleteClientPlugin(clientId, plugin.id)
-        message.success(`已删除 ${plugin.name}`)
-        await loadClient()
-      } catch (e: any) {
-        message.error(e.response?.data || '删除失败')
-      }
-    }
-  })
+    dialog.warning({
+        title: '确认删除', content: `确定要删除插件 ${plugin.name} 吗？`,
+        positiveText: '删除', negativeText: '取消',
+        onPositiveClick: async () => {
+             await deleteClientPlugin(clientId, plugin.id); message.success('已删除'); loadClient()
+        }
+    })
 }
 </script>
 
 <template>
   <div class="client-view">
-    <!-- 头部信息卡片 -->
-    <n-card style="margin-bottom: 16px;">
-      <n-space justify="space-between" align="center" wrap>
-        <n-space align="center">
-          <n-button quaternary @click="router.push('/')">
-            <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
-            返回
-          </n-button>
-          <h2 style="margin: 0; cursor: pointer;" @click="openRenameModal" title="点击重命名">
-            {{ nickname || clientId }}
-            <n-icon size="16" style="margin-left: 4px; opacity: 0.5;"><CreateOutline /></n-icon>
-          </h2>
-          <span v-if="nickname" style="color: #999; font-size: 12px;">{{ clientId }}</span>
-          <n-tag :type="online ? 'success' : 'default'">
-            {{ online ? '在线' : '离线' }}
-          </n-tag>
-          <span v-if="remoteAddr && online" style="color: #666; font-size: 14px;">
-            IP: {{ remoteAddr }}
-          </span>
-          <span v-if="lastPing" style="color: #666; font-size: 14px;">
-            最后心跳: {{ lastPing }}
-          </span>
-        </n-space>
-        <n-space>
-          <template v-if="online">
-            <n-button type="info" @click="pushConfig">
-              <template #icon><n-icon><PushOutline /></n-icon></template>
-              推送配置
-            </n-button>
-            <n-button @click="showLogViewer = true">
-              <template #icon><n-icon><DocumentTextOutline /></n-icon></template>
-              查看日志
-            </n-button>
-            <n-button @click="openStoreModal">
-              <template #icon><n-icon><StorefrontOutline /></n-icon></template>
-              从商店安装
-            </n-button>
-            <n-button type="warning" @click="disconnect">
-              <template #icon><n-icon><PowerOutline /></n-icon></template>
-              断开连接
-            </n-button>
-            <n-button type="error" @click="handleRestartClient">
-              <template #icon><n-icon><RefreshOutline /></n-icon></template>
-              重启客户端
-            </n-button>
-          </template>
-          <template v-if="!editing">
-            <n-button type="primary" @click="startEdit">
-              <template #icon><n-icon><CreateOutline /></n-icon></template>
-              编辑规则
-            </n-button>
-            <n-button type="error" @click="confirmDelete">
-              <template #icon><n-icon><TrashOutline /></n-icon></template>
-              删除
-            </n-button>
-          </template>
-        </n-space>
-      </n-space>
-    </n-card>
+    <!-- Header Area -->
+    <div class="page-header">
+       <n-space align="center">
+         <n-button quaternary circle @click="router.push('/')">
+           <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
+         </n-button>
+         <h1 class="page-title">{{ nickname || clientId }}</h1>
+         <n-button text size="small" @click="openRenameModal">
+           <template #icon><n-icon><CreateOutline /></n-icon></template>
+         </n-button>
+         <n-tag :type="online ? 'success' : 'error'" round size="small" style="margin-left: 8px;">
+           {{ online ? '在线' : '离线' }}
+         </n-tag>
+       </n-space>
+       <n-space>
+         <n-button v-if="online" type="primary" secondary @click="pushConfigToClient(clientId).then(() => message.success('已推送'))" size="small">
+           <template #icon><n-icon><PushOutline /></n-icon></template>
+           推送配置
+         </n-button>
+         <n-button size="small" @click="showLogViewer=true">
+            <template #icon><n-icon><DocumentTextOutline/></n-icon></template>
+            日志
+         </n-button>
+         <n-button type="error" ghost size="small" @click="confirmDelete">
+            <template #icon><n-icon><TrashOutline/></n-icon></template>
+            删除客户端
+         </n-button>
+       </n-space>
+    </div>
 
-    <!-- 规则卡片 -->
-    <n-card title="代理规则">
-      <template #header-extra v-if="editing">
-        <n-space>
-          <n-button @click="cancelEdit">
-            <template #icon><n-icon><CloseOutline /></n-icon></template>
-            取消
-          </n-button>
-          <n-button type="primary" @click="saveEdit">
-            <template #icon><n-icon><SaveOutline /></n-icon></template>
-            保存
-          </n-button>
-        </n-space>
-      </template>
+    <n-divider style="margin: 12px 0 24px 0;" />
 
-      <!-- 查看模式 -->
-      <template v-if="!editing">
-        <n-empty v-if="rules.length === 0" description="暂无代理规则" />
-        <n-table v-else :bordered="false" :single-line="false">
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>本地地址</th>
-              <th>远程端口</th>
-              <th>类型</th>
-              <th>状态</th>
-              <th>来源</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="rule in rules" :key="rule.name">
-              <td>{{ rule.name || '未命名' }}</td>
-              <td>
-                <template v-if="needsLocalAddr(rule.type || 'tcp')">
-                  {{ rule.local_ip }}:{{ rule.local_port }}
-                </template>
-                <span v-else style="color: #999;">-</span>
-              </td>
-              <td>{{ rule.remote_port }}</td>
-              <td><n-tag size="small">{{ (rule.type || 'tcp').toUpperCase() }}</n-tag></td>
-              <td>
-                <n-tag size="small" :type="rule.enabled !== false ? 'success' : 'default'">
-                  {{ rule.enabled !== false ? '启用' : '禁用' }}
-                </n-tag>
-              </td>
-              <td>
-                <n-tag v-if="rule.plugin_managed" size="small" type="info">插件</n-tag>
-                <n-tag v-else size="small" type="default">手动</n-tag>
-              </td>
-            </tr>
-          </tbody>
-        </n-table>
-      </template>
+    <n-grid :x-gap="24" :y-gap="24" cols="1 800:3" item-responsive>
+      <!-- Left Column: Status & Info -->
+      <n-grid-item span="1">
+        <n-space vertical size="large">
+          <n-card title="客户端状态" bordered size="small">
+            <n-space vertical size="large" justify="space-between">
+               <n-statistic label="连接 ID">
+                 {{ clientId }}
+               </n-statistic>
+               <n-statistic label="远程 IP">
+                 {{ remoteAddr || '-' }}
+               </n-statistic>
+               <n-statistic label="最后心跳">
+                 {{ lastPing ? new Date(lastPing).toLocaleTimeString() : '-' }}
+               </n-statistic>
+            </n-space>
+             <template #action>
+               <n-space vertical>
+                 <n-button block type="warning" dashed @click="disconnect" :disabled="!online">断开连接</n-button>
+                 <n-button block type="error" dashed @click="handleRestartClient" :disabled="!online">重启客户端</n-button>
+               </n-space>
+             </template>
+          </n-card>
 
-      <!-- 编辑模式 -->
-      <template v-else>
-        <n-space vertical :size="12">
-          <n-card v-for="(rule, i) in editRules" :key="i" size="small">
-            <n-alert v-if="rule.plugin_managed" type="info" show-icon style="margin-bottom: 12px">
-              此规则由插件创建，禁止修改。如需修改请前往插件管理页面。
-            </n-alert>
-            <n-space align="center" wrap>
-              <n-form-item label="启用" :show-feedback="false">
-                <n-switch v-model:value="rule.enabled" :disabled="!!rule.plugin_managed" />
-              </n-form-item>
-              <n-form-item label="名称" :show-feedback="false">
-                <n-input v-model:value="rule.name" placeholder="规则名称" :disabled="!!rule.plugin_managed" />
-              </n-form-item>
-              <n-form-item label="类型" :show-feedback="false">
-                <n-select v-model:value="rule.type" :options="typeOptions" style="width: 140px;" :disabled="!!rule.plugin_managed" />
-              </n-form-item>
-              <!-- 仅 tcp/udp 显示本地地址 -->
-              <template v-if="needsLocalAddr(rule.type || 'tcp')">
-                <n-form-item label="本地IP" :show-feedback="false">
-                  <n-input v-model:value="rule.local_ip" placeholder="127.0.0.1" :disabled="!!rule.plugin_managed" />
-                </n-form-item>
-                <n-form-item label="本地端口" :show-feedback="false">
-                  <n-input-number v-model:value="rule.local_port" :show-button="false" :disabled="!!rule.plugin_managed" />
-                </n-form-item>
-              </template>
-              <n-form-item label="远程端口" :show-feedback="false">
-                <n-input-number v-model:value="rule.remote_port" :show-button="false" :disabled="!!rule.plugin_managed" />
-              </n-form-item>
-              <!-- 插件额外字段 -->
-              <template v-for="field in getExtraFields(rule.type || '')" :key="field.key">
-                <n-form-item :label="field.label" :show-feedback="false">
-                  <!-- 字符串输入 -->
-                  <n-input
-                    v-if="field.type === 'string'"
-                    :value="rule.plugin_config?.[field.key] || field.default || ''"
-                    @update:value="(v: string) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v }"
-                    :placeholder="field.description"
-                    :disabled="!!rule.plugin_managed"
-                  />
-                  <!-- 密码输入 -->
-                  <n-input
-                    v-else-if="field.type === 'password'"
-                    :value="rule.plugin_config?.[field.key] || ''"
-                    @update:value="(v: string) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v }"
-                    type="password"
-                    show-password-on="click"
-                    :placeholder="field.description"
-                    :disabled="!!rule.plugin_managed"
-                  />
-                  <!-- 数字输入 -->
-                  <n-input-number
-                    v-else-if="field.type === 'number'"
-                    :value="rule.plugin_config?.[field.key] ? Number(rule.plugin_config[field.key]) : undefined"
-                    @update:value="(v: number | null) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v !== null ? String(v) : '' }"
-                    :placeholder="field.description"
-                    :show-button="false"
-                    style="width: 120px;"
-                    :disabled="!!rule.plugin_managed"
-                  />
-                  <!-- 布尔开关 -->
-                  <n-switch
-                    v-else-if="field.type === 'bool'"
-                    :value="rule.plugin_config?.[field.key] === 'true'"
-                    @update:value="(v: boolean) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = String(v) }"
-                    :disabled="!!rule.plugin_managed"
-                  />
-                  <!-- 下拉选择 -->
-                  <n-select
-                    v-else-if="field.type === 'select'"
-                    :value="rule.plugin_config?.[field.key] || field.default"
-                    @update:value="(v: string) => { if (!rule.plugin_config) rule.plugin_config = {}; rule.plugin_config[field.key] = v }"
-                    :options="(field.options || []).map(o => ({ label: o, value: o }))"
-                    style="width: 120px;"
-                    :disabled="!!rule.plugin_managed"
-                  />
-                </n-form-item>
-              </template>
-              <n-button v-if="editRules.length > 1 && !rule.plugin_managed" quaternary type="error" @click="removeRule(i)">
-                <template #icon><n-icon><TrashOutline /></n-icon></template>
-              </n-button>
+          <n-card title="统计" bordered size="small">
+            <n-space justify="space-around">
+               <n-statistic label="规则数" :value="rules.length" />
+               <n-statistic label="插件数" :value="clientPlugins.length" />
             </n-space>
           </n-card>
-          <n-button dashed block @click="addRule">
-            <template #icon><n-icon><AddOutline /></n-icon></template>
-            添加规则
-          </n-button>
         </n-space>
-      </template>
-    </n-card>
+      </n-grid-item>
 
-    <!-- 已安装插件卡片 -->
-    <n-card title="已安装扩展" style="margin-top: 16px;">
-      <n-empty v-if="clientPlugins.length === 0" description="暂无已安装扩展" />
-      <n-table v-else :bordered="false" :single-line="false">
-        <thead>
-          <tr>
-            <th>名称</th>
-            <th>版本</th>
-            <th>状态</th>
-            <th>启用</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="plugin in clientPlugins" :key="plugin.id">
-            <td>{{ plugin.name }}</td>
-            <td>v{{ plugin.version }}</td>
-            <td>
-              <n-tag v-if="plugin.running" type="success" size="small">运行中</n-tag>
-              <n-tag v-else type="default" size="small">已停止</n-tag>
-            </td>
-            <td>
-              <n-switch :value="plugin.enabled" @update:value="toggleClientPlugin(plugin)" />
-            </td>
-            <td>
-              <n-space :size="4">
-                <n-button size="small" quaternary @click="openConfigModal(plugin)">
-                  <template #icon><n-icon><SettingsOutline /></n-icon></template>
-                  配置
-                </n-button>
-                <n-button v-if="online && plugin.enabled && plugin.running" size="small" quaternary type="info" @click="handleRestartPlugin(plugin)">
-                  <template #icon><n-icon><RefreshOutline /></n-icon></template>
-                  重启
-                </n-button>
-                <n-button v-if="online && plugin.enabled && !plugin.running" size="small" quaternary type="success" @click="handleStartPlugin(plugin)">
-                  <template #icon><n-icon><PlayOutline /></n-icon></template>
-                  启动
-                </n-button>
-                <n-button v-if="online && plugin.enabled && plugin.running" size="small" quaternary type="warning" @click="handleStopPlugin(plugin)">
-                  <template #icon><n-icon><StopOutline /></n-icon></template>
-                  停止
-                </n-button>
-                <n-button size="small" quaternary type="error" @click="handleDeletePlugin(plugin)">
-                  <template #icon><n-icon><TrashOutline /></n-icon></template>
-                  删除
-                </n-button>
-              </n-space>
-            </td>
-          </tr>
-        </tbody>
-      </n-table>
-    </n-card>
+      <!-- Right Column: Rules & Plugins -->
+      <n-grid-item span="2">
+         <n-space vertical size="large">
 
-    <!-- 插件配置模态框 -->
-    <n-modal v-model:show="showConfigModal" preset="card" :title="`${configPluginName} 配置`" style="width: 500px;">
-      <n-empty v-if="configLoading" description="加载中..." />
-      <n-empty v-else-if="configSchema.length === 0" description="该插件暂无可配置项" />
-      <n-space v-else vertical :size="16">
-        <n-form-item v-for="field in configSchema" :key="field.key" :label="field.label">
-          <!-- 字符串输入 -->
-          <n-input
-            v-if="field.type === 'string'"
-            v-model:value="configValues[field.key]"
-            :placeholder="field.description || field.label"
-          />
-          <!-- 密码输入 -->
-          <n-input
-            v-else-if="field.type === 'password'"
-            v-model:value="configValues[field.key]"
-            type="password"
-            show-password-on="click"
-            :placeholder="field.description || field.label"
-          />
-          <!-- 数字输入 -->
-          <n-input-number
-            v-else-if="field.type === 'number'"
-            :value="configValues[field.key] ? Number(configValues[field.key]) : undefined"
-            @update:value="(v: number | null) => configValues[field.key] = v !== null ? String(v) : ''"
-            :placeholder="field.description"
-            style="width: 100%;"
-          />
-          <!-- 下拉选择 -->
-          <n-select
-            v-else-if="field.type === 'select'"
-            v-model:value="configValues[field.key]"
-            :options="(field.options || []).map(o => ({ label: o, value: o }))"
-          />
-          <!-- 布尔开关 -->
-          <n-switch
-            v-else-if="field.type === 'bool'"
-            :value="configValues[field.key] === 'true'"
-            @update:value="(v: boolean) => configValues[field.key] = String(v)"
-          />
-          <template #feedback v-if="field.description && field.type !== 'string' && field.type !== 'password'">
-            <span style="color: #999; font-size: 12px;">{{ field.description }}</span>
-          </template>
+           <!-- Rules Card -->
+           <n-card title="代理规则" bordered>
+             <template #header-extra>
+               <n-button type="primary" size="small" @click="openCreateRule">
+                 <template #icon><n-icon><AddOutline /></n-icon></template>
+                 添加规则
+               </n-button>
+             </template>
+
+             <n-empty v-if="rules.length === 0" description="暂无代理规则" style="padding: 24px;" />
+             <n-table v-else :bordered="false" size="small">
+               <thead>
+                 <tr>
+                   <th>名称</th>
+                   <th>类型</th>
+                   <th>映射</th>
+                   <th>状态</th>
+                   <th style="text-align: right;">操作</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 <tr v-for="rule in rules" :key="rule.name">
+                   <td><span style="font-weight: 500;">{{ rule.name }}</span></td>
+                   <td><n-tag size="small" :type="rule.type==='websocket'?'info':'default'">{{ (rule.type || 'tcp').toUpperCase() }}</n-tag></td>
+                   <td style="font-family: monospace; font-size: 12px; color: #666;">
+                      {{ needsLocalAddr(rule.type||'tcp') ? `${rule.local_ip}:${rule.local_port}` : '-' }}
+                      <n-icon><ArrowBackOutline style="transform: rotate(180deg); margin: 0 4px;" /></n-icon>
+                      :{{ rule.remote_port }}
+                   </td>
+                   <td>
+                     <n-switch :value="rule.enabled !== false" @update:value="(v: boolean) => { rule.enabled = v; saveRules(rules) }" size="small" />
+                   </td>
+                   <td style="text-align: right;">
+                     <n-space justify="end" :size="8">
+                       <n-tooltip v-if="rule.plugin_managed">
+                         <template #trigger>
+                            <n-tag type="info" size="small">插件托管</n-tag>
+                         </template>
+                         此规则由插件管理，无法手动编辑
+                       </n-tooltip>
+                       <template v-else>
+                         <n-button size="tiny" secondary type="info" @click="openEditRule(rule)">编辑</n-button>
+                         <n-button size="tiny" secondary type="error" @click="handleDeleteRule(rule)">删除</n-button>
+                       </template>
+                     </n-space>
+                   </td>
+                 </tr>
+               </tbody>
+             </n-table>
+           </n-card>
+
+           <!-- Plugins Card -->
+           <n-card title="已安装扩展" bordered>
+             <template #header-extra>
+                <n-button secondary size="small" @click="openStoreModal">
+                 <template #icon><n-icon><StorefrontOutline /></n-icon></template>
+                 插件商店
+               </n-button>
+             </template>
+
+             <n-empty v-if="clientPlugins.length === 0" description="暂无安装的扩展" style="padding: 24px;" />
+             <n-table v-else :bordered="false" size="small">
+                <thead>
+                  <tr>
+                    <th>名称</th>
+                    <th>版本</th>
+                    <th>端口</th>
+                    <th>状态</th>
+                    <th>启用</th>
+                    <th style="text-align: right;">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="plugin in clientPlugins" :key="plugin.id">
+                    <td>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <n-icon size="18" color="#18a058"><ExtensionPuzzleOutline /></n-icon>
+                        {{ plugin.name }}
+                      </div>
+                    </td>
+                    <td>v{{ plugin.version }}</td>
+                    <td>{{ plugin.remote_port || '-' }}</td>
+                    <td>
+                       <n-tag :type="plugin.running ? 'success' : 'default'" size="small" round>
+                         {{ plugin.running ? '运行中' : '已停止' }}
+                       </n-tag>
+                    </td>
+                    <td>
+                      <n-switch :value="plugin.enabled" size="small" @update:value="toggleClientPlugin(plugin)" />
+                    </td>
+                    <td style="text-align: right;">
+                      <n-space justify="end" :size="4">
+                        <n-button v-if="plugin.running && plugin.remote_port" size="tiny" type="success" secondary @click="handleOpenPlugin(plugin)">
+                          <template #icon><n-icon><OpenOutline /></n-icon></template>
+                          打开
+                        </n-button>
+                        <n-button v-if="!plugin.running" size="tiny" @click="handleStartPlugin(plugin)" :disabled="!online || !plugin.enabled">启动</n-button>
+                        <n-dropdown :options="[
+                           { label: '重启', key: 'restart', disabled: !plugin.running },
+                           { label: '配置', key: 'config' },
+                           { label: '删除', key: 'delete', props: { style: 'color: red' } },
+                           { label: '停止', key: 'stop', disabled: !plugin.running }
+                        ]" @select="(k: string) => {
+                             if(k==='restart') handleRestartPlugin(plugin);
+                             if(k==='config') openConfigModal(plugin);
+                             if(k==='delete') handleDeletePlugin(plugin);
+                             if(k==='stop') handleStopPlugin(plugin);
+                        }">
+                          <n-button size="tiny" quaternary><template #icon><n-icon><SettingsOutline /></n-icon></template></n-button>
+                        </n-dropdown>
+                      </n-space>
+                    </td>
+                  </tr>
+                </tbody>
+             </n-table>
+           </n-card>
+
+         </n-space>
+      </n-grid-item>
+    </n-grid>
+
+    <!-- Rule Edit Modal -->
+    <n-modal v-model:show="showRuleModal" preset="card" :title="ruleModalType==='create'?'添加规则':'编辑规则'" style="width: 500px">
+      <n-form ref="ruleFormRef" :model="ruleForm" :rules="ruleValidationRules" label-placement="left" label-width="80">
+        <n-form-item label="名称" path="name">
+          <n-input v-model:value="ruleForm.name" placeholder="请输入规则名称" :disabled="ruleModalType==='edit'" />
         </n-form-item>
-      </n-space>
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showConfigModal = false">取消</n-button>
-          <n-button type="primary" @click="savePluginConfig" :disabled="configSchema.length === 0">
-            保存
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
+        <n-form-item label="类型" path="type">
+          <n-select v-model:value="ruleForm.type" :options="builtinTypes" />
+        </n-form-item>
 
-    <!-- 重命名模态框 -->
-    <n-modal v-model:show="showRenameModal" preset="card" title="重命名客户端" style="width: 400px;">
-      <n-form-item label="昵称" :show-feedback="false">
-        <n-input v-model:value="renameValue" placeholder="给客户端起个名字（可选）" />
-      </n-form-item>
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showRenameModal = false">取消</n-button>
-          <n-button type="primary" @click="saveRename">保存</n-button>
-        </n-space>
-      </template>
-    </n-modal>
-
-    <!-- 商店插件安装模态框 -->
-    <n-modal v-model:show="showStoreModal" preset="card" title="从商店安装插件" style="width: 500px;">
-      <n-spin :show="storeLoading">
-        <n-empty v-if="!storeLoading && storePlugins.length === 0" description="商店暂无可用插件" />
-        <n-space v-else vertical :size="12">
-          <n-card v-for="plugin in storePlugins" :key="plugin.name" size="small">
-            <n-space justify="space-between" align="center">
-              <n-space vertical :size="4">
-                <n-space align="center">
-                  <span style="font-weight: 500;">{{ plugin.name }}</span>
-                  <n-tag size="small">v{{ plugin.version }}</n-tag>
-                </n-space>
-                <span style="color: #666; font-size: 12px;">{{ plugin.description }}</span>
-                <span style="color: #999; font-size: 12px;">作者: {{ plugin.author }}</span>
-              </n-space>
-              <n-button
-                size="small"
-                type="primary"
-                :loading="storeInstalling === plugin.name"
-                @click="handleInstallStorePlugin(plugin)"
-              >
-                安装
-              </n-button>
-            </n-space>
-          </n-card>
-        </n-space>
-      </n-spin>
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showStoreModal = false">关闭</n-button>
-        </n-space>
-      </template>
-    </n-modal>
-
-    <!-- 安装配置模态框 -->
-    <n-modal v-model:show="showInstallConfigModal" preset="card" title="安装配置" style="width: 450px;">
-      <n-space vertical :size="16">
-        <div v-if="installPlugin">
-          <p style="margin: 0 0 8px 0;"><strong>插件:</strong> {{ installPlugin.name }}</p>
-          <p style="margin: 0; color: #666;">{{ installPlugin.description }}</p>
-        </div>
-        <div>
-          <p style="margin: 0 0 8px 0; color: #666; font-size: 13px;">远程端口:</p>
-          <n-input-number
-            v-model:value="installRemotePort"
-            :min="1"
-            :max="65535"
-            placeholder="输入端口号"
-            style="width: 100%;"
-          />
-        </div>
-        <div>
-          <n-space align="center" :size="8">
-            <n-switch v-model:value="installAuthEnabled" />
-            <span style="color: #666;">启用 HTTP Basic Auth</span>
-          </n-space>
-        </div>
-        <template v-if="installAuthEnabled">
-          <n-input v-model:value="installAuthUsername" placeholder="用户名" />
-          <n-input v-model:value="installAuthPassword" type="password" placeholder="密码" show-password-on="click" />
+        <template v-if="needsLocalAddr(ruleForm.type || 'tcp')">
+          <n-form-item label="本地IP" path="local_ip">
+            <n-input v-model:value="ruleForm.local_ip" placeholder="127.0.0.1" />
+          </n-form-item>
+          <n-form-item label="本地端口" path="local_port">
+            <n-input-number v-model:value="ruleForm.local_port" :min="1" :max="65535" style="width: 100%" />
+          </n-form-item>
         </template>
-      </n-space>
+
+        <n-form-item label="远程端口" path="remote_port">
+          <n-input-number v-model:value="ruleForm.remote_port" :min="1" :max="65535" style="width: 100%" placeholder="将在服务器上监听的端口" />
+        </n-form-item>
+
+        <!-- Extra Fields -->
+        <template v-for="field in getExtraFields(ruleForm.type || '')" :key="field.key">
+           <n-form-item :label="field.label">
+              <n-input v-if="field.type==='string'" v-model:value="ruleForm.plugin_config![field.key]" />
+              <n-input v-if="field.type==='password'" type="password" v-model:value="ruleForm.plugin_config![field.key]" show-password-on="click" />
+              <n-switch v-if="field.type==='bool'" :value="ruleForm.plugin_config![field.key]==='true'" @update:value="(v) => ruleForm.plugin_config![field.key] = String(v)" />
+           </n-form-item>
+        </template>
+      </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showInstallConfigModal = false">取消</n-button>
-          <n-button type="primary" :loading="!!storeInstalling" @click="confirmInstallPlugin">
-            安装
-          </n-button>
+          <n-button @click="showRuleModal = false">取消</n-button>
+          <n-button type="primary" @click="handleRuleSubmit">保存</n-button>
         </n-space>
       </template>
     </n-modal>
 
-    <!-- 日志查看模态框 -->
-    <n-modal v-model:show="showLogViewer" preset="card" style="width: 900px; max-width: 95vw;">
-      <LogViewer :client-id="clientId" :visible="showLogViewer" @close="showLogViewer = false" />
+    <!-- Plugin Config Modal -->
+    <n-modal v-model:show="showConfigModal" preset="card" :title="`${configPluginName} 配置`" style="width: 500px;">
+       <n-empty v-if="configLoading" description="加载中..." />
+       <n-form v-else label-placement="left" label-width="100">
+         <n-form-item v-for="field in configSchema" :key="field.key" :label="field.label">
+            <n-input v-if="field.type==='string'" v-model:value="configValues[field.key]" />
+            <n-input v-if="field.type==='password'" type="password" v-model:value="configValues[field.key]" show-password-on="click"/>
+            <n-input-number v-if="field.type==='number'" :value="Number(configValues[field.key])" @update:value="(v) => configValues[field.key] = String(v)" />
+            <n-switch v-if="field.type==='bool'" :value="configValues[field.key]==='true'" @update:value="(v) => configValues[field.key] = String(v)" />
+         </n-form-item>
+       </n-form>
+       <template #footer>
+         <n-space justify="end">
+           <n-button @click="showConfigModal = false">取消</n-button>
+           <n-button type="primary" @click="savePluginConfig">保存</n-button>
+         </n-space>
+       </template>
     </n-modal>
+
+    <!-- Rename Modal -->
+    <n-modal v-model:show="showRenameModal" preset="card" title="重命名客户端" style="width: 400px;">
+      <n-input v-model:value="renameValue" placeholder="请输入新名称" />
+      <template #footer>
+        <n-space justify="end">
+           <n-button @click="showRenameModal = false">取消</n-button>
+           <n-button type="primary" @click="saveRename">保存</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- Store Modal -->
+    <n-modal v-model:show="showStoreModal" preset="card" title="插件商店" style="width: 600px;">
+       <n-spin :show="storeLoading">
+         <n-grid :x-gap="12" :y-gap="12" cols="1 600:2">
+            <n-grid-item v-for="plugin in storePlugins" :key="plugin.name">
+               <n-card size="small" hoverable>
+                 <n-space align="center" justify="space-between">
+                   <div style="font-weight: 600;">{{ plugin.name }}</div>
+                   <n-tag size="small">v{{ plugin.version }}</n-tag>
+                 </n-space>
+                 <div style="color: #666; font-size: 12px; margin: 8px 0; height: 32px; overflow: hidden;">
+                   {{ plugin.description }}
+                 </div>
+                 <n-button block type="primary" size="small" secondary @click="handleInstallStorePlugin(plugin)" :loading="storeInstalling === plugin.name">
+                   安装
+                 </n-button>
+               </n-card>
+            </n-grid-item>
+         </n-grid>
+       </n-spin>
+    </n-modal>
+
+    <!-- Install Config Modal -->
+    <n-modal v-model:show="showInstallConfigModal" preset="card" title="安装配置" style="width: 400px;">
+       <n-form label-placement="left">
+          <n-form-item label="远程端口">
+             <n-input-number v-model:value="installRemotePort" :min="1" :max="65535" style="width: 100%" placeholder="1-65535" />
+          </n-form-item>
+       </n-form>
+       <template #footer>
+          <n-space justify="end">
+             <n-button @click="showInstallConfigModal = false">取消</n-button>
+             <n-button type="primary" @click="confirmInstallPlugin">确认安装</n-button>
+          </n-space>
+       </template>
+    </n-modal>
+
+    <LogViewer :visible="showLogViewer" @close="showLogViewer = false" :client-id="clientId" />
   </div>
 </template>
+
+<style scoped>
+.client-view {
+  min-height: 100%;
+}
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  color: #1f2937;
+}
+</style>
