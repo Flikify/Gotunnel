@@ -16,8 +16,8 @@ const Version = "1.0.0"
 
 // 仓库信息
 const (
-	RepoURL    = "https://git.92coco.cn:8443/flik/GoTunnel"
-	APIBaseURL = "https://git.92coco.cn:8443/api/v1"
+	RepoURL    = "https://git.92coco.cn/flik/GoTunnel"
+	APIBaseURL = "https://git.92coco.cn/api/v1"
 	RepoOwner  = "flik"
 	RepoName   = "GoTunnel"
 )
