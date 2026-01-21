@@ -140,9 +140,9 @@ jobs:
           # Windows
           zip gotunnel-server-${VERSION}-windows-amd64.zip gotunnel-server-windows-amd64.exe
           zip gotunnel-client-${VERSION}-windows-amd64.zip gotunnel-client-windows-amd64.exe
-          
-          # Clean up raw binaries
-          rm gotunnel-server-* gotunnel-client-* 2>/dev/null || true
+
+          # Clean up raw binaries, keep only archives and checksums
+          find . -type f ! -name "*.tar.gz" ! -name "*.zip" ! -name "SHA256SUMS" -delete
           
           cd ..
       

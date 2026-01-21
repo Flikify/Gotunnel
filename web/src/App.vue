@@ -4,11 +4,11 @@ import { RouterView, useRouter, useRoute } from 'vue-router'
 import {
   NLayout, NLayoutHeader, NLayoutContent, NLayoutSider, NMenu,
   NButton, NIcon, NConfigProvider, NMessageProvider,
-  NDialogProvider, NGlobalStyle, type GlobalThemeOverrides
+  NDialogProvider, NGlobalStyle, NDropdown, NAvatar, type GlobalThemeOverrides
 } from 'naive-ui'
 import {
   HomeOutline, ExtensionPuzzleOutline, LogOutOutline,
-  ServerOutline, MenuOutline
+  ServerOutline, MenuOutline, PersonCircleOutline
 } from '@vicons/ionicons5'
 import type { MenuOption } from 'naive-ui'
 import { getServerStatus, removeToken, getToken } from './api'
@@ -67,6 +67,21 @@ onMounted(() => {
 const logout = () => {
   removeToken()
   router.push('/login')
+}
+
+// User dropdown menu options
+const userDropdownOptions = [
+  {
+    label: '退出登录',
+    key: 'logout',
+    icon: () => h(NIcon, null, { default: () => h(LogOutOutline) })
+  }
+]
+
+const handleUserDropdown = (key: string) => {
+  if (key === 'logout') {
+    logout()
+  }
 }
 
 // Theme Overrides
@@ -131,10 +146,13 @@ const themeOverrides: GlobalThemeOverrides = {
                   <template #icon><n-icon><MenuOutline /></n-icon></template>
                 </n-button>
                 <div class="header-right">
-                   <n-button quaternary @click="logout">
-                    <template #icon><n-icon><LogOutOutline /></n-icon></template>
-                    Logout
-                  </n-button>
+                  <n-dropdown :options="userDropdownOptions" @select="handleUserDropdown">
+                    <n-button quaternary circle size="large">
+                      <template #icon>
+                        <n-icon size="24"><PersonCircleOutline /></n-icon>
+                      </template>
+                    </n-button>
+                  </n-dropdown>
                 </div>
               </div>
             </n-layout-header>

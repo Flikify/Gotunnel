@@ -292,8 +292,8 @@ onMounted(() => {
   <div class="plugins-view">
     <n-space justify="space-between" align="center" style="margin-bottom: 24px;">
       <div>
-        <h2 style="margin: 0 0 8px 0;">扩展商店</h2>
-        <p style="margin: 0; color: #666;">管理已安装扩展和浏览扩展商店</p>
+        <h2 style="margin: 0 0 8px 0;">插件管理</h2>
+        <p style="margin: 0; color: #666;">管理已安装插件和浏览插件商店</p>
       </div>
       <n-button quaternary @click="router.push('/')">
         <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
@@ -302,8 +302,8 @@ onMounted(() => {
     </n-space>
 
     <n-tabs v-model:value="activeTab" type="line" @update:value="handleTabChange">
-      <!-- 已安装扩展 -->
-      <n-tab-pane name="installed" tab="已安装">
+      <!-- 已安装插件 -->
+      <n-tab-pane name="installed" tab="已安装插件">
         <n-spin :show="loading">
           <n-grid :cols="3" :x-gap="16" :y-gap="16" style="margin-bottom: 24px;">
             <n-gi>
@@ -323,7 +323,7 @@ onMounted(() => {
             </n-gi>
           </n-grid>
 
-          <n-empty v-if="!loading && plugins.length === 0" description="暂无已安装扩展" />
+          <n-empty v-if="!loading && plugins.length === 0" description="暂无已安装插件" />
 
           <n-grid v-else :cols="3" :x-gap="16" :y-gap="16" responsive="screen" cols-s="1" cols-m="2">
             <n-gi v-for="plugin in plugins" :key="plugin.name">
@@ -356,10 +356,10 @@ onMounted(() => {
         </n-spin>
       </n-tab-pane>
 
-      <!-- 扩展商店 -->
-      <n-tab-pane name="store" tab="扩展商店">
+      <!-- 插件商店 -->
+      <n-tab-pane name="store" tab="插件商店">
         <n-spin :show="storeLoading">
-          <n-empty v-if="!storeLoading && storePlugins.length === 0" description="扩展商店暂无可用扩展" />
+          <n-empty v-if="!storeLoading && storePlugins.length === 0" description="插件商店暂无可用插件" />
 
           <n-grid v-else :cols="3" :x-gap="16" :y-gap="16" responsive="screen" cols-s="1" cols-m="2">
             <n-gi v-for="plugin in storePlugins" :key="plugin.name">
