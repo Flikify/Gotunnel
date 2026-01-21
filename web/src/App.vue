@@ -4,7 +4,7 @@ import { RouterView, useRouter, useRoute } from 'vue-router'
 import {
   NLayout, NLayoutHeader, NLayoutContent, NLayoutSider, NMenu,
   NButton, NIcon, NConfigProvider, NMessageProvider,
-  NDialogProvider, NGlobalStyle, NDropdown, NAvatar, type GlobalThemeOverrides
+  NDialogProvider, NGlobalStyle, NDropdown, type GlobalThemeOverrides
 } from 'naive-ui'
 import {
   HomeOutline, ExtensionPuzzleOutline, LogOutOutline,
