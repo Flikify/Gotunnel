@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, AddOutline, StorefrontOutline, DocumentTextOutline,
-  ExtensionPuzzleOutline, SettingsOutline, CloudDownloadOutline, RefreshOutline
+  ExtensionPuzzleOutline, SettingsOutline, RefreshOutline
 } from '@vicons/ionicons5'
 import GlassModal from '../components/GlassModal.vue'
 import GlassTag from '../components/GlassTag.vue'
@@ -41,7 +41,6 @@ const clientVersion = ref('')
 
 // 客户端更新相关
 const clientUpdate = ref<UpdateInfo | null>(null)
-const checkingUpdate = ref(false)
 const updatingClient = ref(false)
 
 // 系统状态相关
@@ -157,31 +156,6 @@ const formatBytes = (bytes: number): string => {
 }
 
 // 客户端更新
-const handleCheckClientUpdate = async () => {
-  if (!online.value) {
-    message.warning('客户端离线，无法检查更新')
-    return
-  }
-  if (!clientOs.value || !clientArch.value) {
-    message.warning('无法获取客户端平台信息')
-    return
-  }
-  checkingUpdate.value = true
-  try {
-    const { data } = await checkClientUpdate(clientOs.value, clientArch.value)
-    clientUpdate.value = data
-    if (data.download_url) {
-      message.success('找到客户端更新: ' + data.latest)
-    } else {
-      message.info('已是最新版本或未找到对应平台的更新包')
-    }
-  } catch (e: any) {
-    message.error(e.response?.data || '检查更新失败')
-  } finally {
-    checkingUpdate.value = false
-  }
-}
-
 const handleApplyClientUpdate = () => {
   if (!clientUpdate.value?.download_url) {
     message.error('没有可用的下载链接')
