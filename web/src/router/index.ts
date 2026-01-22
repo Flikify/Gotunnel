@@ -16,14 +16,14 @@ const router = createRouter({
       component: () => import('../views/HomeView.vue'),
     },
     {
+      path: '/clients',
+      name: 'clients',
+      component: () => import('../views/ClientsView.vue'),
+    },
+    {
       path: '/client/:id',
       name: 'client',
       component: () => import('../views/ClientView.vue'),
-    },
-    {
-      path: '/plugins',
-      name: 'plugins',
-      component: () => import('../views/PluginsView.vue'),
     },
     {
       path: '/settings',

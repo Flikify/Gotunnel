@@ -127,6 +127,7 @@ func getVersionInfo() dto.VersionInfo {
 		GitCommit: info.GitCommit,
 		BuildTime: info.BuildTime,
 		GoVersion: info.GoVersion,
-		Platform:  info.OS + "/" + info.Arch,
+		OS:        info.OS,
+		Arch:      info.Arch,
 	}
 }

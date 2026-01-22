@@ -6,10 +6,10 @@ import {
   type GlobalThemeOverrides
 } from 'naive-ui'
 import {
-  HomeOutline, ExtensionPuzzleOutline, SettingsOutline,
-  PersonCircleOutline, LogOutOutline, LogoGithub
+  HomeOutline, DesktopOutline, SettingsOutline,
+  PersonCircleOutline, LogOutOutline, LogoGithub, ServerOutline, CheckmarkCircleOutline, ArrowUpCircleOutline
 } from '@vicons/ionicons5'
-import { getServerStatus, getVersionInfo, removeToken, getToken } from './api'
+import { getServerStatus, getVersionInfo, checkServerUpdate, removeToken, getToken, type UpdateInfo } from './api'
 
 const router = useRouter()
 const route = useRoute()
@@ -17,20 +17,20 @@ const serverInfo = ref({ bind_addr: '', bind_port: 0 })
 const clientCount = ref(0)
 const version = ref('')
 const showUserMenu = ref(false)
+const updateInfo = ref<UpdateInfo | null>(null)
 
 const isLoginPage = computed(() => route.path === '/login')
 
 const navItems = [
   { key: 'home', label: '首页', icon: HomeOutline, path: '/' },
-  { key: 'plugins', label: '插件', icon: ExtensionPuzzleOutline, path: '/plugins' },
+  { key: 'clients', label: '客户端', icon: DesktopOutline, path: '/clients' },
   { key: 'settings', label: '设置', icon: SettingsOutline, path: '/settings' }
 ]
 
 const activeNav = computed(() => {
   const path = route.path
   if (path === '/' || path === '/home') return 'home'
-  if (path.startsWith('/client')) return 'home'
-  if (path === '/plugins') return 'plugins'
+  if (path === '/clients' || path.startsWith('/client/')) return 'clients'
   if (path === '/settings') return 'settings'
   return 'home'
 })
@@ -56,16 +56,28 @@ const fetchVersion = async () => {
   }
 }
 
+const checkUpdate = async () => {
+  if (isLoginPage.value || !getToken()) return
+  try {
+    const { data } = await checkServerUpdate()
+    updateInfo.value = data
+  } catch (e) {
+    console.error('Failed to check update', e)
+  }
+}
+
 watch(() => route.path, (newPath, oldPath) => {
   if (oldPath === '/login' && newPath !== '/login') {
     fetchServerStatus()
     fetchVersion()
+    checkUpdate()
   }
 })
 
 onMounted(() => {
   fetchServerStatus()
   fetchVersion()
+  checkUpdate()
 })
 
 const logout = () => {
@@ -139,7 +151,20 @@ const themeOverrides: GlobalThemeOverrides = {
           <footer class="app-footer">
             <div class="footer-left">
               <span class="brand">GoTunnel</span>
-              <span v-if="version" class="version">v{{ version }}</span>
+              <div v-if="version" class="version-info">
+                <ServerOutline class="version-icon" />
+                <span class="version">v{{ version }}</span>
+                <span v-if="updateInfo" class="update-status" :class="{ latest: !updateInfo.available, 'has-update': updateInfo.available }">
+                  <template v-if="updateInfo.available">
+                    <ArrowUpCircleOutline class="status-icon" />
+                    <span>新版本 ({{ updateInfo.latest }})</span>
+                  </template>
+                  <template v-else>
+                    <CheckmarkCircleOutline class="status-icon" />
+                    <span>最新版本</span>
+                  </template>
+                </span>
+              </div>
             </div>
             <a href="https://github.com/user/gotunnel" target="_blank" class="footer-link">
               <LogoGithub class="footer-icon" />
@@ -308,6 +333,42 @@ const themeOverrides: GlobalThemeOverrides = {
   color: rgba(255, 255, 255, 0.7);
   border-radius: 4px;
   font-size: 12px;
+}
+
+.version-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.version-icon {
+  width: 14px;
+  height: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.update-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.update-status.latest {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.15);
+}
+
+.update-status.has-update {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+}
+
+.status-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .footer-link {

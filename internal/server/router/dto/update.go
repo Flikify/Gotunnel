@@ -39,7 +39,8 @@ type VersionInfo struct {
 	GitCommit string `json:"git_commit,omitempty"`
 	BuildTime string `json:"build_time,omitempty"`
 	GoVersion string `json:"go_version,omitempty"`
-	Platform  string `json:"platform,omitempty"`
+	OS        string `json:"os,omitempty"`
+	Arch      string `json:"arch,omitempty"`
 }
 
 // StatusResponse 服务器状态响应
