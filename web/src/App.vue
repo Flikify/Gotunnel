@@ -2,13 +2,12 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import {
-  NLayout, NLayoutHeader, NLayoutContent, NLayoutFooter,
-  NButton, NIcon, NConfigProvider, NMessageProvider,
-  NDialogProvider, NGlobalStyle, NDropdown, NTabs, NTabPane,
+  NConfigProvider, NMessageProvider, NDialogProvider, NGlobalStyle,
   type GlobalThemeOverrides
 } from 'naive-ui'
 import {
-  PersonCircleOutline, LogoGithub
+  HomeOutline, ExtensionPuzzleOutline, SettingsOutline,
+  PersonCircleOutline, LogOutOutline, LogoGithub
 } from '@vicons/ionicons5'
 import { getServerStatus, getVersionInfo, removeToken, getToken } from './api'
 
@@ -17,25 +16,24 @@ const route = useRoute()
 const serverInfo = ref({ bind_addr: '', bind_port: 0 })
 const clientCount = ref(0)
 const version = ref('')
+const showUserMenu = ref(false)
 
 const isLoginPage = computed(() => route.path === '/login')
 
-// 当前激活的 Tab
-const activeTab = computed(() => {
+const navItems = [
+  { key: 'home', label: '首页', icon: HomeOutline, path: '/' },
+  { key: 'plugins', label: '插件', icon: ExtensionPuzzleOutline, path: '/plugins' },
+  { key: 'settings', label: '设置', icon: SettingsOutline, path: '/settings' }
+]
+
+const activeNav = computed(() => {
   const path = route.path
   if (path === '/' || path === '/home') return 'home'
-  if (path.startsWith('/client')) return 'clients'
+  if (path.startsWith('/client')) return 'home'
   if (path === '/plugins') return 'plugins'
   if (path === '/settings') return 'settings'
   return 'home'
 })
-
-const handleTabChange = (tab: string) => {
-  if (tab === 'home') router.push('/')
-  else if (tab === 'clients') router.push('/')
-  else if (tab === 'plugins') router.push('/plugins')
-  else if (tab === 'settings') router.push('/settings')
-}
 
 const fetchServerStatus = async () => {
   if (isLoginPage.value || !getToken()) return
@@ -75,8 +73,8 @@ const logout = () => {
   router.push('/login')
 }
 
-const handleUserAction = (key: string) => {
-  if (key === 'logout') logout()
+const toggleUserMenu = () => {
+  showUserMenu.value = !showUserMenu.value
 }
 
 // 紫色渐变主题
@@ -101,65 +99,55 @@ const themeOverrides: GlobalThemeOverrides = {
     <n-global-style />
     <n-dialog-provider>
       <n-message-provider>
-        <n-layout v-if="!isLoginPage" class="main-layout" position="absolute">
-          <!-- 顶部导航栏 -->
-          <n-layout-header bordered class="header">
-            <div class="header-content">
-              <div class="header-left">
-                <div class="logo">
-                  <span class="logo-text">GoTunnel</span>
+        <div v-if="!isLoginPage" class="app-layout">
+          <!-- Header -->
+          <header class="app-header">
+            <div class="header-left">
+              <span class="logo">GoTunnel</span>
+            </div>
+            <nav class="header-nav">
+              <router-link
+                v-for="item in navItems"
+                :key="item.key"
+                :to="item.path"
+                class="nav-item"
+                :class="{ active: activeNav === item.key }"
+              >
+                <component :is="item.icon" class="nav-icon" />
+                <span>{{ item.label }}</span>
+              </router-link>
+            </nav>
+            <div class="header-right">
+              <div class="user-menu" @click="toggleUserMenu">
+                <PersonCircleOutline class="user-icon" />
+                <div v-if="showUserMenu" class="user-dropdown" @click.stop>
+                  <button class="dropdown-item" @click="logout">
+                    <LogOutOutline class="dropdown-icon" />
+                    <span>退出登录</span>
+                  </button>
                 </div>
-                <n-tabs
-                  type="line"
-                  :value="activeTab"
-                  @update:value="handleTabChange"
-                  class="nav-tabs"
-                >
-                  <n-tab-pane name="home" tab="首页" />
-                  <n-tab-pane name="clients" tab="客户端管理" />
-                  <n-tab-pane name="plugins" tab="插件商店" />
-                  <n-tab-pane name="settings" tab="系统设置" />
-                </n-tabs>
-              </div>
-              <div class="header-right">
-                <n-dropdown
-                  :options="[{ label: '退出登录', key: 'logout' }]"
-                  @select="handleUserAction"
-                >
-                  <n-button quaternary circle size="large">
-                    <template #icon>
-                      <n-icon size="24"><PersonCircleOutline /></n-icon>
-                    </template>
-                  </n-button>
-                </n-dropdown>
               </div>
             </div>
-          </n-layout-header>
+          </header>
 
-          <!-- 主内容区 -->
-          <n-layout-content class="main-content">
+          <!-- Main Content -->
+          <main class="main-content">
             <RouterView />
-          </n-layout-content>
+          </main>
 
-          <!-- 底部页脚 -->
-          <n-layout-footer bordered class="footer">
-            <div class="footer-content">
-              <div class="footer-left">
-                <span class="brand">GoTunnel</span>
-                <span class="version" v-if="version">v{{ version }}</span>
-              </div>
-              <div class="footer-center">
-                <a href="https://github.com/user/gotunnel" target="_blank" class="footer-link">
-                  <n-icon size="16"><LogoGithub /></n-icon>
-                  <span>GitHub</span>
-                </a>
-              </div>
-              <div class="footer-right">
-                <span>© 2024 Flik. MIT License</span>
-              </div>
+          <!-- Footer -->
+          <footer class="app-footer">
+            <div class="footer-left">
+              <span class="brand">GoTunnel</span>
+              <span v-if="version" class="version">v{{ version }}</span>
             </div>
-          </n-layout-footer>
-        </n-layout>
+            <a href="https://github.com/user/gotunnel" target="_blank" class="footer-link">
+              <LogoGithub class="footer-icon" />
+              <span>GitHub</span>
+            </a>
+            <span class="copyright">© 2024 Flik. MIT License</span>
+          </footer>
+        </div>
         <RouterView v-else />
       </n-message-provider>
     </n-dialog-provider>
@@ -167,87 +155,140 @@ const themeOverrides: GlobalThemeOverrides = {
 </template>
 
 <style scoped>
-.main-layout {
-  height: 100vh;
+.app-layout {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
 }
 
-.header {
+/* Header */
+.app-header {
   height: 60px;
-  background: rgba(30, 27, 75, 0.95);
+  background: rgba(15, 12, 41, 0.9);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  display: flex;
-  align-items: center;
-  padding: 0 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.header-content {
-  width: 100%;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 32px;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .logo {
-  display: flex;
-  align-items: center;
-}
-
-.logo-text {
   font-size: 20px;
   font-weight: 700;
-  color: #ffffff;
+  color: white;
 }
 
-.nav-tabs :deep(.n-tabs-tab) {
+/* Navigation */
+.header-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.nav-item:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nav-item.active {
+  color: white;
+  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* User Menu */
+.user-menu {
+  position: relative;
+  cursor: pointer;
+}
+
+.user-icon {
+  width: 28px;
+  height: 28px;
   color: rgba(255, 255, 255, 0.8);
-  font-weight: 500;
+  transition: color 0.2s;
 }
 
-.nav-tabs :deep(.n-tabs-tab--active) {
-  color: #ffffff !important;
+.user-icon:hover {
+  color: white;
 }
 
-.nav-tabs :deep(.n-tabs-bar) {
-  background-color: #ffffff !important;
+.user-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: rgba(30, 27, 75, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 140px;
 }
 
-.header-right :deep(.n-button) {
-  color: rgba(255, 255, 255, 0.9);
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.dropdown-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .main-content {
   flex: 1;
-  padding: 0;
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
   overflow-y: auto;
 }
 
-.footer {
+/* Footer */
+.app-footer {
   height: 48px;
-  background: rgba(30, 27, 75, 0.9);
+  background: rgba(15, 12, 41, 0.9);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.footer-content {
-  height: 100%;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   padding: 0 24px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
 }
 
 .footer-left {
@@ -269,41 +310,41 @@ const themeOverrides: GlobalThemeOverrides = {
   font-size: 12px;
 }
 
-.footer-center {
-  display: flex;
-  gap: 16px;
-}
-
 .footer-link {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   color: rgba(255, 255, 255, 0.6);
   text-decoration: none;
   transition: color 0.2s;
 }
 
 .footer-link:hover {
-  color: rgba(255, 255, 255, 0.9);
+  color: white;
 }
 
-.footer-right {
+.footer-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.copyright {
   color: rgba(255, 255, 255, 0.4);
 }
 
+/* Responsive */
 @media (max-width: 768px) {
-  .header {
+  .app-header {
     padding: 0 12px;
   }
-  .header-left {
-    gap: 16px;
+  .header-nav {
+    display: none;
   }
-  .logo-text {
-    font-size: 16px;
-  }
-  .footer-content {
+  .app-footer {
     padding: 0 12px;
-    font-size: 12px;
+  }
+  .copyright {
+    display: none;
   }
 }
 </style>

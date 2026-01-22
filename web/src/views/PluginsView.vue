@@ -1,23 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { ExtensionPuzzleOutline, CodeSlashOutline, SettingsOutline } from '@vicons/ionicons5'
+import GlassModal from '../components/GlassModal.vue'
+import GlassTag from '../components/GlassTag.vue'
+import GlassSwitch from '../components/GlassSwitch.vue'
+import { useToast } from '../composables/useToast'
 import {
-  NButton, NSpace, NTag, NIcon, NSwitch, NModal, NInput, NInputNumber, NSelect,
-  useMessage
-} from 'naive-ui'
-import { ExtensionPuzzleOutline, StorefrontOutline, CodeSlashOutline, SettingsOutline } from '@vicons/ionicons5'
-import {
-  getPlugins, enablePlugin, disablePlugin, getStorePlugins, getJSPlugins,
-  pushJSPluginToClient, getClients, installStorePlugin, updateJSPluginConfig, setJSPluginEnabled
+  getPlugins, enablePlugin, disablePlugin, getJSPlugins,
+  pushJSPluginToClient, getClients, updateJSPluginConfig, setJSPluginEnabled
 } from '../api'
-import type { PluginInfo, StorePluginInfo, JSPlugin, ClientStatus } from '../types'
+import type { PluginInfo, JSPlugin, ClientStatus } from '../types'
 
-const message = useMessage()
+const message = useToast()
 const plugins = ref<PluginInfo[]>([])
-const storePlugins = ref<StorePluginInfo[]>([])
 const jsPlugins = ref<JSPlugin[]>([])
 const clients = ref<ClientStatus[]>([])
 const loading = ref(true)
-const storeLoading = ref(false)
 const jsLoading = ref(false)
 const activeTab = ref('installed')
 
@@ -29,18 +27,6 @@ const loadPlugins = async () => {
     console.error('Failed to load plugins', e)
   } finally {
     loading.value = false
-  }
-}
-
-const loadStorePlugins = async () => {
-  storeLoading.value = true
-  try {
-    const { data } = await getStorePlugins()
-    storePlugins.value = data.plugins || []
-  } catch (e) {
-    console.error('Failed to load store plugins', e)
-  } finally {
-    storeLoading.value = false
   }
 }
 
@@ -68,7 +54,6 @@ const getTypeLabel = (type: string) => {
 }
 
 const handleTabChange = (tab: string) => {
-  if (tab === 'store' && storePlugins.value.length === 0) loadStorePlugins()
   if (tab === 'js' && jsPlugins.value.length === 0) loadJSPlugins()
 }
 
@@ -172,58 +157,6 @@ const toggleJSPlugin = async (plugin: JSPlugin) => {
   }
 }
 
-// Store Plugin Install
-const showInstallModal = ref(false)
-const selectedStorePlugin = ref<StorePluginInfo | null>(null)
-const selectedClientId = ref('')
-const installing = ref(false)
-const installRemotePort = ref<number | null>(8080)
-const installAuthEnabled = ref(false)
-const installAuthUsername = ref('')
-const installAuthPassword = ref('')
-
-const openInstallModal = (plugin: StorePluginInfo) => {
-  selectedStorePlugin.value = plugin
-  selectedClientId.value = ''
-  installRemotePort.value = 8080
-  installAuthEnabled.value = false
-  installAuthUsername.value = ''
-  installAuthPassword.value = ''
-  showInstallModal.value = true
-}
-
-const handleInstallStorePlugin = async () => {
-  if (!selectedStorePlugin.value || !selectedClientId.value) {
-    message.warning('请选择要安装到的客户端')
-    return
-  }
-  if (!selectedStorePlugin.value.download_url || !selectedStorePlugin.value.signature_url) {
-    message.error('该插件缺少下载地址或签名')
-    return
-  }
-  installing.value = true
-  try {
-    await installStorePlugin(
-      selectedStorePlugin.value.name,
-      selectedStorePlugin.value.download_url,
-      selectedStorePlugin.value.signature_url,
-      selectedClientId.value,
-      installRemotePort.value || 8080,
-      selectedStorePlugin.value.version,
-      selectedStorePlugin.value.config_schema,
-      installAuthEnabled.value,
-      installAuthUsername.value,
-      installAuthPassword.value
-    )
-    message.success(`已安装 ${selectedStorePlugin.value.name}`)
-    showInstallModal.value = false
-  } catch (e: any) {
-    message.error(e.response?.data || '安装失败')
-  } finally {
-    installing.value = false
-  }
-}
-
 onMounted(() => {
   loadPlugins()
   loadClients()
@@ -243,7 +176,7 @@ onMounted(() => {
       <!-- Header -->
       <div class="page-header">
         <h1 class="page-title">插件管理</h1>
-        <p class="page-subtitle">管理已安装插件和浏览插件商店</p>
+        <p class="page-subtitle">管理已安装插件和 JS 插件</p>
       </div>
 
       <!-- Stats Row -->
@@ -268,9 +201,6 @@ onMounted(() => {
           <button class="tab-btn" :class="{ active: activeTab === 'installed' }" @click="activeTab = 'installed'">
             已安装插件
           </button>
-          <button class="tab-btn" :class="{ active: activeTab === 'store' }" @click="activeTab = 'store'; handleTabChange('store')">
-            插件商店
-          </button>
           <button class="tab-btn" :class="{ active: activeTab === 'js' }" @click="activeTab = 'js'; handleTabChange('js')">
             JS 插件
           </button>
@@ -284,46 +214,19 @@ onMounted(() => {
             <div v-for="plugin in plugins" :key="plugin.name" class="plugin-card">
               <div class="plugin-header">
                 <div class="plugin-icon">
-                  <n-icon size="20" color="#a78bfa"><ExtensionPuzzleOutline /></n-icon>
+                  <ExtensionPuzzleOutline class="icon-purple" />
                 </div>
                 <span class="plugin-name">{{ plugin.name }}</span>
-                <n-switch :value="plugin.enabled" size="small" @update:value="togglePlugin(plugin)" />
+                <GlassSwitch :model-value="plugin.enabled" size="small" @update:model-value="togglePlugin(plugin)" />
               </div>
               <div class="plugin-tags">
-                <n-tag size="small">v{{ plugin.version }}</n-tag>
-                <n-tag size="small" :type="plugin.type === 'proxy' ? 'info' : 'success'">{{ getTypeLabel(plugin.type) }}</n-tag>
-                <n-tag size="small" :type="plugin.source === 'builtin' ? 'default' : 'warning'">
+                <GlassTag>v{{ plugin.version }}</GlassTag>
+                <GlassTag :type="plugin.type === 'proxy' ? 'info' : 'success'">{{ getTypeLabel(plugin.type) }}</GlassTag>
+                <GlassTag :type="plugin.source === 'builtin' ? 'default' : 'warning'">
                   {{ plugin.source === 'builtin' ? '内置' : 'JS' }}
-                </n-tag>
+                </GlassTag>
               </div>
               <p class="plugin-desc">{{ plugin.description }}</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Store Tab -->
-        <div v-if="activeTab === 'store'" class="tab-content">
-          <div v-if="storeLoading" class="loading-state">加载中...</div>
-          <div v-else-if="storePlugins.length === 0" class="empty-state">插件商店暂无可用插件</div>
-          <div v-else class="plugins-grid">
-            <div v-for="plugin in storePlugins" :key="plugin.name" class="plugin-card">
-              <div class="plugin-header">
-                <div class="plugin-icon store">
-                  <n-icon size="20" color="#60a5fa"><StorefrontOutline /></n-icon>
-                </div>
-                <span class="plugin-name">{{ plugin.name }}</span>
-                <button
-                  v-if="plugin.download_url && plugin.signature_url && onlineClients.length > 0"
-                  class="glass-btn primary tiny"
-                  @click="openInstallModal(plugin)"
-                >安装</button>
-              </div>
-              <div class="plugin-tags">
-                <n-tag size="small">v{{ plugin.version }}</n-tag>
-                <n-tag size="small" :type="plugin.type === 'proxy' ? 'info' : 'success'">{{ getTypeLabel(plugin.type) }}</n-tag>
-              </div>
-              <p class="plugin-desc">{{ plugin.description }}</p>
-              <p class="plugin-author">作者: {{ plugin.author }}</p>
             </div>
           </div>
         </div>
@@ -336,30 +239,30 @@ onMounted(() => {
             <div v-for="plugin in jsPlugins" :key="plugin.name" class="plugin-card js">
               <div class="plugin-header">
                 <div class="plugin-icon js">
-                  <n-icon size="20" color="#fbbf24"><CodeSlashOutline /></n-icon>
+                  <CodeSlashOutline class="icon-yellow" />
                 </div>
                 <span class="plugin-name">{{ plugin.name }}</span>
-                <n-tag v-if="plugin.version" size="small">v{{ plugin.version }}</n-tag>
-                <n-switch :value="plugin.enabled" size="small" @update:value="toggleJSPlugin(plugin)" />
+                <GlassTag v-if="plugin.version">v{{ plugin.version }}</GlassTag>
+                <GlassSwitch :model-value="plugin.enabled" size="small" @update:model-value="toggleJSPlugin(plugin)" />
               </div>
               <div class="plugin-tags">
-                <n-tag size="small" type="warning">JS</n-tag>
-                <n-tag v-if="plugin.auto_start" size="small" type="success">自动启动</n-tag>
-                <n-tag v-if="plugin.signature" size="small" type="info">已签名</n-tag>
+                <GlassTag type="warning">JS</GlassTag>
+                <GlassTag v-if="plugin.auto_start" type="success">自动启动</GlassTag>
+                <GlassTag v-if="plugin.signature" type="info">已签名</GlassTag>
               </div>
               <p class="plugin-desc">{{ plugin.description || '无描述' }}</p>
               <p v-if="plugin.author" class="plugin-author">作者: {{ plugin.author }}</p>
               <div v-if="Object.keys(plugin.config || {}).length > 0" class="plugin-config-preview">
                 <span class="config-label">配置:</span>
-                <n-space :size="4" wrap>
-                  <n-tag v-for="(value, key) in plugin.config" :key="key" size="small">
+                <div class="config-tags">
+                  <GlassTag v-for="(value, key) in plugin.config" :key="key">
                     {{ key }}: {{ String(value).length > 10 ? String(value).slice(0, 10) + '...' : value }}
-                  </n-tag>
-                </n-space>
+                  </GlassTag>
+                </div>
               </div>
               <div class="plugin-actions">
                 <button class="glass-btn tiny" @click="openJSConfigModal(plugin)">
-                  <n-icon size="14"><SettingsOutline /></n-icon>
+                  <SettingsOutline class="btn-icon" />
                   配置
                 </button>
                 <button v-if="onlineClients.length > 0" class="glass-btn primary tiny" @click="openPushModal(plugin)">
@@ -372,78 +275,47 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Install Modal -->
-    <n-modal v-model:show="showInstallModal" preset="card" title="安装插件" style="width: 450px;">
-      <n-space vertical :size="16">
-        <div v-if="selectedStorePlugin">
-          <p style="margin: 0 0 8px 0;"><strong>插件:</strong> {{ selectedStorePlugin.name }}</p>
-          <p style="margin: 0; color: #666;">{{ selectedStorePlugin.description }}</p>
-        </div>
-        <n-select v-model:value="selectedClientId" placeholder="选择客户端"
-          :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))" />
-        <div>
-          <p style="margin: 0 0 8px 0; color: #666; font-size: 13px;">远程端口:</p>
-          <n-input-number v-model:value="installRemotePort" :min="1" :max="65535" style="width: 100%;" />
-        </div>
-        <n-space align="center" :size="8">
-          <n-switch v-model:value="installAuthEnabled" />
-          <span style="color: #666;">启用 HTTP Basic Auth</span>
-        </n-space>
-        <template v-if="installAuthEnabled">
-          <n-input v-model:value="installAuthUsername" placeholder="用户名" />
-          <n-input v-model:value="installAuthPassword" type="password" placeholder="密码" show-password-on="click" />
-        </template>
-      </n-space>
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showInstallModal = false">取消</n-button>
-          <n-button type="primary" :loading="installing" :disabled="!selectedClientId" @click="handleInstallStorePlugin">安装</n-button>
-        </n-space>
-      </template>
-    </n-modal>
-
     <!-- JS Config Modal -->
-    <n-modal v-model:show="showJSConfigModal" preset="card" :title="`${currentJSPlugin?.name || ''} 配置`" style="width: 500px;">
-      <n-space vertical :size="12">
-        <p style="margin: 0; color: #666; font-size: 13px;">编辑插件配置参数</p>
-        <div v-for="(item, index) in jsConfigItems" :key="index">
-          <n-space :size="8" align="center">
-            <n-input v-model:value="item.key" placeholder="参数名" style="width: 150px;" />
-            <n-input v-model:value="item.value" placeholder="参数值" style="width: 200px;" />
-            <n-button v-if="jsConfigItems.length > 1" quaternary type="error" size="small" @click="removeJSConfigItem(index)">删除</n-button>
-          </n-space>
-        </div>
-        <n-button dashed size="small" @click="addJSConfigItem">添加配置项</n-button>
-      </n-space>
+    <GlassModal :show="showJSConfigModal" :title="`${currentJSPlugin?.name || ''} 配置`" @close="showJSConfigModal = false">
+      <p class="config-hint">编辑插件配置参数</p>
+      <div v-for="(item, index) in jsConfigItems" :key="index" class="config-row">
+        <input v-model="item.key" class="form-input config-key" placeholder="参数名" />
+        <input v-model="item.value" class="form-input config-value" placeholder="参数值" />
+        <button v-if="jsConfigItems.length > 1" class="icon-btn danger" @click="removeJSConfigItem(index)">删除</button>
+      </div>
+      <button class="glass-btn small dashed" @click="addJSConfigItem">添加配置项</button>
       <template #footer>
-        <n-space justify="end">
-          <n-button @click="showJSConfigModal = false">取消</n-button>
-          <n-button type="primary" :loading="jsConfigSaving" @click="saveJSPluginConfig">保存</n-button>
-        </n-space>
+        <button class="glass-btn" @click="showJSConfigModal = false">取消</button>
+        <button class="glass-btn primary" :disabled="jsConfigSaving" @click="saveJSPluginConfig">
+          {{ jsConfigSaving ? '保存中...' : '保存' }}
+        </button>
       </template>
-    </n-modal>
+    </GlassModal>
 
     <!-- Push Modal -->
-    <n-modal v-model:show="showPushModal" preset="card" title="推送插件到客户端" style="width: 400px;">
-      <n-space vertical :size="16">
-        <div v-if="selectedJSPlugin">
-          <p style="margin: 0 0 8px 0;"><strong>插件:</strong> {{ selectedJSPlugin.name }}</p>
-          <p style="margin: 0; color: #666;">{{ selectedJSPlugin.description || '无描述' }}</p>
-        </div>
-        <n-select v-model:value="pushClientId" placeholder="选择客户端"
-          :options="onlineClients.map(c => ({ label: c.nickname || c.id, value: c.id }))" />
-        <div>
-          <p style="margin: 0 0 8px 0; color: #666; font-size: 13px;">远程端口:</p>
-          <n-input-number v-model:value="pushRemotePort" :min="1" :max="65535" style="width: 100%;" />
-        </div>
-      </n-space>
+    <GlassModal :show="showPushModal" title="推送插件到客户端" width="400px" @close="showPushModal = false">
+      <div v-if="selectedJSPlugin" class="plugin-info-box">
+        <p class="plugin-info-name">插件: {{ selectedJSPlugin.name }}</p>
+        <p class="plugin-info-desc">{{ selectedJSPlugin.description || '无描述' }}</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">选择客户端</label>
+        <select v-model="pushClientId" class="form-select">
+          <option value="" disabled>选择客户端</option>
+          <option v-for="c in onlineClients" :key="c.id" :value="c.id">{{ c.nickname || c.id }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">远程端口</label>
+        <input v-model.number="pushRemotePort" type="number" class="form-input" min="1" max="65535" />
+      </div>
       <template #footer>
-        <n-space justify="end">
-          <n-button @click="showPushModal = false">取消</n-button>
-          <n-button type="primary" :loading="pushing" :disabled="!pushClientId" @click="handlePushJSPlugin">推送</n-button>
-        </n-space>
+        <button class="glass-btn" @click="showPushModal = false">取消</button>
+        <button class="glass-btn primary" :disabled="!pushClientId || pushing" @click="handlePushJSPlugin">
+          {{ pushing ? '推送中...' : '推送' }}
+        </button>
       </template>
-    </n-modal>
+    </GlassModal>
   </div>
 </template>
 
@@ -710,5 +582,181 @@ onMounted(() => {
 .glass-btn.tiny {
   padding: 4px 10px;
   font-size: 11px;
+}
+
+.glass-btn.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.glass-btn.dashed {
+  border-style: dashed;
+}
+
+.glass-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 6px;
+}
+
+.form-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: white;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  border-color: rgba(167, 139, 250, 0.5);
+}
+
+.form-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.form-select {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: white;
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+}
+
+.form-select option {
+  background: #1e1b4b;
+  color: white;
+}
+
+.form-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.form-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #a78bfa;
+}
+
+/* Plugin Info Box */
+.plugin-info-box {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.plugin-info-name {
+  margin: 0 0 4px 0;
+  color: white;
+  font-weight: 500;
+}
+
+.plugin-info-desc {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+}
+
+/* Config Row */
+.config-hint {
+  margin: 0 0 12px 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+}
+
+.config-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.config-key {
+  width: 150px;
+  flex-shrink: 0;
+}
+
+.config-value {
+  flex: 1;
+}
+
+.icon-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.icon-btn.danger {
+  color: #fca5a5;
+}
+
+.icon-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* Icon styles */
+.icon-purple {
+  width: 20px;
+  height: 20px;
+  color: #a78bfa;
+}
+
+.icon-blue {
+  width: 20px;
+  height: 20px;
+  color: #60a5fa;
+}
+
+.icon-yellow {
+  width: 20px;
+  height: 20px;
+  color: #fbbf24;
+}
+
+.btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.config-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 </style>

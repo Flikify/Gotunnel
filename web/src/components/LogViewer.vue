@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { NCard, NSpace, NButton, NSelect, NSwitch, NInput, NIcon, NEmpty, NSpin } from 'naive-ui'
-import { PlayOutline, StopOutline, TrashOutline, DownloadOutline } from '@vicons/ionicons5'
+import {
+  PlayOutline, StopOutline, TrashOutline, DownloadOutline, CloseOutline
+} from '@vicons/ionicons5'
 import { createLogStream } from '../api'
 import type { LogEntry } from '../types'
 
@@ -23,14 +24,6 @@ const loading = ref(false)
 
 let eventSource: EventSource | null = null
 const logContainer = ref<HTMLElement | null>(null)
-
-const levelOptions = [
-  { label: '所有级别', value: '' },
-  { label: 'Info', value: 'info' },
-  { label: 'Warning', value: 'warn' },
-  { label: 'Error', value: 'error' },
-  { label: 'Debug', value: 'debug' }
-]
 
 const startStream = () => {
   if (eventSource) {
@@ -133,100 +126,354 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <n-card title="客户端日志" :closable="true" @close="emit('close')">
-    <template #header-extra>
-      <n-space :size="8">
-        <n-select
-          v-model:value="levelFilter"
-          :options="levelOptions"
-          size="small"
-          style="width: 110px;"
-          @update:value="() => { stopStream(); logs = []; startStream(); }"
-        />
-        <n-input
-          v-model:value="searchText"
-          placeholder="搜索..."
-          size="small"
-          style="width: 120px;"
-          clearable
-        />
-        <n-switch v-model:value="autoScroll" size="small">
-          <template #checked>自动滚动</template>
-          <template #unchecked>手动</template>
-        </n-switch>
-        <n-button size="small" quaternary @click="clearLogs">
-          <template #icon><n-icon><TrashOutline /></n-icon></template>
-        </n-button>
-        <n-button size="small" quaternary @click="downloadLogs">
-          <template #icon><n-icon><DownloadOutline /></n-icon></template>
-        </n-button>
-        <n-button
-          size="small"
-          :type="isStreaming ? 'error' : 'success'"
-          @click="isStreaming ? stopStream() : startStream()"
-        >
-          <template #icon>
-            <n-icon><StopOutline v-if="isStreaming" /><PlayOutline v-else /></n-icon>
-          </template>
-          {{ isStreaming ? '停止' : '开始' }}
-        </n-button>
-      </n-space>
-    </template>
+  <div v-if="visible" class="log-overlay" @click.self="emit('close')">
+    <div class="log-modal">
+      <!-- Header -->
+      <div class="log-header">
+        <h3>客户端日志</h3>
+        <div class="log-controls">
+          <select v-model="levelFilter" class="log-select" @change="() => { stopStream(); logs = []; startStream(); }">
+            <option value="">所有级别</option>
+            <option value="info">Info</option>
+            <option value="warn">Warning</option>
+            <option value="error">Error</option>
+            <option value="debug">Debug</option>
+          </select>
+          <input v-model="searchText" type="text" class="log-input" placeholder="搜索..." />
+          <label class="log-toggle">
+            <input type="checkbox" v-model="autoScroll" />
+            <span>自动滚动</span>
+          </label>
+          <button class="icon-btn" @click="clearLogs" title="清空">
+            <TrashOutline />
+          </button>
+          <button class="icon-btn" @click="downloadLogs" title="下载">
+            <DownloadOutline />
+          </button>
+          <button class="action-btn" :class="isStreaming ? 'danger' : 'success'" @click="isStreaming ? stopStream() : startStream()">
+            <StopOutline v-if="isStreaming" />
+            <PlayOutline v-else />
+            <span>{{ isStreaming ? '停止' : '开始' }}</span>
+          </button>
+        </div>
+        <button class="close-btn" @click="emit('close')">
+          <CloseOutline />
+        </button>
+      </div>
 
-    <n-spin :show="loading && logs.length === 0">
-      <div
-        ref="logContainer"
-        class="log-container"
-      >
-        <n-empty v-if="filteredLogs.length === 0" description="暂无日志" />
-        <div
-          v-for="(log, i) in filteredLogs"
-          :key="i"
-          class="log-line"
-        >
-          <span class="log-time">{{ formatTime(log.ts) }}</span>
-          <span class="log-level" :style="{ color: getLevelColor(log.level) }">[{{ log.level.toUpperCase() }}]</span>
-          <span class="log-src">[{{ log.src }}]</span>
-          <span class="log-msg">{{ log.msg }}</span>
+      <!-- Content -->
+      <div class="log-body">
+        <div v-if="loading && logs.length === 0" class="log-loading">加载中...</div>
+        <div ref="logContainer" class="log-container">
+          <div v-if="filteredLogs.length === 0" class="log-empty">暂无日志</div>
+          <div v-for="(log, i) in filteredLogs" :key="i" class="log-line">
+            <span class="log-time">{{ formatTime(log.ts) }}</span>
+            <span class="log-level" :style="{ color: getLevelColor(log.level) }">[{{ log.level.toUpperCase() }}]</span>
+            <span class="log-src">[{{ log.src }}]</span>
+            <span class="log-msg">{{ log.msg }}</span>
+          </div>
         </div>
       </div>
-    </n-spin>
-  </n-card>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.log-container {
-  height: 400px;
-  overflow-y: auto;
-  background: #1e1e1e;
-  padding: 8px;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
-  border-radius: 4px;
+/* Overlay */
+.log-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
 }
 
+/* Modal */
+.log-modal {
+  width: 100%;
+  max-width: 900px;
+  max-height: 80vh;
+  background: rgba(30, 27, 75, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header */
+.log-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.log-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+}
+
+.log-controls {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Select */
+.log-select {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.log-select option {
+  background: #1e1b4b;
+  color: white;
+}
+
+/* Input */
+.log-input {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: white;
+  font-size: 13px;
+  width: 150px;
+  outline: none;
+}
+
+.log-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.log-input:focus {
+  border-color: rgba(167, 139, 250, 0.5);
+}
+
+/* Toggle */
+.log-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.log-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #a78bfa;
+}
+
+/* Icon Button */
+.icon-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 6px;
+  padding: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Action Button */
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.action-btn.success {
+  background: rgba(52, 211, 153, 0.2);
+  border-color: rgba(52, 211, 153, 0.3);
+  color: #34d399;
+}
+
+.action-btn.danger {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+/* Close Button */
+.close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 6px;
+  padding: 6px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+}
+
+.close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.close-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Body */
+.log-body {
+  flex: 1;
+  padding: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-loading {
+  text-align: center;
+  padding: 32px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Container */
+.log-container {
+  flex: 1;
+  height: 400px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 12px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.log-empty {
+  text-align: center;
+  padding: 48px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Log Line */
 .log-line {
-  line-height: 1.6;
+  line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-all;
-  color: #d4d4d4;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 2px 0;
 }
 
 .log-time {
-  color: #808080;
+  color: rgba(255, 255, 255, 0.4);
   margin-right: 8px;
 }
 
 .log-level {
   margin-right: 8px;
+  font-weight: 500;
 }
 
 .log-src {
-  color: #a0a0a0;
+  color: rgba(167, 139, 250, 0.8);
   margin-right: 8px;
 }
 
 .log-msg {
-  color: #d4d4d4;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Scrollbar */
+.log-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.log-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.log-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.log-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .log-overlay {
+    padding: 12px;
+  }
+
+  .log-modal {
+    max-height: 90vh;
+  }
+
+  .log-header {
+    flex-wrap: wrap;
+  }
+
+  .log-controls {
+    order: 1;
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .log-input {
+    width: 100%;
+  }
 }
 </style>

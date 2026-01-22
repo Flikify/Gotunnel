@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import {
-  NTag, NIcon, useMessage, useDialog
-} from 'naive-ui'
 import { CloudDownloadOutline, RefreshOutline, ServerOutline } from '@vicons/ionicons5'
+import GlassTag from '../components/GlassTag.vue'
+import { useToast } from '../composables/useToast'
+import { useConfirm } from '../composables/useConfirm'
 import {
   getVersionInfo, checkServerUpdate, applyServerUpdate,
   type UpdateInfo, type VersionInfo
 } from '../api'
 
-const message = useMessage()
-const dialog = useDialog()
+const message = useToast()
+const dialog = useConfirm()
 
 const versionInfo = ref<VersionInfo | null>(null)
 const serverUpdate = ref<UpdateInfo | null>(null)
@@ -106,7 +106,7 @@ onMounted(() => {
       <div class="glass-card">
         <div class="card-header">
           <h3>版本信息</h3>
-          <n-icon size="20" color="#a78bfa"><ServerOutline /></n-icon>
+          <ServerOutline class="header-icon" />
         </div>
         <div class="card-body">
           <div v-if="loading" class="loading-state">加载中...</div>
@@ -145,7 +145,7 @@ onMounted(() => {
         <div class="card-header">
           <h3>服务端更新</h3>
           <button class="glass-btn small" :disabled="checkingServer" @click="handleCheckServerUpdate">
-            <n-icon size="14"><RefreshOutline /></n-icon>
+            <RefreshOutline class="btn-icon" />
             检查更新
           </button>
         </div>
@@ -163,7 +163,7 @@ onMounted(() => {
 
             <div v-if="serverUpdate.download_url" class="download-info">
               下载文件: {{ serverUpdate.asset_name }}
-              <n-tag size="small" style="margin-left: 8px;">{{ formatBytes(serverUpdate.asset_size) }}</n-tag>
+              <GlassTag style="margin-left: 8px;">{{ formatBytes(serverUpdate.asset_size) }}</GlassTag>
             </div>
 
             <div v-if="serverUpdate.release_note" class="release-note">
@@ -177,7 +177,7 @@ onMounted(() => {
               :disabled="updatingServer"
               @click="handleApplyServerUpdate"
             >
-              <n-icon size="16"><CloudDownloadOutline /></n-icon>
+              <CloudDownloadOutline class="btn-icon" />
               下载并更新服务端
             </button>
           </template>
@@ -393,5 +393,17 @@ onMounted(() => {
 .glass-btn.primary {
   background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
   border: none;
+}
+
+/* Icon styles */
+.header-icon {
+  width: 20px;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-icon {
+  width: 14px;
+  height: 14px;
 }
 </style>

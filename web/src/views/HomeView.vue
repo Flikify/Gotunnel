@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { getClients } from '../api'
 import type { ClientStatus } from '../types'
 
-const router = useRouter()
 const clients = ref<ClientStatus[]>([])
 
 // Mock data for traffic (API not implemented yet)
@@ -14,6 +12,23 @@ const trafficStats = ref({
   inboundUnit: 'GB',
   outboundUnit: 'GB'
 })
+
+// Mock 24h traffic data for chart
+const trafficHistory = ref<Array<{ hour: string; inbound: number; outbound: number }>>([])
+
+const generateMockTrafficData = () => {
+  const data = []
+  const now = new Date()
+  for (let i = 23; i >= 0; i--) {
+    const hour = new Date(now.getTime() - i * 60 * 60 * 1000)
+    data.push({
+      hour: hour.getHours().toString().padStart(2, '0') + ':00',
+      inbound: Math.random() * 100,
+      outbound: Math.random() * 80
+    })
+  }
+  trafficHistory.value = data
+}
 
 const loadClients = async () => {
   try {
@@ -28,11 +43,26 @@ const onlineClients = computed(() => {
   return clients.value.filter(client => client.online).length
 })
 
-onMounted(loadClients)
+const totalRules = computed(() => {
+  return clients.value.reduce((sum, c) => sum + (c.rule_count || 0), 0)
+})
 
-const viewClient = (id: string) => {
-  router.push(`/client/${id}`)
+// Chart helpers
+const maxTraffic = computed(() => {
+  const max = Math.max(
+    ...trafficHistory.value.map(d => Math.max(d.inbound, d.outbound))
+  )
+  return max || 100
+})
+
+const getBarHeight = (value: number) => {
+  return (value / maxTraffic.value) * 100
 }
+
+onMounted(() => {
+  loadClients()
+  generateMockTrafficData()
+})
 </script>
 
 <template>
@@ -64,14 +94,9 @@ const viewClient = (id: string) => {
             </svg>
           </div>
           <div class="stat-content">
-            <span class="stat-label">Outbound Traffic</span>
+            <span class="stat-label">出站流量</span>
             <span class="stat-value">{{ trafficStats.outbound.toFixed(2) }}</span>
             <span class="stat-unit">{{ trafficStats.outboundUnit }}</span>
-          </div>
-          <div class="stat-trend up">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
           </div>
         </div>
 
@@ -83,14 +108,9 @@ const viewClient = (id: string) => {
             </svg>
           </div>
           <div class="stat-content">
-            <span class="stat-label">Inbound Traffic</span>
+            <span class="stat-label">入站流量</span>
             <span class="stat-value">{{ trafficStats.inbound.toFixed(2) }}</span>
             <span class="stat-unit">{{ trafficStats.inboundUnit }}</span>
-          </div>
-          <div class="stat-trend up">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
           </div>
         </div>
 
@@ -102,79 +122,58 @@ const viewClient = (id: string) => {
             </svg>
           </div>
           <div class="stat-content">
-            <span class="stat-label">Clients</span>
+            <span class="stat-label">客户端</span>
             <div class="client-count">
               <span class="stat-value online">{{ onlineClients }}</span>
               <span class="stat-separator">/</span>
               <span class="stat-value total">{{ clients.length }}</span>
             </div>
-            <span class="stat-unit">online / total</span>
+            <span class="stat-unit">在线 / 总数</span>
           </div>
           <div class="online-indicator" :class="{ active: onlineClients > 0 }">
             <span class="pulse"></span>
           </div>
         </div>
+
+        <!-- Rules Count -->
+        <div class="stat-card glass-stat">
+          <div class="stat-icon rules">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">代理规则</span>
+            <span class="stat-value">{{ totalRules }}</span>
+            <span class="stat-unit">条规则</span>
+          </div>
+        </div>
       </div>
 
-      <!-- Client List Section -->
-      <div class="clients-section">
+      <!-- Traffic Chart Section -->
+      <div class="chart-section">
         <div class="section-header">
-          <h2 class="text-xl font-semibold text-white">Connected Clients</h2>
-          <span class="client-badge">{{ clients.length }} clients</span>
+          <h2 class="section-title">24小时流量趋势</h2>
+          <div class="chart-legend">
+            <span class="legend-item inbound"><span class="legend-dot"></span>入站</span>
+            <span class="legend-item outbound"><span class="legend-dot"></span>出站</span>
+          </div>
         </div>
 
-        <!-- Empty State -->
-        <div v-if="clients.length === 0" class="empty-state glass-card">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-white/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-          <p class="text-white/50 text-lg">No clients connected</p>
-          <p class="text-white/30 text-sm mt-2">Waiting for tunnel connections...</p>
-        </div>
-
-        <!-- Client Cards Grid -->
-        <div v-else class="clients-grid">
-          <div
-            v-for="client in clients"
-            :key="client.id"
-            class="client-card glass-card"
-            @click="viewClient(client.id)"
-          >
-            <div class="client-header">
-              <div class="client-status" :class="{ online: client.online }">
-                <span class="status-dot"></span>
-              </div>
-              <h3 class="client-name">{{ client.nickname || client.id }}</h3>
-            </div>
-
-            <p v-if="client.nickname" class="client-id">{{ client.id }}</p>
-
-            <div class="client-info">
-              <div v-if="client.remote_addr && client.online" class="info-item">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                </svg>
-                <span>{{ client.remote_addr }}</span>
-              </div>
-              <div class="info-item">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                </svg>
-                <span>{{ client.rule_count }} rules</span>
+        <div class="chart-card glass-card">
+          <div class="chart-container">
+            <div class="chart-bars">
+              <div v-for="(data, index) in trafficHistory" :key="index" class="bar-group">
+                <div class="bar-wrapper">
+                  <div class="bar inbound" :style="{ height: getBarHeight(data.inbound) + '%' }"></div>
+                  <div class="bar outbound" :style="{ height: getBarHeight(data.outbound) + '%' }"></div>
+                </div>
+                <span class="bar-label">{{ data.hour }}</span>
               </div>
             </div>
-
-            <div class="client-tags">
-              <span class="tag" :class="client.online ? 'tag-online' : 'tag-offline'">
-                {{ client.online ? 'Online' : 'Offline' }}
-              </span>
-            </div>
-
-            <div class="card-arrow">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
+          </div>
+          <div class="chart-hint">
+            <span>流量统计功能开发中，当前显示模拟数据</span>
           </div>
         </div>
       </div>
@@ -269,12 +268,18 @@ const viewClient = (id: string) => {
 /* Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  margin-bottom: 40px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 32px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
   .stats-grid {
     grid-template-columns: 1fr;
   }
@@ -326,6 +331,11 @@ const viewClient = (id: string) => {
 .stat-icon.clients {
   background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
   box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
+}
+
+.stat-icon.rules {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4);
 }
 
 .stat-icon svg {
@@ -419,8 +429,8 @@ const viewClient = (id: string) => {
   50% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
 }
 
-/* Clients Section */
-.clients-section {
+/* Chart Section */
+.chart-section {
   margin-top: 16px;
 }
 
@@ -431,157 +441,102 @@ const viewClient = (id: string) => {
   margin-bottom: 20px;
 }
 
-.client-badge {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.7);
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 13px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Empty state */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 32px;
-  text-align: center;
-}
-
-/* Clients grid */
-.clients-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-
-@media (max-width: 1024px) {
-  .clients-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .clients-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Client card */
-.client-card {
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 20px;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.2s ease;
-}
-
-.client-card:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.client-card:active {
-  transform: translateY(0) scale(0.98);
-}
-
-/* Client header */
-.client-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.client-status {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.client-status.online {
-  background: #34d399;
-  box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
-}
-
-.client-name {
-  font-size: 16px;
+.section-title {
+  font-size: 18px;
   font-weight: 600;
   color: white;
   margin: 0;
 }
 
-.client-id {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  margin: 0 0 12px 0;
-}
-
-/* Client info */
-.client-info {
+.chart-legend {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 16px;
 }
 
-.info-item {
+.legend-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.7);
 }
 
-.info-item svg {
-  flex-shrink: 0;
-  opacity: 0.6;
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
 }
 
-/* Client tags */
-.client-tags {
+.legend-item.inbound .legend-dot {
+  background: #a78bfa;
+}
+
+.legend-item.outbound .legend-dot {
+  background: #60a5fa;
+}
+
+/* Chart Card */
+.chart-card {
+  padding: 24px;
+}
+
+.chart-container {
+  height: 200px;
+  overflow-x: auto;
+}
+
+.chart-bars {
   display: flex;
+  gap: 4px;
+  height: 100%;
+  min-width: 600px;
+  align-items: flex-end;
+}
+
+.bar-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 
-.tag {
-  padding: 4px 10px;
-  border-radius: 6px;
+.bar-wrapper {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+}
+
+.bar {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+  transition: height 0.3s ease;
+}
+
+.bar.inbound {
+  background: linear-gradient(180deg, #a78bfa 0%, #8b5cf6 100%);
+}
+
+.bar.outbound {
+  background: linear-gradient(180deg, #60a5fa 0%, #3b82f6 100%);
+}
+
+.bar-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
+
+.chart-hint {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
   font-size: 12px;
-  font-weight: 500;
-}
-
-.tag-online {
-  background: rgba(52, 211, 153, 0.2);
-  color: #34d399;
-}
-
-.tag-offline {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.5);
-}
-
-/* Card arrow */
-.card-arrow {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: rgba(255, 255, 255, 0.3);
-  transition: all 0.2s ease;
-}
-
-.client-card:hover .card-arrow {
-  color: rgba(255, 255, 255, 0.6);
-  transform: translateY(-50%) translateX(4px);
+  color: rgba(255, 255, 255, 0.4);
 }
 
 /* Glass card base */

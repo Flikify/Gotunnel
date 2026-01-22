@@ -2,16 +2,15 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  NButton, NSpace, NTag, NEmpty,
-  NForm, NFormItem, NInput, NInputNumber, NSelect, NModal, NSwitch,
-  NIcon, useMessage, useDialog, NSpin, NGrid, NGridItem,
-  NTooltip, NDropdown, type FormInst, type FormRules
-} from 'naive-ui'
-import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, AddOutline, StorefrontOutline, DocumentTextOutline,
   ExtensionPuzzleOutline, SettingsOutline, CloudDownloadOutline, RefreshOutline
 } from '@vicons/ionicons5'
+import GlassModal from '../components/GlassModal.vue'
+import GlassTag from '../components/GlassTag.vue'
+import GlassSwitch from '../components/GlassSwitch.vue'
+import { useToast } from '../composables/useToast'
+import { useConfirm } from '../composables/useConfirm'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
   getClientPluginConfig, updateClientPluginConfig,
@@ -20,11 +19,12 @@ import {
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 import LogViewer from '../components/LogViewer.vue'
+import InlineLogPanel from '../components/InlineLogPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
-const message = useMessage()
-const dialog = useDialog()
+const message = useToast()
+const dialog = useConfirm()
 const clientId = route.params.id as string
 
 // Data
@@ -67,7 +67,6 @@ const builtinTypes = [
 // Modal Control for Rules
 const showRuleModal = ref(false)
 const ruleModalType = ref<'create' | 'edit'>('create')
-const ruleFormRef = ref<FormInst | null>(null)
 // Default Rule Model
 const defaultRule = {
   name: '',
@@ -89,37 +88,6 @@ const needsLocalAddr = (type: string) => {
 const getExtraFields = (type: string): ConfigField[] => {
   const schema = pluginRuleSchemas.value[type]
   return schema?.extra_fields || []
-}
-
-// Validation Rules
-const ruleValidationRules: FormRules = {
-  name: { required: true, message: '请输入规则名称', trigger: 'blur' },
-  type: { required: true, message: '请选择类型', trigger: ['blur', 'change'] },
-  remote_port: [
-    { required: true, type: 'number', message: '请输入远程端口', trigger: ['blur', 'change'] },
-    { type: 'number', min: 1, max: 65535, message: '端口范围 1-65535', trigger: ['blur', 'change'] }
-  ],
-  local_ip: {
-    required: true,
-    validator(_rule, value) {
-      if (needsLocalAddr(ruleForm.value.type || 'tcp')) {
-        if (!value) return new Error('请输入本地IP')
-      }
-      return true
-    },
-    trigger: 'blur'
-  },
-  local_port: {
-    required: true,
-    validator(_rule, value) {
-      if (needsLocalAddr(ruleForm.value.type || 'tcp')) {
-        if (!value && value !== 0) return new Error('请输入本地端口')
-        if (typeof value === 'number' && (value < 1 || value > 65535)) return new Error('端口范围 1-65535')
-      }
-      return true
-    },
-    trigger: ['blur', 'change']
-  }
 }
 
 // Actions
@@ -262,29 +230,42 @@ const saveRules = async (newRules: ProxyRule[]) => {
   }
 }
 
-const handleRuleSubmit = (e: MouseEvent) => {
-  e.preventDefault()
-  ruleFormRef.value?.validate(async (errors) => {
-    if (!errors) {
-      let newRules = [...rules.value]
-      if (ruleModalType.value === 'create') {
-        if (newRules.some(r => r.name === ruleForm.value.name)) {
-          message.error('规则名称已存在')
-          return
-        }
-        newRules.push({ ...ruleForm.value })
-      } else {
-        const index = newRules.findIndex(r => r.name === ruleForm.value.name)
-        if (index > -1) {
-          newRules[index] = { ...ruleForm.value }
-        }
-      }
-      await saveRules(newRules)
-      showRuleModal.value = false
-    } else {
-      message.error('请检查表单填写')
+const handleRuleSubmit = async () => {
+  // Simple validation
+  if (!ruleForm.value.name) {
+    message.error('请输入规则名称')
+    return
+  }
+  if (!ruleForm.value.remote_port || ruleForm.value.remote_port < 1 || ruleForm.value.remote_port > 65535) {
+    message.error('请输入有效的远程端口 (1-65535)')
+    return
+  }
+  if (needsLocalAddr(ruleForm.value.type || 'tcp')) {
+    if (!ruleForm.value.local_ip) {
+      message.error('请输入本地IP')
+      return
     }
-  })
+    if (!ruleForm.value.local_port || ruleForm.value.local_port < 1 || ruleForm.value.local_port > 65535) {
+      message.error('请输入有效的本地端口 (1-65535)')
+      return
+    }
+  }
+
+  let newRules = [...rules.value]
+  if (ruleModalType.value === 'create') {
+    if (newRules.some(r => r.name === ruleForm.value.name)) {
+      message.error('规则名称已存在')
+      return
+    }
+    newRules.push({ ...ruleForm.value })
+  } else {
+    const index = newRules.findIndex(r => r.name === ruleForm.value.name)
+    if (index > -1) {
+      newRules[index] = { ...ruleForm.value }
+    }
+  }
+  await saveRules(newRules)
+  showRuleModal.value = false
 }
 
 // Store & Plugin Logic
@@ -444,6 +425,12 @@ onMounted(() => {
 
 // Log Viewer
 const showLogViewer = ref(false)
+
+// Plugin Menu
+const activePluginMenu = ref('')
+const togglePluginMenu = (pluginId: string) => {
+  activePluginMenu.value = activePluginMenu.value === pluginId ? '' : pluginId
+}
 
 // Plugin Status Actions
 const handleStartPlugin = async (plugin: ClientPlugin) => {
@@ -611,22 +598,17 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                 </div>
                 <div v-for="rule in rules" :key="rule.name" class="table-row">
                   <span class="rule-name">{{ rule.name }}</span>
-                  <span><n-tag size="small" :type="rule.type==='websocket'?'info':'default'">{{ (rule.type || 'tcp').toUpperCase() }}</n-tag></span>
+                  <span><GlassTag :type="rule.type==='websocket'?'info':'default'">{{ (rule.type || 'tcp').toUpperCase() }}</GlassTag></span>
                   <span class="rule-mapping">
                     {{ needsLocalAddr(rule.type||'tcp') ? `${rule.local_ip}:${rule.local_port}` : '-' }}
                     →
                     :{{ rule.remote_port }}
                   </span>
                   <span>
-                    <n-switch :value="rule.enabled !== false" @update:value="(v: boolean) => { rule.enabled = v; saveRules(rules) }" size="small" />
+                    <GlassSwitch :model-value="rule.enabled !== false" @update:model-value="(v: boolean) => { rule.enabled = v; saveRules(rules) }" size="small" />
                   </span>
                   <span class="rule-actions">
-                    <n-tooltip v-if="rule.plugin_managed">
-                      <template #trigger>
-                        <n-tag type="info" size="small">插件托管</n-tag>
-                      </template>
-                      此规则由插件管理
-                    </n-tooltip>
+                    <GlassTag v-if="rule.plugin_managed" type="info" title="此规则由插件管理">插件托管</GlassTag>
                     <template v-else>
                       <button class="icon-btn" @click="openEditRule(rule)">编辑</button>
                       <button class="icon-btn danger" @click="handleDeleteRule(rule)">删除</button>
@@ -642,7 +624,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
             <div class="card-header">
               <h3>已安装扩展</h3>
               <button class="glass-btn small" @click="openStoreModal">
-                <n-icon size="14"><StorefrontOutline /></n-icon>
+                <StorefrontOutline class="btn-icon" />
                 插件商店
               </button>
             </div>
@@ -653,142 +635,149 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
               <div v-else class="plugins-list">
                 <div v-for="plugin in clientPlugins" :key="plugin.id" class="plugin-item">
                   <div class="plugin-info">
-                    <n-icon size="18" color="#a78bfa"><ExtensionPuzzleOutline /></n-icon>
+                    <ExtensionPuzzleOutline class="plugin-icon" />
                     <span class="plugin-name">{{ plugin.name }}</span>
                     <span class="plugin-version">v{{ plugin.version }}</span>
                   </div>
                   <div class="plugin-meta">
                     <span>端口: {{ plugin.remote_port || '-' }}</span>
-                    <n-tag :type="plugin.running ? 'success' : 'default'" size="small" round>
+                    <GlassTag :type="plugin.running ? 'success' : 'default'" round>
                       {{ plugin.running ? '运行中' : '已停止' }}
-                    </n-tag>
-                    <n-switch :value="plugin.enabled" size="small" @update:value="toggleClientPlugin(plugin)" />
+                    </GlassTag>
+                    <GlassSwitch :model-value="plugin.enabled" size="small" @update:model-value="toggleClientPlugin(plugin)" />
                   </div>
                   <div class="plugin-actions">
                     <button v-if="plugin.running && plugin.remote_port" class="icon-btn success" @click="handleOpenPlugin(plugin)">打开</button>
                     <button v-if="!plugin.running" class="icon-btn" @click="handleStartPlugin(plugin)" :disabled="!online || !plugin.enabled">启动</button>
-                    <n-dropdown :options="[
-                      { label: '重启', key: 'restart', disabled: !plugin.running },
-                      { label: '配置', key: 'config' },
-                      { label: '停止', key: 'stop', disabled: !plugin.running },
-                      { label: '删除', key: 'delete' }
-                    ]" @select="(k: string) => {
-                      if(k==='restart') handleRestartPlugin(plugin);
-                      if(k==='config') openConfigModal(plugin);
-                      if(k==='delete') handleDeletePlugin(plugin);
-                      if(k==='stop') handleStopPlugin(plugin);
-                    }">
-                      <button class="icon-btn"><n-icon size="16"><SettingsOutline /></n-icon></button>
-                    </n-dropdown>
+                    <div class="dropdown-wrapper">
+                      <button class="icon-btn" @click="togglePluginMenu(plugin.id)">
+                        <SettingsOutline class="settings-icon" />
+                      </button>
+                      <div v-if="activePluginMenu === plugin.id" class="dropdown-menu">
+                        <button @click="handleRestartPlugin(plugin); activePluginMenu = ''" :disabled="!plugin.running">重启</button>
+                        <button @click="openConfigModal(plugin); activePluginMenu = ''">配置</button>
+                        <button @click="handleStopPlugin(plugin); activePluginMenu = ''" :disabled="!plugin.running">停止</button>
+                        <button class="danger" @click="handleDeletePlugin(plugin); activePluginMenu = ''">删除</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- Inline Log Panel -->
+          <div class="glass-card">
+            <InlineLogPanel :client-id="clientId" />
           </div>
         </div>
       </div>
     </div>
 
     <!-- Rule Modal -->
-    <n-modal v-model:show="showRuleModal" preset="card" :title="ruleModalType==='create'?'添加规则':'编辑规则'" style="width: 500px">
-      <n-form ref="ruleFormRef" :model="ruleForm" :rules="ruleValidationRules" label-placement="left" label-width="80">
-        <n-form-item label="名称" path="name">
-          <n-input v-model:value="ruleForm.name" placeholder="请输入规则名称" :disabled="ruleModalType==='edit'" />
-        </n-form-item>
-        <n-form-item label="类型" path="type">
-          <n-select v-model:value="ruleForm.type" :options="builtinTypes" />
-        </n-form-item>
-        <template v-if="needsLocalAddr(ruleForm.type || 'tcp')">
-          <n-form-item label="本地IP" path="local_ip">
-            <n-input v-model:value="ruleForm.local_ip" placeholder="127.0.0.1" />
-          </n-form-item>
-          <n-form-item label="本地端口" path="local_port">
-            <n-input-number v-model:value="ruleForm.local_port" :min="1" :max="65535" style="width: 100%" />
-          </n-form-item>
-        </template>
-        <n-form-item label="远程端口" path="remote_port">
-          <n-input-number v-model:value="ruleForm.remote_port" :min="1" :max="65535" style="width: 100%" />
-        </n-form-item>
-        <template v-for="field in getExtraFields(ruleForm.type || '')" :key="field.key">
-          <n-form-item :label="field.label">
-            <n-input v-if="field.type==='string'" v-model:value="ruleForm.plugin_config![field.key]" />
-            <n-input v-if="field.type==='password'" type="password" v-model:value="ruleForm.plugin_config![field.key]" show-password-on="click" />
-            <n-switch v-if="field.type==='bool'" :value="ruleForm.plugin_config![field.key]==='true'" @update:value="(v) => ruleForm.plugin_config![field.key] = String(v)" />
-          </n-form-item>
-        </template>
-      </n-form>
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showRuleModal = false">取消</n-button>
-          <n-button type="primary" @click="handleRuleSubmit">保存</n-button>
-        </n-space>
+    <GlassModal :show="showRuleModal" :title="ruleModalType==='create'?'添加规则':'编辑规则'" @close="showRuleModal = false">
+      <div class="form-group">
+        <label class="form-label">名称</label>
+        <input v-model="ruleForm.name" class="form-input" placeholder="请输入规则名称" :disabled="ruleModalType==='edit'" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">类型</label>
+        <select v-model="ruleForm.type" class="form-select">
+          <option v-for="t in builtinTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
+        </select>
+      </div>
+      <template v-if="needsLocalAddr(ruleForm.type || 'tcp')">
+        <div class="form-group">
+          <label class="form-label">本地IP</label>
+          <input v-model="ruleForm.local_ip" class="form-input" placeholder="127.0.0.1" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">本地端口</label>
+          <input v-model.number="ruleForm.local_port" type="number" class="form-input" min="1" max="65535" />
+        </div>
       </template>
-    </n-modal>
+      <div class="form-group">
+        <label class="form-label">远程端口</label>
+        <input v-model.number="ruleForm.remote_port" type="number" class="form-input" min="1" max="65535" />
+      </div>
+      <template v-for="field in getExtraFields(ruleForm.type || '')" :key="field.key">
+        <div class="form-group">
+          <label class="form-label">{{ field.label }}</label>
+          <input v-if="field.type==='string'" v-model="ruleForm.plugin_config![field.key]" class="form-input" />
+          <input v-if="field.type==='password'" type="password" v-model="ruleForm.plugin_config![field.key]" class="form-input" />
+          <label v-if="field.type==='bool'" class="form-toggle">
+            <input type="checkbox" :checked="ruleForm.plugin_config![field.key]==='true'" @change="(e: Event) => ruleForm.plugin_config![field.key] = String((e.target as HTMLInputElement).checked)" />
+            <span>启用</span>
+          </label>
+        </div>
+      </template>
+      <template #footer>
+        <button class="glass-btn" @click="showRuleModal = false">取消</button>
+        <button class="glass-btn primary" @click="handleRuleSubmit">保存</button>
+      </template>
+    </GlassModal>
 
     <!-- Config Modal -->
-    <n-modal v-model:show="showConfigModal" preset="card" :title="`${configPluginName} 配置`" style="width: 500px;">
-      <n-empty v-if="configLoading" description="加载中..." />
-      <n-form v-else label-placement="left" label-width="100">
-        <n-form-item v-for="field in configSchema" :key="field.key" :label="field.label">
-          <n-input v-if="field.type==='string'" v-model:value="configValues[field.key]" />
-          <n-input v-if="field.type==='password'" type="password" v-model:value="configValues[field.key]" />
-          <n-input-number v-if="field.type==='number'" :value="Number(configValues[field.key])" @update:value="(v) => configValues[field.key] = String(v)" />
-          <n-switch v-if="field.type==='bool'" :value="configValues[field.key]==='true'" @update:value="(v) => configValues[field.key] = String(v)" />
-        </n-form-item>
-      </n-form>
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showConfigModal = false">取消</n-button>
-          <n-button type="primary" @click="savePluginConfig">保存</n-button>
-        </n-space>
+    <GlassModal :show="showConfigModal" :title="`${configPluginName} 配置`" @close="showConfigModal = false">
+      <div v-if="configLoading" class="loading-state">加载中...</div>
+      <template v-else>
+        <div v-for="field in configSchema" :key="field.key" class="form-group">
+          <label class="form-label">{{ field.label }}</label>
+          <input v-if="field.type==='string'" v-model="configValues[field.key]" class="form-input" />
+          <input v-if="field.type==='password'" type="password" v-model="configValues[field.key]" class="form-input" />
+          <input v-if="field.type==='number'" type="number" :value="Number(configValues[field.key])" @input="(e: Event) => configValues[field.key] = (e.target as HTMLInputElement).value" class="form-input" />
+          <label v-if="field.type==='bool'" class="form-toggle">
+            <input type="checkbox" :checked="configValues[field.key]==='true'" @change="(e: Event) => configValues[field.key] = String((e.target as HTMLInputElement).checked)" />
+            <span>启用</span>
+          </label>
+        </div>
       </template>
-    </n-modal>
+      <template #footer>
+        <button class="glass-btn" @click="showConfigModal = false">取消</button>
+        <button class="glass-btn primary" @click="savePluginConfig">保存</button>
+      </template>
+    </GlassModal>
 
     <!-- Rename Modal -->
-    <n-modal v-model:show="showRenameModal" preset="card" title="重命名客户端" style="width: 400px;">
-      <n-input v-model:value="renameValue" placeholder="请输入新名称" />
+    <GlassModal :show="showRenameModal" title="重命名客户端" width="400px" @close="showRenameModal = false">
+      <div class="form-group">
+        <label class="form-label">新名称</label>
+        <input v-model="renameValue" class="form-input" placeholder="请输入新名称" />
+      </div>
       <template #footer>
-        <n-space justify="end">
-          <n-button @click="showRenameModal = false">取消</n-button>
-          <n-button type="primary" @click="saveRename">保存</n-button>
-        </n-space>
+        <button class="glass-btn" @click="showRenameModal = false">取消</button>
+        <button class="glass-btn primary" @click="saveRename">保存</button>
       </template>
-    </n-modal>
+    </GlassModal>
 
     <!-- Store Modal -->
-    <n-modal v-model:show="showStoreModal" preset="card" title="插件商店" style="width: 600px;">
-      <n-spin :show="storeLoading">
-        <n-grid :x-gap="12" :y-gap="12" cols="1 600:2">
-          <n-grid-item v-for="plugin in storePlugins" :key="plugin.name">
-            <div class="store-plugin-card">
-              <div class="store-plugin-header">
-                <span class="store-plugin-name">{{ plugin.name }}</span>
-                <n-tag size="small">v{{ plugin.version }}</n-tag>
-              </div>
-              <p class="store-plugin-desc">{{ plugin.description }}</p>
-              <button class="glass-btn primary small full" @click="handleInstallStorePlugin(plugin)">
-                安装
-              </button>
-            </div>
-          </n-grid-item>
-        </n-grid>
-      </n-spin>
-    </n-modal>
+    <GlassModal :show="showStoreModal" title="插件商店" width="600px" @close="showStoreModal = false">
+      <div v-if="storeLoading" class="loading-state">加载中...</div>
+      <div v-else class="store-grid">
+        <div v-for="plugin in storePlugins" :key="plugin.name" class="store-plugin-card">
+          <div class="store-plugin-header">
+            <span class="store-plugin-name">{{ plugin.name }}</span>
+            <n-tag size="small">v{{ plugin.version }}</n-tag>
+          </div>
+          <p class="store-plugin-desc">{{ plugin.description }}</p>
+          <button class="glass-btn primary small full" @click="handleInstallStorePlugin(plugin)">
+            安装
+          </button>
+        </div>
+      </div>
+    </GlassModal>
 
     <!-- Install Config Modal -->
-    <n-modal v-model:show="showInstallConfigModal" preset="card" title="安装配置" style="width: 400px;">
-      <n-form label-placement="left">
-        <n-form-item label="远程端口">
-          <n-input-number v-model:value="installRemotePort" :min="1" :max="65535" style="width: 100%" />
-        </n-form-item>
-      </n-form>
+    <GlassModal :show="showInstallConfigModal" title="安装配置" width="400px" @close="showInstallConfigModal = false">
+      <div class="form-group">
+        <label class="form-label">远程端口</label>
+        <input v-model.number="installRemotePort" type="number" class="form-input" min="1" max="65535" />
+      </div>
       <template #footer>
-        <n-space justify="end">
-          <n-button @click="showInstallConfigModal = false">取消</n-button>
-          <n-button type="primary" @click="confirmInstallPlugin">确认安装</n-button>
-        </n-space>
+        <button class="glass-btn" @click="showInstallConfigModal = false">取消</button>
+        <button class="glass-btn primary" @click="confirmInstallPlugin">确认安装</button>
       </template>
-    </n-modal>
+    </GlassModal>
 
     <LogViewer :visible="showLogViewer" @close="showLogViewer = false" :client-id="clientId" />
   </div>
@@ -1200,5 +1189,160 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   font-size: 12px;
   margin: 0 0 12px 0;
   line-height: 1.5;
+}
+
+/* Store Grid */
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 500px) {
+  .store-grid { grid-template-columns: 1fr; }
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 6px;
+}
+
+.form-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: white;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  border-color: rgba(167, 139, 250, 0.5);
+}
+
+.form-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.form-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.form-select {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: white;
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+}
+
+.form-select option {
+  background: #1e1b4b;
+  color: white;
+}
+
+.form-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.form-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #a78bfa;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 32px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Dropdown Menu */
+.dropdown-wrapper {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: rgba(30, 27, 75, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 100px;
+  z-index: 100;
+}
+
+.dropdown-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.dropdown-menu button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.dropdown-menu button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dropdown-menu button.danger {
+  color: #fca5a5;
+}
+
+.dropdown-menu button.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* Icon styles */
+.btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.plugin-icon {
+  width: 18px;
+  height: 18px;
+  color: #a78bfa;
+}
+
+.settings-icon {
+  width: 16px;
+  height: 16px;
 }
 </style>
