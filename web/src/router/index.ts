@@ -26,9 +26,9 @@ const router = createRouter({
       component: () => import('../views/PluginsView.vue'),
     },
     {
-      path: '/update',
-      name: 'update',
-      component: () => import('../views/UpdateView.vue'),
+      path: '/settings',
+      name: 'settings',
+      component: () => import('../views/SettingsView.vue'),
     },
   ],
 })

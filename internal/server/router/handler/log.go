@@ -35,7 +35,7 @@ func (h *LogHandler) StreamLogs(c *gin.Context) {
 	clientID := c.Param("id")
 
 	// 检查客户端是否在线
-	online, _, _ := h.app.GetServer().GetClientStatus(clientID)
+	online, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
 	if !online {
 		c.JSON(400, gin.H{"code": 400, "message": "client not online"})
 		return

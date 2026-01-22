@@ -10,12 +10,13 @@ import {
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, AddOutline, StorefrontOutline, DocumentTextOutline,
-  ExtensionPuzzleOutline, SettingsOutline, OpenOutline
+  ExtensionPuzzleOutline, SettingsOutline, OpenOutline, CloudDownloadOutline, RefreshOutline
 } from '@vicons/ionicons5'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
   getClientPluginConfig, updateClientPluginConfig,
-  getStorePlugins, installStorePlugin, getRuleSchemas, startClientPlugin, restartClientPlugin, stopClientPlugin, deleteClientPlugin
+  getStorePlugins, installStorePlugin, getRuleSchemas, startClientPlugin, restartClientPlugin, stopClientPlugin, deleteClientPlugin,
+  checkClientUpdate, applyClientUpdate, type UpdateInfo
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 import LogViewer from '../components/LogViewer.vue'
@@ -34,6 +35,13 @@ const nickname = ref('')
 const rules = ref<ProxyRule[]>([])
 const clientPlugins = ref<ClientPlugin[]>([])
 const loading = ref(false)
+const clientOs = ref('')
+const clientArch = ref('')
+
+// 客户端更新相关
+const clientUpdate = ref<UpdateInfo | null>(null)
+const checkingUpdate = ref(false)
+const updatingClient = ref(false)
 
 // Rule Schemas
 const pluginRuleSchemas = ref<RuleSchemasMap>({})
@@ -125,12 +133,65 @@ const loadClient = async () => {
     nickname.value = data.nickname || ''
     rules.value = data.rules || []
     clientPlugins.value = data.plugins || []
+    clientOs.value = data.os || ''
+    clientArch.value = data.arch || ''
   } catch (e) {
     message.error('加载客户端信息失败')
     console.error(e)
   } finally {
     loading.value = false
   }
+}
+
+// 客户端更新
+const handleCheckClientUpdate = async () => {
+  if (!online.value) {
+    message.warning('客户端离线，无法检查更新')
+    return
+  }
+  if (!clientOs.value || !clientArch.value) {
+    message.warning('无法获取客户端平台信息')
+    return
+  }
+  checkingUpdate.value = true
+  try {
+    const { data } = await checkClientUpdate(clientOs.value, clientArch.value)
+    clientUpdate.value = data
+    if (data.download_url) {
+      message.success('找到客户端更新: ' + data.latest)
+    } else {
+      message.info('已是最新版本或未找到对应平台的更新包')
+    }
+  } catch (e: any) {
+    message.error(e.response?.data || '检查更新失败')
+  } finally {
+    checkingUpdate.value = false
+  }
+}
+
+const handleApplyClientUpdate = () => {
+  if (!clientUpdate.value?.download_url) {
+    message.error('没有可用的下载链接')
+    return
+  }
+  dialog.warning({
+    title: '确认更新客户端',
+    content: `即将更新客户端到 ${clientUpdate.value.latest}，更新后客户端将自动重启。确定要继续吗？`,
+    positiveText: '更新',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      updatingClient.value = true
+      try {
+        await applyClientUpdate(clientId, clientUpdate.value!.download_url)
+        message.success('更新命令已发送，客户端将自动重启')
+        clientUpdate.value = null
+      } catch (e: any) {
+        message.error(e.response?.data || '更新失败')
+      } finally {
+        updatingClient.value = false
+      }
+    }
+  })
 }
 
 // Client Rename
@@ -478,6 +539,32 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                <n-statistic label="规则数" :value="rules.length" />
                <n-statistic label="插件数" :value="clientPlugins.length" />
             </n-space>
+          </n-card>
+
+          <!-- 客户端更新 -->
+          <n-card title="客户端更新" bordered size="small">
+            <template #header-extra>
+              <n-button size="tiny" :loading="checkingUpdate" @click="handleCheckClientUpdate" :disabled="!online">
+                <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                检查
+              </n-button>
+            </template>
+            <div v-if="clientOs && clientArch" style="margin-bottom: 8px; font-size: 12px; color: #666;">
+              平台: {{ clientOs }}/{{ clientArch }}
+            </div>
+            <n-empty v-if="!clientUpdate" description="点击检查更新" size="small" />
+            <template v-else>
+              <div v-if="clientUpdate.download_url" style="font-size: 13px;">
+                <p style="margin: 0 0 8px 0; color: #10b981;">发现新版本 {{ clientUpdate.latest }}</p>
+                <n-button size="small" type="primary" :loading="updatingClient" @click="handleApplyClientUpdate">
+                  <template #icon><n-icon><CloudDownloadOutline /></n-icon></template>
+                  更新
+                </n-button>
+              </div>
+              <div v-else style="font-size: 13px; color: #666;">
+                已是最新版本
+              </div>
+            </template>
           </n-card>
         </n-space>
       </n-grid-item>

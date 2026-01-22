@@ -47,6 +47,8 @@ func (h *ClientHandler) List(c *gin.Context) {
 			item.Online = status.Online
 			item.LastPing = status.LastPing
 			item.RemoteAddr = status.RemoteAddr
+			item.OS = status.OS
+			item.Arch = status.Arch
 		}
 		result = append(result, item)
 	}
@@ -113,7 +115,7 @@ func (h *ClientHandler) Get(c *gin.Context) {
 		return
 	}
 
-	online, lastPing, remoteAddr := h.app.GetServer().GetClientStatus(clientID)
+	online, lastPing, remoteAddr, clientOS, clientArch := h.app.GetServer().GetClientStatus(clientID)
 
 	// 复制插件列表
 	plugins := make([]db.ClientPlugin, len(client.Plugins))
@@ -151,6 +153,8 @@ func (h *ClientHandler) Get(c *gin.Context) {
 		Online:     online,
 		LastPing:   lastPing,
 		RemoteAddr: remoteAddr,
+		OS:         clientOS,
+		Arch:       clientArch,
 	}
 
 	Success(c, resp)
@@ -237,7 +241,7 @@ func (h *ClientHandler) Delete(c *gin.Context) {
 func (h *ClientHandler) PushConfig(c *gin.Context) {
 	clientID := c.Param("id")
 
-	online, _, _ := h.app.GetServer().GetClientStatus(clientID)
+	online, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
 	if !online {
 		ClientNotOnline(c)
 		return
@@ -306,7 +310,7 @@ func (h *ClientHandler) Restart(c *gin.Context) {
 func (h *ClientHandler) InstallPlugins(c *gin.Context) {
 	clientID := c.Param("id")
 
-	online, _, _ := h.app.GetServer().GetClientStatus(clientID)
+	online, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
 	if !online {
 		ClientNotOnline(c)
 		return

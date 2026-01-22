@@ -84,6 +84,8 @@ type JSPluginEntry struct {
 type ClientSession struct {
 	ID         string
 	RemoteAddr string // 客户端 IP 地址
+	OS         string // 客户端操作系统
+	Arch       string // 客户端架构
 	Session    *yamux.Session
 	Rules      []protocol.ProxyRule
 	Listeners  map[int]net.Listener
@@ -287,11 +289,11 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	security.LogAuthSuccess(clientIP, clientID)
-	s.setupClientSession(conn, clientID, rules)
+	s.setupClientSession(conn, clientID, authReq.OS, authReq.Arch, rules)
 }
 
 // setupClientSession 建立客户端会话
-func (s *Server) setupClientSession(conn net.Conn, clientID string, rules []protocol.ProxyRule) {
+func (s *Server) setupClientSession(conn net.Conn, clientID, clientOS, clientArch string, rules []protocol.ProxyRule) {
 	session, err := yamux.Server(conn, nil)
 	if err != nil {
 		log.Printf("[Server] Yamux error: %v", err)
@@ -307,6 +309,8 @@ func (s *Server) setupClientSession(conn net.Conn, clientID string, rules []prot
 	cs := &ClientSession{
 		ID:         clientID,
 		RemoteAddr: remoteAddr,
+		OS:         clientOS,
+		Arch:       clientArch,
 		Session:    session,
 		Rules:      rules,
 		Listeners:  make(map[int]net.Listener),
@@ -567,16 +571,16 @@ func (s *Server) sendHeartbeat(cs *ClientSession) bool {
 }
 
 // GetClientStatus 获取客户端状态
-func (s *Server) GetClientStatus(clientID string) (online bool, lastPing string, remoteAddr string) {
+func (s *Server) GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientOS, clientArch string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if cs, ok := s.clients[clientID]; ok {
 		cs.mu.Lock()
 		defer cs.mu.Unlock()
-		return true, cs.LastPing.Format(time.RFC3339), cs.RemoteAddr
+		return true, cs.LastPing.Format(time.RFC3339), cs.RemoteAddr, cs.OS, cs.Arch
 	}
-	return false, "", ""
+	return false, "", "", "", ""
 }
 
 // GetClientPluginStatus 获取客户端插件运行状态
@@ -627,6 +631,8 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 	Online     bool
 	LastPing   string
 	RemoteAddr string
+	OS         string
+	Arch       string
 } {
 	// 先复制客户端引用，避免嵌套锁
 	s.mu.RLock()
@@ -640,6 +646,8 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 		Online     bool
 		LastPing   string
 		RemoteAddr string
+		OS         string
+		Arch       string
 	})
 
 	for _, cs := range clients {
@@ -648,10 +656,14 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 			Online     bool
 			LastPing   string
 			RemoteAddr string
+			OS         string
+			Arch       string
 		}{
 			Online:     true,
 			LastPing:   cs.LastPing.Format(time.RFC3339),
 			RemoteAddr: cs.RemoteAddr,
+			OS:         cs.OS,
+			Arch:       cs.Arch,
 		}
 		cs.mu.Unlock()
 	}

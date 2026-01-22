@@ -30,6 +30,8 @@ type ClientResponse struct {
 	Online     bool                 `json:"online" example:"true"`
 	LastPing   string               `json:"last_ping,omitempty" example:"2025-01-02T10:30:00Z"`
 	RemoteAddr string               `json:"remote_addr,omitempty" example:"192.168.1.100:54321"`
+	OS         string               `json:"os,omitempty" example:"linux"`
+	Arch       string               `json:"arch,omitempty" example:"amd64"`
 }
 
 // ClientListItem 客户端列表项
@@ -41,6 +43,8 @@ type ClientListItem struct {
 	LastPing   string `json:"last_ping,omitempty"`
 	RemoteAddr string `json:"remote_addr,omitempty"`
 	RuleCount  int    `json:"rule_count" example:"3"`
+	OS         string `json:"os,omitempty" example:"linux"`
+	Arch       string `json:"arch,omitempty" example:"amd64"`
 }
 
 // InstallPluginsRequest 安装插件到客户端请求

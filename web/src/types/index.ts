@@ -61,6 +61,8 @@ export interface ClientStatus {
   last_ping?: string
   remote_addr?: string
   rule_count: number
+  os?: string
+  arch?: string
 }
 
 // 客户端详情
@@ -72,6 +74,8 @@ export interface ClientDetail {
   online: boolean
   last_ping?: string
   remote_addr?: string
+  os?: string
+  arch?: string
 }
 
 // 服务器状态

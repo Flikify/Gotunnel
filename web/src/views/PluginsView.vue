@@ -1,19 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import {
   NCard, NButton, NSpace, NTag, NStatistic, NGrid, NGi,
   NEmpty, NSpin, NIcon, NSwitch, NTabs, NTabPane, useMessage,
   NSelect, NModal, NInput, NInputNumber
 } from 'naive-ui'
-import { ArrowBackOutline, ExtensionPuzzleOutline, StorefrontOutline, CodeSlashOutline, SettingsOutline } from '@vicons/ionicons5'
+import { ExtensionPuzzleOutline, StorefrontOutline, CodeSlashOutline, SettingsOutline } from '@vicons/ionicons5'
 import {
   getPlugins, enablePlugin, disablePlugin, getStorePlugins, getJSPlugins,
   pushJSPluginToClient, getClients, installStorePlugin, updateJSPluginConfig, setJSPluginEnabled
 } from '../api'
 import type { PluginInfo, StorePluginInfo, JSPlugin, ClientStatus } from '../types'
 
-const router = useRouter()
 const message = useMessage()
 const plugins = ref<PluginInfo[]>([])
 const storePlugins = ref<StorePluginInfo[]>([])
@@ -290,16 +288,10 @@ onMounted(() => {
 
 <template>
   <div class="plugins-view">
-    <n-space justify="space-between" align="center" style="margin-bottom: 24px;">
-      <div>
-        <h2 style="margin: 0 0 8px 0;">插件管理</h2>
-        <p style="margin: 0; color: #666;">管理已安装插件和浏览插件商店</p>
-      </div>
-      <n-button quaternary @click="router.push('/')">
-        <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
-        返回首页
-      </n-button>
-    </n-space>
+    <div class="page-header">
+      <h2>插件管理</h2>
+      <p>管理已安装插件和浏览插件商店</p>
+    </div>
 
     <n-tabs v-model:value="activeTab" type="line" @update:value="handleTabChange">
       <!-- 已安装插件 -->
@@ -574,3 +566,26 @@ onMounted(() => {
     </n-modal>
   </div>
 </template>
+
+<style scoped>
+.plugins-view {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.page-header p {
+  margin: 0;
+  color: #6b7280;
+}
+</style>

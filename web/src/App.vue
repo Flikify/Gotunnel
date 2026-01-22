@@ -1,46 +1,40 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, h, watch } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import {
-  NLayout, NLayoutHeader, NLayoutContent, NLayoutSider, NMenu,
+  NLayout, NLayoutHeader, NLayoutContent, NLayoutFooter,
   NButton, NIcon, NConfigProvider, NMessageProvider,
-  NDialogProvider, NGlobalStyle, NDropdown, type GlobalThemeOverrides
+  NDialogProvider, NGlobalStyle, NDropdown, NTabs, NTabPane,
+  type GlobalThemeOverrides
 } from 'naive-ui'
 import {
-  HomeOutline, ExtensionPuzzleOutline, LogOutOutline,
-  ServerOutline, MenuOutline, PersonCircleOutline
+  PersonCircleOutline, LogoGithub
 } from '@vicons/ionicons5'
-import type { MenuOption } from 'naive-ui'
-import { getServerStatus, removeToken, getToken } from './api'
+import { getServerStatus, getVersionInfo, removeToken, getToken } from './api'
 
 const router = useRouter()
 const route = useRoute()
 const serverInfo = ref({ bind_addr: '', bind_port: 0 })
 const clientCount = ref(0)
-const collapsed = ref(false)
+const version = ref('')
 
 const isLoginPage = computed(() => route.path === '/login')
 
-const menuOptions: MenuOption[] = [
-  {
-    label: 'Dashboard',
-    key: '/',
-    icon: () => h(NIcon, null, { default: () => h(HomeOutline) })
-  },
-  {
-    label: 'Plugins Store',
-    key: '/plugins',
-    icon: () => h(NIcon, null, { default: () => h(ExtensionPuzzleOutline) })
-  }
-]
-
-const activeKey = computed(() => {
-  if (route.path.startsWith('/client/')) return '/'
-  return route.path
+// 当前激活的 Tab
+const activeTab = computed(() => {
+  const path = route.path
+  if (path === '/' || path === '/home') return 'home'
+  if (path.startsWith('/client')) return 'clients'
+  if (path === '/plugins') return 'plugins'
+  if (path === '/settings') return 'settings'
+  return 'home'
 })
 
-const handleMenuUpdate = (key: string) => {
-  router.push(key)
+const handleTabChange = (tab: string) => {
+  if (tab === 'home') router.push('/')
+  else if (tab === 'clients') router.push('/')
+  else if (tab === 'plugins') router.push('/plugins')
+  else if (tab === 'settings') router.push('/settings')
 }
 
 const fetchServerStatus = async () => {
@@ -54,14 +48,26 @@ const fetchServerStatus = async () => {
   }
 }
 
+const fetchVersion = async () => {
+  if (isLoginPage.value || !getToken()) return
+  try {
+    const { data } = await getVersionInfo()
+    version.value = data.version || ''
+  } catch (e) {
+    console.error('Failed to get version', e)
+  }
+}
+
 watch(() => route.path, (newPath, oldPath) => {
   if (oldPath === '/login' && newPath !== '/login') {
     fetchServerStatus()
+    fetchVersion()
   }
 })
 
 onMounted(() => {
   fetchServerStatus()
+  fetchVersion()
 })
 
 const logout = () => {
@@ -69,31 +75,23 @@ const logout = () => {
   router.push('/login')
 }
 
-// User dropdown menu options
-const userDropdownOptions = [
-  {
-    label: '退出登录',
-    key: 'logout',
-    icon: () => h(NIcon, null, { default: () => h(LogOutOutline) })
-  }
-]
-
-const handleUserDropdown = (key: string) => {
-  if (key === 'logout') {
-    logout()
-  }
+const handleUserAction = (key: string) => {
+  if (key === 'logout') logout()
 }
 
-// Theme Overrides
+// 紫色渐变主题
 const themeOverrides: GlobalThemeOverrides = {
   common: {
-    primaryColor: '#18a058',
-    primaryColorHover: '#36ad6a',
-    primaryColorPressed: '#0c7a43',
+    primaryColor: '#6366f1',
+    primaryColorHover: '#818cf8',
+    primaryColorPressed: '#4f46e5',
   },
   Layout: {
-    siderColor: '#f7fcf9',
     headerColor: '#ffffff'
+  },
+  Tabs: {
+    tabTextColorActiveLine: '#6366f1',
+    barColor: '#6366f1'
   }
 }
 </script>
@@ -103,63 +101,64 @@ const themeOverrides: GlobalThemeOverrides = {
     <n-global-style />
     <n-dialog-provider>
       <n-message-provider>
-        <n-layout v-if="!isLoginPage" class="main-layout" has-sider position="absolute">
-          <n-layout-sider
-            bordered
-            collapse-mode="width"
-            :collapsed-width="64"
-            :width="240"
-            :collapsed="collapsed"
-            show-trigger
-            @collapse="collapsed = true"
-            @expand="collapsed = false"
-            style="background: #f9fafb;"
-          >
-            <div class="logo-container">
-              <n-icon size="32" color="#18a058"><ServerOutline /></n-icon>
-              <span v-if="!collapsed" class="logo-text">GoTunnel</span>
-            </div>
-            <n-menu
-              :collapsed="collapsed"
-              :collapsed-width="64"
-              :collapsed-icon-size="22"
-              :options="menuOptions"
-              :value="activeKey"
-              @update:value="handleMenuUpdate"
-            />
-            <div v-if="!collapsed" class="server-status-card">
-               <div class="status-item">
-                 <span class="label">Server:</span>
-                 <span class="value">{{ serverInfo.bind_addr }}:{{ serverInfo.bind_port }}</span>
-               </div>
-               <div class="status-item">
-                 <span class="label">Clients:</span>
-                 <span class="value">{{ clientCount }}</span>
-               </div>
-            </div>
-          </n-layout-sider>
-
-          <n-layout>
-            <n-layout-header bordered class="header">
-              <div class="header-content">
-                <n-button quaternary circle size="large" @click="collapsed = !collapsed" class="mobile-toggle">
-                  <template #icon><n-icon><MenuOutline /></n-icon></template>
-                </n-button>
-                <div class="header-right">
-                  <n-dropdown :options="userDropdownOptions" @select="handleUserDropdown">
-                    <n-button quaternary circle size="large">
-                      <template #icon>
-                        <n-icon size="24"><PersonCircleOutline /></n-icon>
-                      </template>
-                    </n-button>
-                  </n-dropdown>
+        <n-layout v-if="!isLoginPage" class="main-layout" position="absolute">
+          <!-- 顶部导航栏 -->
+          <n-layout-header bordered class="header">
+            <div class="header-content">
+              <div class="header-left">
+                <div class="logo">
+                  <span class="logo-text">GoTunnel</span>
                 </div>
+                <n-tabs
+                  type="line"
+                  :value="activeTab"
+                  @update:value="handleTabChange"
+                  class="nav-tabs"
+                >
+                  <n-tab-pane name="home" tab="首页" />
+                  <n-tab-pane name="clients" tab="客户端管理" />
+                  <n-tab-pane name="plugins" tab="插件商店" />
+                  <n-tab-pane name="settings" tab="系统设置" />
+                </n-tabs>
               </div>
-            </n-layout-header>
-            <n-layout-content content-style="padding: 24px; background-color: #f0f2f5; min-height: calc(100vh - 64px);">
-              <RouterView />
-            </n-layout-content>
-          </n-layout>
+              <div class="header-right">
+                <n-dropdown
+                  :options="[{ label: '退出登录', key: 'logout' }]"
+                  @select="handleUserAction"
+                >
+                  <n-button quaternary circle size="large">
+                    <template #icon>
+                      <n-icon size="24"><PersonCircleOutline /></n-icon>
+                    </template>
+                  </n-button>
+                </n-dropdown>
+              </div>
+            </div>
+          </n-layout-header>
+
+          <!-- 主内容区 -->
+          <n-layout-content class="main-content">
+            <RouterView />
+          </n-layout-content>
+
+          <!-- 底部页脚 -->
+          <n-layout-footer bordered class="footer">
+            <div class="footer-content">
+              <div class="footer-left">
+                <span class="brand">GoTunnel</span>
+                <span class="version" v-if="version">v{{ version }}</span>
+              </div>
+              <div class="footer-center">
+                <a href="https://github.com/user/gotunnel" target="_blank" class="footer-link">
+                  <n-icon size="16"><LogoGithub /></n-icon>
+                  <span>GitHub</span>
+                </a>
+              </div>
+              <div class="footer-right">
+                <span>© 2024 Flik. MIT License</span>
+              </div>
+            </div>
+          </n-layout-footer>
         </n-layout>
         <RouterView v-else />
       </n-message-provider>
@@ -170,31 +169,17 @@ const themeOverrides: GlobalThemeOverrides = {
 <style scoped>
 .main-layout {
   height: 100vh;
-}
-
-.logo-container {
-  height: 64px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  border-bottom: 1px solid #efeff5;
-  overflow: hidden;
-}
-
-.logo-text {
-  font-size: 20px;
-  font-weight: 700;
-  color: #18a058;
-  white-space: nowrap;
+  flex-direction: column;
 }
 
 .header {
-  height: 64px;
-  background: white;
+  height: 60px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
   padding: 0 24px;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
 }
 
 .header-content {
@@ -204,38 +189,117 @@ const themeOverrides: GlobalThemeOverrides = {
   align-items: center;
 }
 
-.server-status-card {
-  position: absolute;
-  bottom: 0;
-  width: 100%;
-  padding: 20px;
-  background: #f0fdf4;
-  border-top: 1px solid #d1fae5;
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 32px;
 }
 
-.status-item {
+.logo {
+  display: flex;
+  align-items: center;
+}
+
+.logo-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.nav-tabs :deep(.n-tabs-tab) {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+
+.nav-tabs :deep(.n-tabs-tab--active) {
+  color: #ffffff !important;
+}
+
+.nav-tabs :deep(.n-tabs-bar) {
+  background-color: #ffffff !important;
+}
+
+.header-right :deep(.n-button) {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.main-content {
+  flex: 1;
+  padding: 24px;
+  background-color: #f5f7fa;
+  overflow-y: auto;
+}
+
+.footer {
+  height: 48px;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer-content {
+  height: 100%;
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  align-items: center;
+  padding: 0 24px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand {
+  font-weight: 600;
+  color: #6366f1;
+}
+
+.version {
+  padding: 2px 8px;
+  background: #e0e7ff;
+  color: #4f46e5;
+  border-radius: 4px;
   font-size: 12px;
 }
 
-.status-item .label {
-  color: #64748b;
+.footer-center {
+  display: flex;
+  gap: 16px;
 }
 
-.status-item .value {
-  font-weight: 600;
-  color: #0f172a;
+.footer-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #6b7280;
+  text-decoration: none;
+  transition: color 0.2s;
 }
 
-.mobile-toggle {
-  display: none;
+.footer-link:hover {
+  color: #6366f1;
+}
+
+.footer-right {
+  color: #9ca3af;
 }
 
 @media (max-width: 768px) {
-  .mobile-toggle {
-    display: inline-flex;
+  .header {
+    padding: 0 12px;
+  }
+  .header-left {
+    gap: 16px;
+  }
+  .logo-text {
+    font-size: 16px;
+  }
+  .footer-content {
+    padding: 0 12px;
+    font-size: 12px;
   }
 }
 </style>

@@ -83,6 +83,8 @@ type Message struct {
 type AuthRequest struct {
 	ClientID string `json:"client_id"`
 	Token    string `json:"token"`
+	OS       string `json:"os,omitempty"`   // 客户端操作系统
+	Arch     string `json:"arch,omitempty"` // 客户端架构
 }
 
 // AuthResponse 认证响应

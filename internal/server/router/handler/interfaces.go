@@ -18,11 +18,13 @@ type AppInterface interface {
 
 // ServerInterface 服务端接口
 type ServerInterface interface {
-	GetClientStatus(clientID string) (online bool, lastPing string, remoteAddr string)
+	GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientOS, clientArch string)
 	GetAllClientStatus() map[string]struct {
 		Online     bool
 		LastPing   string
 		RemoteAddr string
+		OS         string
+		Arch       string
 	}
 	ReloadConfig() error
 	GetBindAddr() string

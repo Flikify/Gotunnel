@@ -176,7 +176,12 @@ func (c *Client) connect() error {
 		return err
 	}
 
-	authReq := protocol.AuthRequest{ClientID: c.ID, Token: c.Token}
+	authReq := protocol.AuthRequest{
+		ClientID: c.ID,
+		Token:    c.Token,
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
+	}
 	msg, _ := protocol.NewMessage(protocol.MsgTypeAuth, authReq)
 	if err := protocol.WriteMessage(conn, msg); err != nil {
 		conn.Close()
