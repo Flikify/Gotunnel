@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 * {
   margin: 0;
   padding: 0;
@@ -12,4 +14,20 @@ body {
 
 #app {
   min-height: 100vh;
+}
+
+/* Glass morphism utilities */
+.glass-card {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+.glass-card-hover:hover {
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 12px 48px 0 rgba(31, 38, 135, 0.45);
+  transform: translateY(-4px);
 }

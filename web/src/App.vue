@@ -225,15 +225,17 @@ const themeOverrides: GlobalThemeOverrides = {
 
 .main-content {
   flex: 1;
-  padding: 24px;
-  background-color: #f5f7fa;
+  padding: 0;
+  background-color: transparent;
   overflow-y: auto;
 }
 
 .footer {
   height: 48px;
-  background: #ffffff;
-  border-top: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .footer-content {
@@ -243,7 +245,7 @@ const themeOverrides: GlobalThemeOverrides = {
   align-items: center;
   padding: 0 24px;
   font-size: 13px;
-  color: #6b7280;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .footer-left {
@@ -254,13 +256,13 @@ const themeOverrides: GlobalThemeOverrides = {
 
 .brand {
   font-weight: 600;
-  color: #6366f1;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .version {
   padding: 2px 8px;
-  background: #e0e7ff;
-  color: #4f46e5;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
   border-radius: 4px;
   font-size: 12px;
 }
@@ -274,17 +276,17 @@ const themeOverrides: GlobalThemeOverrides = {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #6b7280;
+  color: rgba(255, 255, 255, 0.6);
   text-decoration: none;
   transition: color 0.2s;
 }
 
 .footer-link:hover {
-  color: #6366f1;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .footer-right {
-  color: #9ca3af;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 @media (max-width: 768px) {
