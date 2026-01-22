@@ -2,15 +2,15 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  NCard, NButton, NSpace, NTag, NTable, NEmpty,
+  NButton, NSpace, NTag, NEmpty,
   NForm, NFormItem, NInput, NInputNumber, NSelect, NModal, NSwitch,
   NIcon, useMessage, useDialog, NSpin, NGrid, NGridItem,
-  NStatistic, NDivider, NTooltip, NDropdown, type FormInst, type FormRules
+  NTooltip, NDropdown, type FormInst, type FormRules
 } from 'naive-ui'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, AddOutline, StorefrontOutline, DocumentTextOutline,
-  ExtensionPuzzleOutline, SettingsOutline, OpenOutline, CloudDownloadOutline, RefreshOutline
+  ExtensionPuzzleOutline, SettingsOutline, CloudDownloadOutline, RefreshOutline
 } from '@vicons/ionicons5'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
@@ -73,7 +73,7 @@ const defaultRule = {
   name: '',
   local_ip: '127.0.0.1',
   local_port: 80,
-  remote_port: 0, // 0 means unset/placeholder
+  remote_port: 0,
   type: 'tcp',
   enabled: true,
   plugin_config: {} as Record<string, string>
@@ -219,14 +219,13 @@ const saveRename = async () => {
 // Rule Management
 const openCreateRule = () => {
   ruleModalType.value = 'create'
-  ruleForm.value = { ...defaultRule, remote_port: 8080 } // Reset
+  ruleForm.value = { ...defaultRule, remote_port: 8080 }
   showRuleModal.value = true
 }
 
 const openEditRule = (rule: ProxyRule) => {
   if (rule.plugin_managed) return
   ruleModalType.value = 'edit'
-  // Deep copy to avoid modifying original until saved
   ruleForm.value = JSON.parse(JSON.stringify(rule))
   showRuleModal.value = true
 }
@@ -259,7 +258,7 @@ const saveRules = async (newRules: ProxyRule[]) => {
     }
   } catch (e: any) {
     message.error('保存失败: ' + (e.response?.data || e.message))
-    await loadClient() // Revert on failure
+    await loadClient()
   }
 }
 
@@ -267,10 +266,8 @@ const handleRuleSubmit = (e: MouseEvent) => {
   e.preventDefault()
   ruleFormRef.value?.validate(async (errors) => {
     if (!errors) {
-      // Logic to merge rule
       let newRules = [...rules.value]
       if (ruleModalType.value === 'create') {
-        // Check duplicate name
         if (newRules.some(r => r.name === ruleForm.value.name)) {
           message.error('规则名称已存在')
           return
@@ -387,7 +384,6 @@ const openConfigModal = async (plugin: ClientPlugin) => {
     const { data } = await getClientPluginConfig(clientId, plugin.name)
     configSchema.value = data.schema || []
     configValues.value = { ...data.config }
-    // Fill defaults
     configSchema.value.forEach(f => {
       if (f.default && !configValues.value[f.key]) {
         configValues.value[f.key] = f.default
@@ -477,224 +473,223 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 </script>
 
 <template>
-  <div class="client-view">
-    <!-- Header Area -->
-    <div class="page-header">
-       <n-space align="center">
-         <n-button quaternary circle @click="router.push('/')">
-           <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
-         </n-button>
-         <h1 class="page-title">{{ nickname || clientId }}</h1>
-         <n-button text size="small" @click="openRenameModal">
-           <template #icon><n-icon><CreateOutline /></n-icon></template>
-         </n-button>
-         <n-tag :type="online ? 'success' : 'error'" round size="small" style="margin-left: 8px;">
-           {{ online ? '在线' : '离线' }}
-         </n-tag>
-       </n-space>
-       <n-space>
-         <n-button v-if="online" type="primary" secondary @click="pushConfigToClient(clientId).then(() => message.success('已推送'))" size="small">
-           <template #icon><n-icon><PushOutline /></n-icon></template>
-           推送配置
-         </n-button>
-         <n-button size="small" @click="showLogViewer=true">
-            <template #icon><n-icon><DocumentTextOutline/></n-icon></template>
-            日志
-         </n-button>
-         <n-button type="error" ghost size="small" @click="confirmDelete">
-            <template #icon><n-icon><TrashOutline/></n-icon></template>
-            删除客户端
-         </n-button>
-       </n-space>
+  <div class="client-page">
+    <!-- Particles -->
+    <div class="particles">
+      <div class="particle particle-1"></div>
+      <div class="particle particle-2"></div>
+      <div class="particle particle-3"></div>
     </div>
 
-    <n-divider style="margin: 12px 0 24px 0;" />
+    <div class="client-content">
+      <!-- Header -->
+      <div class="page-header">
+        <div class="header-left">
+          <button class="back-btn" @click="router.push('/')">
+            <n-icon size="20"><ArrowBackOutline /></n-icon>
+          </button>
+          <h1 class="page-title">{{ nickname || clientId }}</h1>
+          <button class="edit-btn" @click="openRenameModal">
+            <n-icon size="16"><CreateOutline /></n-icon>
+          </button>
+          <span class="status-tag" :class="{ online }">
+            {{ online ? '在线' : '离线' }}
+          </span>
+        </div>
+        <div class="header-actions">
+          <button v-if="online" class="glass-btn primary" @click="pushConfigToClient(clientId).then(() => message.success('已推送'))">
+            <n-icon size="16"><PushOutline /></n-icon>
+            <span>推送配置</span>
+          </button>
+          <button class="glass-btn" @click="showLogViewer=true">
+            <n-icon size="16"><DocumentTextOutline /></n-icon>
+            <span>日志</span>
+          </button>
+          <button class="glass-btn danger" @click="confirmDelete">
+            <n-icon size="16"><TrashOutline /></n-icon>
+            <span>删除</span>
+          </button>
+        </div>
+      </div>
 
-    <n-grid :x-gap="24" :y-gap="24" cols="1 800:3" item-responsive>
-      <!-- Left Column: Status & Info -->
-      <n-grid-item span="1">
-        <n-space vertical size="large">
-          <n-card title="客户端状态" bordered size="small">
-            <n-space vertical size="large" justify="space-between">
-               <n-statistic label="连接 ID">
-                 {{ clientId }}
-               </n-statistic>
-               <n-statistic label="远程 IP">
-                 {{ remoteAddr || '-' }}
-               </n-statistic>
-               <n-statistic label="最后心跳">
-                 {{ lastPing ? new Date(lastPing).toLocaleTimeString() : '-' }}
-               </n-statistic>
-            </n-space>
-             <template #action>
-               <n-space vertical>
-                 <n-button block type="warning" dashed @click="disconnect" :disabled="!online">断开连接</n-button>
-                 <n-button block type="error" dashed @click="handleRestartClient" :disabled="!online">重启客户端</n-button>
-               </n-space>
-             </template>
-          </n-card>
-
-          <n-card title="统计" bordered size="small">
-            <n-space justify="space-around">
-               <n-statistic label="规则数" :value="rules.length" />
-               <n-statistic label="插件数" :value="clientPlugins.length" />
-            </n-space>
-          </n-card>
-
-          <!-- 客户端更新 -->
-          <n-card title="客户端更新" bordered size="small">
-            <template #header-extra>
-              <n-button size="tiny" :loading="checkingUpdate" @click="handleCheckClientUpdate" :disabled="!online">
-                <template #icon><n-icon><RefreshOutline /></n-icon></template>
-                检查
-              </n-button>
-            </template>
-            <div v-if="clientOs && clientArch" style="margin-bottom: 8px; font-size: 12px; color: #666;">
-              平台: {{ clientOs }}/{{ clientArch }}
+      <!-- Main Grid -->
+      <div class="main-grid">
+        <!-- Left Column -->
+        <div class="left-column">
+          <!-- Status Card -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3>客户端状态</h3>
             </div>
-            <n-empty v-if="!clientUpdate" description="点击检查更新" size="small" />
-            <template v-else>
-              <div v-if="clientUpdate.download_url" style="font-size: 13px;">
-                <p style="margin: 0 0 8px 0; color: #10b981;">发现新版本 {{ clientUpdate.latest }}</p>
-                <n-button size="small" type="primary" :loading="updatingClient" @click="handleApplyClientUpdate">
-                  <template #icon><n-icon><CloudDownloadOutline /></n-icon></template>
-                  更新
-                </n-button>
+            <div class="card-body">
+              <div class="stat-item">
+                <span class="stat-label">连接 ID</span>
+                <span class="stat-value mono">{{ clientId }}</span>
               </div>
-              <div v-else style="font-size: 13px; color: #666;">
-                已是最新版本
+              <div class="stat-item">
+                <span class="stat-label">远程 IP</span>
+                <span class="stat-value">{{ remoteAddr || '-' }}</span>
               </div>
-            </template>
-          </n-card>
-        </n-space>
-      </n-grid-item>
+              <div class="stat-item">
+                <span class="stat-label">最后心跳</span>
+                <span class="stat-value">{{ lastPing ? new Date(lastPing).toLocaleTimeString() : '-' }}</span>
+              </div>
+            </div>
+            <div class="card-actions">
+              <button class="glass-btn warning small" @click="disconnect" :disabled="!online">断开连接</button>
+              <button class="glass-btn danger small" @click="handleRestartClient" :disabled="!online">重启客户端</button>
+            </div>
+          </div>
 
-      <!-- Right Column: Rules & Plugins -->
-      <n-grid-item span="2">
-         <n-space vertical size="large">
+          <!-- Stats Card -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3>统计</h3>
+            </div>
+            <div class="card-body stats-row">
+              <div class="mini-stat">
+                <span class="mini-stat-value">{{ rules.length }}</span>
+                <span class="mini-stat-label">规则数</span>
+              </div>
+              <div class="mini-stat">
+                <span class="mini-stat-value">{{ clientPlugins.length }}</span>
+                <span class="mini-stat-label">插件数</span>
+              </div>
+            </div>
+          </div>
 
-           <!-- Rules Card -->
-           <n-card title="代理规则" bordered>
-             <template #header-extra>
-               <n-button type="primary" size="small" @click="openCreateRule">
-                 <template #icon><n-icon><AddOutline /></n-icon></template>
-                 添加规则
-               </n-button>
-             </template>
+          <!-- Update Card -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3>客户端更新</h3>
+              <button class="glass-btn tiny" :disabled="!online || checkingUpdate" @click="handleCheckClientUpdate">
+                <n-icon size="14"><RefreshOutline /></n-icon>
+                检查
+              </button>
+            </div>
+            <div class="card-body">
+              <div v-if="clientOs && clientArch" class="platform-info">
+                平台: {{ clientOs }}/{{ clientArch }}
+              </div>
+              <div v-if="!clientUpdate" class="empty-hint">点击检查更新</div>
+              <template v-else>
+                <div v-if="clientUpdate.download_url" class="update-available">
+                  <p>发现新版本 {{ clientUpdate.latest }}</p>
+                  <button class="glass-btn primary small" :disabled="updatingClient" @click="handleApplyClientUpdate">
+                    <n-icon size="14"><CloudDownloadOutline /></n-icon>
+                    更新
+                  </button>
+                </div>
+                <div v-else class="empty-hint">已是最新版本</div>
+              </template>
+            </div>
+          </div>
+        </div>
 
-             <n-empty v-if="rules.length === 0" description="暂无代理规则" style="padding: 24px;" />
-             <n-table v-else :bordered="false" size="small">
-               <thead>
-                 <tr>
-                   <th>名称</th>
-                   <th>类型</th>
-                   <th>映射</th>
-                   <th>状态</th>
-                   <th style="text-align: right;">操作</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 <tr v-for="rule in rules" :key="rule.name">
-                   <td><span style="font-weight: 500;">{{ rule.name }}</span></td>
-                   <td><n-tag size="small" :type="rule.type==='websocket'?'info':'default'">{{ (rule.type || 'tcp').toUpperCase() }}</n-tag></td>
-                   <td style="font-family: monospace; font-size: 12px; color: #666;">
-                      {{ needsLocalAddr(rule.type||'tcp') ? `${rule.local_ip}:${rule.local_port}` : '-' }}
-                      <n-icon><ArrowBackOutline style="transform: rotate(180deg); margin: 0 4px;" /></n-icon>
-                      :{{ rule.remote_port }}
-                   </td>
-                   <td>
-                     <n-switch :value="rule.enabled !== false" @update:value="(v: boolean) => { rule.enabled = v; saveRules(rules) }" size="small" />
-                   </td>
-                   <td style="text-align: right;">
-                     <n-space justify="end" :size="8">
-                       <n-tooltip v-if="rule.plugin_managed">
-                         <template #trigger>
-                            <n-tag type="info" size="small">插件托管</n-tag>
-                         </template>
-                         此规则由插件管理，无法手动编辑
-                       </n-tooltip>
-                       <template v-else>
-                         <n-button size="tiny" secondary type="info" @click="openEditRule(rule)">编辑</n-button>
-                         <n-button size="tiny" secondary type="error" @click="handleDeleteRule(rule)">删除</n-button>
-                       </template>
-                     </n-space>
-                   </td>
-                 </tr>
-               </tbody>
-             </n-table>
-           </n-card>
+        <!-- Right Column -->
+        <div class="right-column">
+          <!-- Rules Card -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3>代理规则</h3>
+              <button class="glass-btn primary small" @click="openCreateRule">
+                <n-icon size="14"><AddOutline /></n-icon>
+                添加规则
+              </button>
+            </div>
+            <div class="card-body">
+              <div v-if="rules.length === 0" class="empty-state">
+                <p>暂无代理规则</p>
+              </div>
+              <div v-else class="rules-table">
+                <div class="table-header">
+                  <span>名称</span>
+                  <span>类型</span>
+                  <span>映射</span>
+                  <span>状态</span>
+                  <span>操作</span>
+                </div>
+                <div v-for="rule in rules" :key="rule.name" class="table-row">
+                  <span class="rule-name">{{ rule.name }}</span>
+                  <span><n-tag size="small" :type="rule.type==='websocket'?'info':'default'">{{ (rule.type || 'tcp').toUpperCase() }}</n-tag></span>
+                  <span class="rule-mapping">
+                    {{ needsLocalAddr(rule.type||'tcp') ? `${rule.local_ip}:${rule.local_port}` : '-' }}
+                    →
+                    :{{ rule.remote_port }}
+                  </span>
+                  <span>
+                    <n-switch :value="rule.enabled !== false" @update:value="(v: boolean) => { rule.enabled = v; saveRules(rules) }" size="small" />
+                  </span>
+                  <span class="rule-actions">
+                    <n-tooltip v-if="rule.plugin_managed">
+                      <template #trigger>
+                        <n-tag type="info" size="small">插件托管</n-tag>
+                      </template>
+                      此规则由插件管理
+                    </n-tooltip>
+                    <template v-else>
+                      <button class="icon-btn" @click="openEditRule(rule)">编辑</button>
+                      <button class="icon-btn danger" @click="handleDeleteRule(rule)">删除</button>
+                    </template>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-           <!-- Plugins Card -->
-           <n-card title="已安装扩展" bordered>
-             <template #header-extra>
-                <n-button secondary size="small" @click="openStoreModal">
-                 <template #icon><n-icon><StorefrontOutline /></n-icon></template>
-                 插件商店
-               </n-button>
-             </template>
+          <!-- Plugins Card -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3>已安装扩展</h3>
+              <button class="glass-btn small" @click="openStoreModal">
+                <n-icon size="14"><StorefrontOutline /></n-icon>
+                插件商店
+              </button>
+            </div>
+            <div class="card-body">
+              <div v-if="clientPlugins.length === 0" class="empty-state">
+                <p>暂无安装的扩展</p>
+              </div>
+              <div v-else class="plugins-list">
+                <div v-for="plugin in clientPlugins" :key="plugin.id" class="plugin-item">
+                  <div class="plugin-info">
+                    <n-icon size="18" color="#a78bfa"><ExtensionPuzzleOutline /></n-icon>
+                    <span class="plugin-name">{{ plugin.name }}</span>
+                    <span class="plugin-version">v{{ plugin.version }}</span>
+                  </div>
+                  <div class="plugin-meta">
+                    <span>端口: {{ plugin.remote_port || '-' }}</span>
+                    <n-tag :type="plugin.running ? 'success' : 'default'" size="small" round>
+                      {{ plugin.running ? '运行中' : '已停止' }}
+                    </n-tag>
+                    <n-switch :value="plugin.enabled" size="small" @update:value="toggleClientPlugin(plugin)" />
+                  </div>
+                  <div class="plugin-actions">
+                    <button v-if="plugin.running && plugin.remote_port" class="icon-btn success" @click="handleOpenPlugin(plugin)">打开</button>
+                    <button v-if="!plugin.running" class="icon-btn" @click="handleStartPlugin(plugin)" :disabled="!online || !plugin.enabled">启动</button>
+                    <n-dropdown :options="[
+                      { label: '重启', key: 'restart', disabled: !plugin.running },
+                      { label: '配置', key: 'config' },
+                      { label: '停止', key: 'stop', disabled: !plugin.running },
+                      { label: '删除', key: 'delete' }
+                    ]" @select="(k: string) => {
+                      if(k==='restart') handleRestartPlugin(plugin);
+                      if(k==='config') openConfigModal(plugin);
+                      if(k==='delete') handleDeletePlugin(plugin);
+                      if(k==='stop') handleStopPlugin(plugin);
+                    }">
+                      <button class="icon-btn"><n-icon size="16"><SettingsOutline /></n-icon></button>
+                    </n-dropdown>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-             <n-empty v-if="clientPlugins.length === 0" description="暂无安装的扩展" style="padding: 24px;" />
-             <n-table v-else :bordered="false" size="small">
-                <thead>
-                  <tr>
-                    <th>名称</th>
-                    <th>版本</th>
-                    <th>端口</th>
-                    <th>状态</th>
-                    <th>启用</th>
-                    <th style="text-align: right;">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="plugin in clientPlugins" :key="plugin.id">
-                    <td>
-                      <div style="display: flex; align-items: center; gap: 8px;">
-                        <n-icon size="18" color="#18a058"><ExtensionPuzzleOutline /></n-icon>
-                        {{ plugin.name }}
-                      </div>
-                    </td>
-                    <td>v{{ plugin.version }}</td>
-                    <td>{{ plugin.remote_port || '-' }}</td>
-                    <td>
-                       <n-tag :type="plugin.running ? 'success' : 'default'" size="small" round>
-                         {{ plugin.running ? '运行中' : '已停止' }}
-                       </n-tag>
-                    </td>
-                    <td>
-                      <n-switch :value="plugin.enabled" size="small" @update:value="toggleClientPlugin(plugin)" />
-                    </td>
-                    <td style="text-align: right;">
-                      <n-space justify="end" :size="4">
-                        <n-button v-if="plugin.running && plugin.remote_port" size="tiny" type="success" secondary @click="handleOpenPlugin(plugin)">
-                          <template #icon><n-icon><OpenOutline /></n-icon></template>
-                          打开
-                        </n-button>
-                        <n-button v-if="!plugin.running" size="tiny" @click="handleStartPlugin(plugin)" :disabled="!online || !plugin.enabled">启动</n-button>
-                        <n-dropdown :options="[
-                           { label: '重启', key: 'restart', disabled: !plugin.running },
-                           { label: '配置', key: 'config' },
-                           { label: '删除', key: 'delete', props: { style: 'color: red' } },
-                           { label: '停止', key: 'stop', disabled: !plugin.running }
-                        ]" @select="(k: string) => {
-                             if(k==='restart') handleRestartPlugin(plugin);
-                             if(k==='config') openConfigModal(plugin);
-                             if(k==='delete') handleDeletePlugin(plugin);
-                             if(k==='stop') handleStopPlugin(plugin);
-                        }">
-                          <n-button size="tiny" quaternary><template #icon><n-icon><SettingsOutline /></n-icon></template></n-button>
-                        </n-dropdown>
-                      </n-space>
-                    </td>
-                  </tr>
-                </tbody>
-             </n-table>
-           </n-card>
-
-         </n-space>
-      </n-grid-item>
-    </n-grid>
-
-    <!-- Rule Edit Modal -->
+    <!-- Rule Modal -->
     <n-modal v-model:show="showRuleModal" preset="card" :title="ruleModalType==='create'?'添加规则':'编辑规则'" style="width: 500px">
       <n-form ref="ruleFormRef" :model="ruleForm" :rules="ruleValidationRules" label-placement="left" label-width="80">
         <n-form-item label="名称" path="name">
@@ -703,7 +698,6 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
         <n-form-item label="类型" path="type">
           <n-select v-model:value="ruleForm.type" :options="builtinTypes" />
         </n-form-item>
-
         <template v-if="needsLocalAddr(ruleForm.type || 'tcp')">
           <n-form-item label="本地IP" path="local_ip">
             <n-input v-model:value="ruleForm.local_ip" placeholder="127.0.0.1" />
@@ -712,18 +706,15 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
             <n-input-number v-model:value="ruleForm.local_port" :min="1" :max="65535" style="width: 100%" />
           </n-form-item>
         </template>
-
         <n-form-item label="远程端口" path="remote_port">
-          <n-input-number v-model:value="ruleForm.remote_port" :min="1" :max="65535" style="width: 100%" placeholder="将在服务器上监听的端口" />
+          <n-input-number v-model:value="ruleForm.remote_port" :min="1" :max="65535" style="width: 100%" />
         </n-form-item>
-
-        <!-- Extra Fields -->
         <template v-for="field in getExtraFields(ruleForm.type || '')" :key="field.key">
-           <n-form-item :label="field.label">
-              <n-input v-if="field.type==='string'" v-model:value="ruleForm.plugin_config![field.key]" />
-              <n-input v-if="field.type==='password'" type="password" v-model:value="ruleForm.plugin_config![field.key]" show-password-on="click" />
-              <n-switch v-if="field.type==='bool'" :value="ruleForm.plugin_config![field.key]==='true'" @update:value="(v) => ruleForm.plugin_config![field.key] = String(v)" />
-           </n-form-item>
+          <n-form-item :label="field.label">
+            <n-input v-if="field.type==='string'" v-model:value="ruleForm.plugin_config![field.key]" />
+            <n-input v-if="field.type==='password'" type="password" v-model:value="ruleForm.plugin_config![field.key]" show-password-on="click" />
+            <n-switch v-if="field.type==='bool'" :value="ruleForm.plugin_config![field.key]==='true'" @update:value="(v) => ruleForm.plugin_config![field.key] = String(v)" />
+          </n-form-item>
         </template>
       </n-form>
       <template #footer>
@@ -734,23 +725,23 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
       </template>
     </n-modal>
 
-    <!-- Plugin Config Modal -->
+    <!-- Config Modal -->
     <n-modal v-model:show="showConfigModal" preset="card" :title="`${configPluginName} 配置`" style="width: 500px;">
-       <n-empty v-if="configLoading" description="加载中..." />
-       <n-form v-else label-placement="left" label-width="100">
-         <n-form-item v-for="field in configSchema" :key="field.key" :label="field.label">
-            <n-input v-if="field.type==='string'" v-model:value="configValues[field.key]" />
-            <n-input v-if="field.type==='password'" type="password" v-model:value="configValues[field.key]" show-password-on="click"/>
-            <n-input-number v-if="field.type==='number'" :value="Number(configValues[field.key])" @update:value="(v) => configValues[field.key] = String(v)" />
-            <n-switch v-if="field.type==='bool'" :value="configValues[field.key]==='true'" @update:value="(v) => configValues[field.key] = String(v)" />
-         </n-form-item>
-       </n-form>
-       <template #footer>
-         <n-space justify="end">
-           <n-button @click="showConfigModal = false">取消</n-button>
-           <n-button type="primary" @click="savePluginConfig">保存</n-button>
-         </n-space>
-       </template>
+      <n-empty v-if="configLoading" description="加载中..." />
+      <n-form v-else label-placement="left" label-width="100">
+        <n-form-item v-for="field in configSchema" :key="field.key" :label="field.label">
+          <n-input v-if="field.type==='string'" v-model:value="configValues[field.key]" />
+          <n-input v-if="field.type==='password'" type="password" v-model:value="configValues[field.key]" />
+          <n-input-number v-if="field.type==='number'" :value="Number(configValues[field.key])" @update:value="(v) => configValues[field.key] = String(v)" />
+          <n-switch v-if="field.type==='bool'" :value="configValues[field.key]==='true'" @update:value="(v) => configValues[field.key] = String(v)" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showConfigModal = false">取消</n-button>
+          <n-button type="primary" @click="savePluginConfig">保存</n-button>
+        </n-space>
+      </template>
     </n-modal>
 
     <!-- Rename Modal -->
@@ -758,47 +749,45 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
       <n-input v-model:value="renameValue" placeholder="请输入新名称" />
       <template #footer>
         <n-space justify="end">
-           <n-button @click="showRenameModal = false">取消</n-button>
-           <n-button type="primary" @click="saveRename">保存</n-button>
+          <n-button @click="showRenameModal = false">取消</n-button>
+          <n-button type="primary" @click="saveRename">保存</n-button>
         </n-space>
       </template>
     </n-modal>
 
     <!-- Store Modal -->
     <n-modal v-model:show="showStoreModal" preset="card" title="插件商店" style="width: 600px;">
-       <n-spin :show="storeLoading">
-         <n-grid :x-gap="12" :y-gap="12" cols="1 600:2">
-            <n-grid-item v-for="plugin in storePlugins" :key="plugin.name">
-               <n-card size="small" hoverable>
-                 <n-space align="center" justify="space-between">
-                   <div style="font-weight: 600;">{{ plugin.name }}</div>
-                   <n-tag size="small">v{{ plugin.version }}</n-tag>
-                 </n-space>
-                 <div style="color: #666; font-size: 12px; margin: 8px 0; height: 32px; overflow: hidden;">
-                   {{ plugin.description }}
-                 </div>
-                 <n-button block type="primary" size="small" secondary @click="handleInstallStorePlugin(plugin)" :loading="storeInstalling === plugin.name">
-                   安装
-                 </n-button>
-               </n-card>
-            </n-grid-item>
-         </n-grid>
-       </n-spin>
+      <n-spin :show="storeLoading">
+        <n-grid :x-gap="12" :y-gap="12" cols="1 600:2">
+          <n-grid-item v-for="plugin in storePlugins" :key="plugin.name">
+            <div class="store-plugin-card">
+              <div class="store-plugin-header">
+                <span class="store-plugin-name">{{ plugin.name }}</span>
+                <n-tag size="small">v{{ plugin.version }}</n-tag>
+              </div>
+              <p class="store-plugin-desc">{{ plugin.description }}</p>
+              <button class="glass-btn primary small full" @click="handleInstallStorePlugin(plugin)">
+                安装
+              </button>
+            </div>
+          </n-grid-item>
+        </n-grid>
+      </n-spin>
     </n-modal>
 
     <!-- Install Config Modal -->
     <n-modal v-model:show="showInstallConfigModal" preset="card" title="安装配置" style="width: 400px;">
-       <n-form label-placement="left">
-          <n-form-item label="远程端口">
-             <n-input-number v-model:value="installRemotePort" :min="1" :max="65535" style="width: 100%" placeholder="1-65535" />
-          </n-form-item>
-       </n-form>
-       <template #footer>
-          <n-space justify="end">
-             <n-button @click="showInstallConfigModal = false">取消</n-button>
-             <n-button type="primary" @click="confirmInstallPlugin">确认安装</n-button>
-          </n-space>
-       </template>
+      <n-form label-placement="left">
+        <n-form-item label="远程端口">
+          <n-input-number v-model:value="installRemotePort" :min="1" :max="65535" style="width: 100%" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showInstallConfigModal = false">取消</n-button>
+          <n-button type="primary" @click="confirmInstallPlugin">确认安装</n-button>
+        </n-space>
+      </template>
     </n-modal>
 
     <LogViewer :visible="showLogViewer" @close="showLogViewer = false" :client-id="clientId" />
@@ -806,18 +795,410 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 </template>
 
 <style scoped>
-.client-view {
-  min-height: 100%;
+.client-page {
+  min-height: calc(100vh - 108px);
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
+  position: relative;
+  overflow: hidden;
+  padding: 32px;
 }
+
+.particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+  animation: float-particle 20s ease-in-out infinite;
+}
+
+.particle-1 { width: 250px; height: 250px; top: -80px; right: -50px; }
+.particle-2 { width: 180px; height: 180px; bottom: 10%; left: 5%; animation-delay: -7s; }
+.particle-3 { width: 120px; height: 120px; top: 50%; right: 15%; animation-delay: -12s; }
+
+@keyframes float-particle {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+  50% { transform: translate(-20px, -60px) scale(0.95); opacity: 0.4; }
+}
+
+.client-content {
+  position: relative;
+  z-index: 10;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Page Header */
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
 }
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.back-btn, .edit-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.back-btn:hover, .edit-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
 .page-title {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
+  color: white;
   margin: 0;
-  color: #1f2937;
+}
+
+.status-tag {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.status-tag.online {
+  background: rgba(52, 211, 153, 0.2);
+  color: #34d399;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Glass Button */
+.glass-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px 16px;
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.glass-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.glass-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.glass-btn.primary {
+  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  border: none;
+}
+
+.glass-btn.danger {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.glass-btn.warning {
+  background: rgba(251, 191, 36, 0.2);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fcd34d;
+}
+
+.glass-btn.small { padding: 6px 12px; font-size: 12px; }
+.glass-btn.tiny { padding: 4px 8px; font-size: 11px; }
+.glass-btn.full { width: 100%; justify-content: center; }
+
+/* Main Grid */
+.main-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .main-grid { grid-template-columns: 1fr; }
+}
+
+.left-column, .right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Glass Card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+}
+
+.card-body { padding: 20px; }
+.card-actions {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  gap: 8px;
+}
+
+/* Stat Items */
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stat-item:last-child { border-bottom: none; }
+
+.stat-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+}
+
+.stat-value {
+  color: white;
+  font-size: 13px;
+}
+
+.stat-value.mono {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+/* Mini Stats */
+.stats-row {
+  display: flex;
+  justify-content: space-around;
+}
+
+.mini-stat {
+  text-align: center;
+}
+
+.mini-stat-value {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  color: white;
+}
+
+.mini-stat-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Update Card */
+.platform-info {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+}
+
+.empty-hint {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.update-available p {
+  margin: 0 0 8px 0;
+  color: #34d399;
+  font-size: 13px;
+}
+
+/* Rules Table */
+.empty-state {
+  text-align: center;
+  padding: 32px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.rules-table {
+  overflow-x: auto;
+}
+
+.table-header, .table-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 1.5fr 60px 100px;
+  gap: 12px;
+  padding: 10px 0;
+  align-items: center;
+}
+
+.table-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.table-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+}
+
+.rule-name { font-weight: 500; color: white; }
+.rule-mapping { font-family: monospace; font-size: 12px; }
+.rule-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* Icon Button */
+.icon-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-btn.danger {
+  color: #fca5a5;
+}
+
+.icon-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.icon-btn.success {
+  color: #34d399;
+}
+
+.icon-btn.success:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.2);
+}
+
+/* Plugins List */
+.plugins-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plugin-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plugin-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.plugin-name {
+  font-weight: 600;
+  color: white;
+  font-size: 14px;
+}
+
+.plugin-version {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.plugin-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.plugin-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Store Plugin Card */
+.store-plugin-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.store-plugin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.store-plugin-name {
+  font-weight: 600;
+  color: white;
+  font-size: 14px;
+}
+
+.store-plugin-desc {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  margin: 0 0 12px 0;
+  line-height: 1.5;
 }
 </style>

@@ -175,11 +175,13 @@ const themeOverrides: GlobalThemeOverrides = {
 
 .header {
   height: 60px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgba(30, 27, 75, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex;
   align-items: center;
   padding: 0 24px;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .header-content {
@@ -226,13 +228,13 @@ const themeOverrides: GlobalThemeOverrides = {
 .main-content {
   flex: 1;
   padding: 0;
-  background-color: transparent;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
   overflow-y: auto;
 }
 
 .footer {
   height: 48px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(30, 27, 75, 0.9);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
