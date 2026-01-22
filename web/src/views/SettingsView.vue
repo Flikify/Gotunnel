@@ -30,7 +30,8 @@ const configForm = ref({
   heartbeat_sec: 30,
   heartbeat_timeout: 90,
   web_username: '',
-  web_password: ''
+  web_password: '',
+  plugin_store_url: ''
 })
 
 const loadVersionInfo = async () => {
@@ -55,7 +56,8 @@ const loadServerConfig = async () => {
       heartbeat_sec: data.server.heartbeat_sec,
       heartbeat_timeout: data.server.heartbeat_timeout,
       web_username: data.web.username,
-      web_password: ''
+      web_password: '',
+      plugin_store_url: data.plugin_store.url
     }
   } catch (e) {
     console.error('Failed to load server config', e)
@@ -75,6 +77,9 @@ const handleSaveConfig = async () => {
       },
       web: {
         username: configForm.value.web_username
+      },
+      plugin_store: {
+        url: configForm.value.plugin_store_url
       }
     }
     // 只有填写了密码才更新
@@ -267,6 +272,19 @@ onMounted(() => {
                   placeholder="留空则不修改"
                 />
               </div>
+            </div>
+
+            <div class="form-divider"></div>
+
+            <div class="form-group">
+              <label class="form-label">插件商店地址</label>
+              <input
+                v-model="configForm.plugin_store_url"
+                type="text"
+                class="glass-input"
+                placeholder="https://example.com/plugins"
+              />
+              <span class="form-hint">插件商店的 API 地址</span>
             </div>
 
             <div class="form-actions">

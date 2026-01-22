@@ -17,8 +17,6 @@ declare module 'vue' {
     HelloWorld: typeof import('./src/components/HelloWorld.vue')['default']
     InlineLogPanel: typeof import('./src/components/InlineLogPanel.vue')['default']
     LogViewer: typeof import('./src/components/LogViewer.vue')['default']
-    NIcon: typeof import('naive-ui')['NIcon']
-    NTag: typeof import('naive-ui')['NTag']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
   }

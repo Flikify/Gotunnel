@@ -27,7 +27,6 @@ import (
 	"github.com/gotunnel/internal/server/tunnel"
 	"github.com/gotunnel/pkg/crypto"
 	"github.com/gotunnel/pkg/plugin"
-	"github.com/gotunnel/pkg/plugin/sign"
 	"github.com/gotunnel/pkg/version"
 )
 
@@ -83,12 +82,6 @@ func main() {
 	server.SetPluginRegistry(registry)
 	server.SetJSPluginStore(clientStore) // 设置 JS 插件存储，用于客户端重连时恢复插件
 
-	// 加载 JS 插件配置
-	if len(cfg.JSPlugins) > 0 {
-		jsPlugins := loadJSPlugins(cfg.JSPlugins)
-		server.LoadJSPlugins(jsPlugins)
-	}
-
 	// 启动 Web 控制台
 	if cfg.Server.Web.Enabled {
 		// 强制生成 Web 凭据（如果未配置）
@@ -127,70 +120,4 @@ func main() {
 	}()
 
 	log.Fatal(server.Run())
-}
-
-// loadJSPlugins 加载 JS 插件文件
-func loadJSPlugins(configs []config.JSPluginConfig) []tunnel.JSPluginEntry {
-	var plugins []tunnel.JSPluginEntry
-
-	for _, cfg := range configs {
-		source, err := os.ReadFile(cfg.Path)
-		if err != nil {
-			log.Printf("[JSPlugin] Failed to load %s: %v", cfg.Path, err)
-			continue
-		}
-
-		// 加载签名文件
-		sigPath := cfg.SigPath
-		if sigPath == "" {
-			sigPath = cfg.Path + ".sig"
-		}
-		signature, err := os.ReadFile(sigPath)
-		if err != nil {
-			log.Printf("[JSPlugin] Failed to load signature for %s: %v", cfg.Name, err)
-			continue
-		}
-
-		// 服务端也验证签名，防止配置文件被篡改
-		if err := verifyPluginSignature(cfg.Name, string(source), string(signature)); err != nil {
-			log.Printf("[JSPlugin] Signature verification failed for %s: %v", cfg.Name, err)
-			continue
-		}
-
-		plugins = append(plugins, tunnel.JSPluginEntry{
-			Name:      cfg.Name,
-			Source:    string(source),
-			Signature: string(signature),
-			AutoPush:  cfg.AutoPush,
-			Config:    cfg.Config,
-			AutoStart: cfg.AutoStart,
-		})
-
-		log.Printf("[JSPlugin] Loaded: %s from %s (verified)", cfg.Name, cfg.Path)
-	}
-
-	return plugins
-}
-
-// verifyPluginSignature 验证插件签名
-func verifyPluginSignature(name, source, signature string) error {
-	// 解码签名
-	signed, err := sign.DecodeSignedPlugin(signature)
-	if err != nil {
-		return fmt.Errorf("decode signature: %w", err)
-	}
-
-	// 获取公钥
-	pubKey, err := sign.GetPublicKeyByID(signed.Payload.KeyID)
-	if err != nil {
-		return err
-	}
-
-	// 验证插件名称
-	if signed.Payload.Name != name {
-		return fmt.Errorf("name mismatch: %s vs %s", signed.Payload.Name, name)
-	}
-
-	// 验证签名
-	return sign.VerifyPlugin(pubKey, signed, source)
 }

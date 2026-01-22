@@ -47,6 +47,9 @@ func (h *ConfigHandler) Get(c *gin.Context) {
 			Username: cfg.Server.Web.Username,
 			Password: "****",
 		},
+		PluginStore: dto.PluginStoreConfigInfo{
+			URL: cfg.Server.PluginStore.URL,
+		},
 	}
 
 	Success(c, resp)
@@ -98,6 +101,11 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		}
 		cfg.Server.Web.Username = req.Web.Username
 		cfg.Server.Web.Password = req.Web.Password
+	}
+
+	// 更新 PluginStore 配置
+	if req.PluginStore != nil {
+		cfg.Server.PluginStore.URL = req.PluginStore.URL
 	}
 
 	if err := h.app.SaveConfig(); err != nil {

@@ -2,10 +2,6 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import {
-  NConfigProvider, NMessageProvider, NDialogProvider, NGlobalStyle,
-  type GlobalThemeOverrides
-} from 'naive-ui'
-import {
   HomeOutline, DesktopOutline, SettingsOutline,
   PersonCircleOutline, LogOutOutline, LogoGithub, ServerOutline, CheckmarkCircleOutline, ArrowUpCircleOutline
 } from '@vicons/ionicons5'
@@ -88,95 +84,72 @@ const logout = () => {
 const toggleUserMenu = () => {
   showUserMenu.value = !showUserMenu.value
 }
-
-// 紫色渐变主题
-const themeOverrides: GlobalThemeOverrides = {
-  common: {
-    primaryColor: '#6366f1',
-    primaryColorHover: '#818cf8',
-    primaryColorPressed: '#4f46e5',
-  },
-  Layout: {
-    headerColor: '#ffffff'
-  },
-  Tabs: {
-    tabTextColorActiveLine: '#6366f1',
-    barColor: '#6366f1'
-  }
-}
 </script>
 
 <template>
-  <n-config-provider :theme-overrides="themeOverrides">
-    <n-global-style />
-    <n-dialog-provider>
-      <n-message-provider>
-        <div v-if="!isLoginPage" class="app-layout">
-          <!-- Header -->
-          <header class="app-header">
-            <div class="header-left">
-              <span class="logo">GoTunnel</span>
-            </div>
-            <nav class="header-nav">
-              <router-link
-                v-for="item in navItems"
-                :key="item.key"
-                :to="item.path"
-                class="nav-item"
-                :class="{ active: activeNav === item.key }"
-              >
-                <component :is="item.icon" class="nav-icon" />
-                <span>{{ item.label }}</span>
-              </router-link>
-            </nav>
-            <div class="header-right">
-              <div class="user-menu" @click="toggleUserMenu">
-                <PersonCircleOutline class="user-icon" />
-                <div v-if="showUserMenu" class="user-dropdown" @click.stop>
-                  <button class="dropdown-item" @click="logout">
-                    <LogOutOutline class="dropdown-icon" />
-                    <span>退出登录</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <!-- Main Content -->
-          <main class="main-content">
-            <RouterView />
-          </main>
-
-          <!-- Footer -->
-          <footer class="app-footer">
-            <div class="footer-left">
-              <span class="brand">GoTunnel</span>
-              <div v-if="version" class="version-info">
-                <ServerOutline class="version-icon" />
-                <span class="version">v{{ version }}</span>
-                <span v-if="updateInfo" class="update-status" :class="{ latest: !updateInfo.available, 'has-update': updateInfo.available }">
-                  <template v-if="updateInfo.available">
-                    <ArrowUpCircleOutline class="status-icon" />
-                    <span>新版本 ({{ updateInfo.latest }})</span>
-                  </template>
-                  <template v-else>
-                    <CheckmarkCircleOutline class="status-icon" />
-                    <span>最新版本</span>
-                  </template>
-                </span>
-              </div>
-            </div>
-            <a href="https://github.com/user/gotunnel" target="_blank" class="footer-link">
-              <LogoGithub class="footer-icon" />
-              <span>GitHub</span>
-            </a>
-            <span class="copyright">© 2024 Flik. MIT License</span>
-          </footer>
+  <div v-if="!isLoginPage" class="app-layout">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <span class="logo">GoTunnel</span>
+      </div>
+      <nav class="header-nav">
+        <router-link
+          v-for="item in navItems"
+          :key="item.key"
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: activeNav === item.key }"
+        >
+          <component :is="item.icon" class="nav-icon" />
+          <span>{{ item.label }}</span>
+        </router-link>
+      </nav>
+      <div class="header-right">
+        <div class="user-menu" @click="toggleUserMenu">
+          <PersonCircleOutline class="user-icon" />
+          <div v-if="showUserMenu" class="user-dropdown" @click.stop>
+            <button class="dropdown-item" @click="logout">
+              <LogOutOutline class="dropdown-icon" />
+              <span>退出登录</span>
+            </button>
+          </div>
         </div>
-        <RouterView v-else />
-      </n-message-provider>
-    </n-dialog-provider>
-  </n-config-provider>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <RouterView />
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-left">
+        <span class="brand">GoTunnel</span>
+        <div v-if="version" class="version-info">
+          <ServerOutline class="version-icon" />
+          <span class="version">v{{ version }}</span>
+          <span v-if="updateInfo" class="update-status" :class="{ latest: !updateInfo.available, 'has-update': updateInfo.available }">
+            <template v-if="updateInfo.available">
+              <ArrowUpCircleOutline class="status-icon" />
+              <span>新版本 ({{ updateInfo.latest }})</span>
+            </template>
+            <template v-else>
+              <CheckmarkCircleOutline class="status-icon" />
+              <span>最新版本</span>
+            </template>
+          </span>
+        </div>
+      </div>
+      <a href="https://github.com/user/gotunnel" target="_blank" class="footer-link">
+        <LogoGithub class="footer-icon" />
+        <span>GitHub</span>
+      </a>
+      <span class="copyright">© 2024 Flik. MIT License</span>
+    </footer>
+  </div>
+  <RouterView v-else />
 </template>
 
 <style scoped>

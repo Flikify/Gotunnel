@@ -3,8 +3,9 @@ package dto
 // UpdateServerConfigRequest 更新服务器配置请求
 // @Description 更新服务器配置
 type UpdateServerConfigRequest struct {
-	Server *ServerConfigPart `json:"server"`
-	Web    *WebConfigPart    `json:"web"`
+	Server      *ServerConfigPart      `json:"server"`
+	Web         *WebConfigPart         `json:"web"`
+	PluginStore *PluginStoreConfigPart `json:"plugin_store"`
 }
 
 // ServerConfigPart 服务器配置部分
@@ -29,8 +30,9 @@ type WebConfigPart struct {
 // ServerConfigResponse 服务器配置响应
 // @Description 服务器配置信息
 type ServerConfigResponse struct {
-	Server ServerConfigInfo `json:"server"`
-	Web    WebConfigInfo    `json:"web"`
+	Server      ServerConfigInfo      `json:"server"`
+	Web         WebConfigInfo         `json:"web"`
+	PluginStore PluginStoreConfigInfo `json:"plugin_store"`
 }
 
 // ServerConfigInfo 服务器配置信息
@@ -48,4 +50,14 @@ type WebConfigInfo struct {
 	BindPort int    `json:"bind_port"`
 	Username string `json:"username"`
 	Password string `json:"password"` // 显示为 ****
+}
+
+// PluginStoreConfigPart 插件商店配置部分
+type PluginStoreConfigPart struct {
+	URL string `json:"url"`
+}
+
+// PluginStoreConfigInfo 插件商店配置信息
+type PluginStoreConfigInfo struct {
+	URL string `json:"url"`
 }

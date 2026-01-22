@@ -10,19 +10,7 @@ import (
 
 // ServerConfig 服务端配置
 type ServerConfig struct {
-	Server      ServerSettings      `yaml:"server"`
-	PluginStore PluginStoreSettings `yaml:"plugin_store"`
-	JSPlugins   []JSPluginConfig    `yaml:"js_plugins,omitempty"`
-}
-
-// JSPluginConfig JS 插件配置
-type JSPluginConfig struct {
-	Name      string            `yaml:"name"`
-	Path      string            `yaml:"path"`                 // JS 文件路径
-	SigPath   string            `yaml:"sig_path,omitempty"`   // 签名文件路径 (默认为 path + ".sig")
-	AutoPush  []string          `yaml:"auto_push,omitempty"`  // 自动推送到的客户端 ID 列表
-	Config    map[string]string `yaml:"config,omitempty"`     // 插件配置
-	AutoStart bool              `yaml:"auto_start,omitempty"` // 是否自动启动
+	Server ServerSettings `yaml:"server"`
 }
 
 // PluginStoreSettings 插件仓库设置
@@ -43,14 +31,15 @@ func (s *PluginStoreSettings) GetPluginStoreURL() string {
 
 // ServerSettings 服务端设置
 type ServerSettings struct {
-	BindAddr         string      `yaml:"bind_addr"`
-	BindPort         int         `yaml:"bind_port"`
-	Token            string      `yaml:"token"`
-	HeartbeatSec     int         `yaml:"heartbeat_sec"`
-	HeartbeatTimeout int         `yaml:"heartbeat_timeout"`
-	DBPath           string      `yaml:"db_path"`
-	TLSDisabled      bool        `yaml:"tls_disabled"`
-	Web              WebSettings `yaml:"web"`
+	BindAddr         string              `yaml:"bind_addr"`
+	BindPort         int                 `yaml:"bind_port"`
+	Token            string              `yaml:"token"`
+	HeartbeatSec     int                 `yaml:"heartbeat_sec"`
+	HeartbeatTimeout int                 `yaml:"heartbeat_timeout"`
+	DBPath           string              `yaml:"db_path"`
+	TLSDisabled      bool                `yaml:"tls_disabled"`
+	Web              WebSettings         `yaml:"web"`
+	PluginStore      PluginStoreSettings `yaml:"plugin_store"`
 }
 
 // WebSettings Web控制台设置

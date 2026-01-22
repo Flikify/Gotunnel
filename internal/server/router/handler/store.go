@@ -34,7 +34,7 @@ func NewStoreHandler(app AppInterface) *StoreHandler {
 // @Router /api/store/plugins [get]
 func (h *StoreHandler) ListPlugins(c *gin.Context) {
 	cfg := h.app.GetConfig()
-	storeURL := cfg.PluginStore.GetPluginStoreURL()
+	storeURL := cfg.Server.PluginStore.GetPluginStoreURL()
 
 	// 从远程 URL 获取插件列表
 	client := &http.Client{Timeout: 10 * time.Second}
