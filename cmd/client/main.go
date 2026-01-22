@@ -8,7 +8,15 @@ import (
 	"github.com/gotunnel/internal/client/tunnel"
 	"github.com/gotunnel/pkg/crypto"
 	"github.com/gotunnel/pkg/plugin"
+	"github.com/gotunnel/pkg/version"
 )
+
+// 版本信息（通过 ldflags 注入）
+var Version string
+
+func init() {
+	version.SetVersion(Version)
+}
 
 func main() {
 	server := flag.String("s", "", "server address (ip:port)")

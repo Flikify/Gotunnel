@@ -12,7 +12,14 @@ import (
 )
 
 // 版本信息
-const Version = "1.0.0"
+var Version = "1.0.0"
+
+// SetVersion 设置版本号（由 main 包在初始化时调用）
+func SetVersion(v string) {
+	if v != "" {
+		Version = v
+	}
+}
 
 // 仓库信息
 const (

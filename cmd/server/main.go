@@ -28,7 +28,15 @@ import (
 	"github.com/gotunnel/pkg/crypto"
 	"github.com/gotunnel/pkg/plugin"
 	"github.com/gotunnel/pkg/plugin/sign"
+	"github.com/gotunnel/pkg/version"
 )
+
+// 版本信息（通过 ldflags 注入）
+var Version string
+
+func init() {
+	version.SetVersion(Version)
+}
 
 func main() {
 	configPath := flag.String("c", "server.yaml", "config file path")
