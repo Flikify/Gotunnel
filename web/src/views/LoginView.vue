@@ -101,57 +101,131 @@ const handleLogin = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-primary);
+  background: var(--gradient-bg);
   padding: 16px;
   position: relative;
   overflow: hidden;
 }
 
-/* 移除浮动粒子动画 */
+/* 动画背景粒子 */
 .particles {
-  display: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
 }
 
-/* Login card */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.2;
+  filter: blur(60px);
+  animation: float 20s ease-in-out infinite;
+}
+
+.particle-1 {
+  width: 400px;
+  height: 400px;
+  background: var(--color-accent);
+  top: -100px;
+  right: -100px;
+}
+
+.particle-2 {
+  width: 300px;
+  height: 300px;
+  background: #8b5cf6;
+  bottom: -50px;
+  left: -50px;
+  animation-delay: -5s;
+}
+
+.particle-3 {
+  width: 250px;
+  height: 250px;
+  background: var(--color-info);
+  top: 50%;
+  left: 20%;
+  animation-delay: -10s;
+}
+
+.particle-4 {
+  width: 200px;
+  height: 200px;
+  background: #ec4899;
+  bottom: 30%;
+  right: 10%;
+  animation-delay: -15s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -30px) scale(1.05); }
+  50% { transform: translate(-20px, 20px) scale(0.95); }
+  75% { transform: translate(-30px, -20px) scale(1.02); }
+}
+
+/* Login card - 毛玻璃效果 */
 .login-card {
   width: 100%;
-  max-width: 380px;
-  background: var(--color-bg-tertiary);
-  border-radius: 16px;
+  max-width: 400px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: 20px;
   border: 1px solid var(--color-border);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-  padding: 40px 32px;
+  box-shadow: var(--shadow-card);
+  padding: 48px 36px;
   position: relative;
   z-index: 10;
+}
+
+/* 卡片顶部高光 */
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 100%);
 }
 
 /* Header */
 .login-header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 36px;
 }
 
 .logo-icon {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 16px;
-  background: var(--color-accent);
-  border-radius: 12px;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  background: var(--gradient-accent);
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 8px 24px var(--color-accent-glow);
 }
 
 .logo-icon svg {
   color: white;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
 }
 
 .logo-text {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--color-text-primary);
+  font-size: 28px;
+  font-weight: 700;
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin: 0 0 8px 0;
 }
 
@@ -181,19 +255,22 @@ const handleLogin = async () => {
 }
 
 .glass-input {
-  background: var(--color-bg-elevated);
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur-light);
+  -webkit-backdrop-filter: var(--glass-blur-light);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 12px 14px;
+  border-radius: 12px;
+  padding: 14px 16px;
   color: var(--color-text-primary);
   font-size: 15px;
   width: 100%;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   outline: none;
 }
 
 .glass-input:focus {
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-glow);
 }
 
 .glass-input::placeholder {
@@ -211,9 +288,9 @@ const handleLogin = async () => {
   align-items: center;
   gap: 8px;
   padding: 12px 14px;
-  background: rgba(244, 33, 46, 0.1);
-  border: 1px solid rgba(244, 33, 46, 0.3);
-  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 10px;
   color: var(--color-error);
   font-size: 14px;
 }
@@ -224,23 +301,30 @@ const handleLogin = async () => {
 
 /* Button */
 .glass-button {
-  background: var(--color-accent);
+  background: var(--gradient-accent);
   border: none;
-  border-radius: 8px;
-  padding: 12px 24px;
+  border-radius: 12px;
+  padding: 14px 24px;
   color: white;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  box-shadow: 0 4px 15px var(--color-accent-glow);
 }
 
 .glass-button:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  box-shadow: 0 6px 20px var(--color-accent-glow);
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+.glass-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 .glass-button:disabled {
@@ -265,7 +349,7 @@ const handleLogin = async () => {
 /* Footer */
 .login-footer {
   text-align: center;
-  margin-top: 24px;
+  margin-top: 28px;
   padding-top: 24px;
   border-top: 1px solid var(--color-border);
   color: var(--color-text-muted);

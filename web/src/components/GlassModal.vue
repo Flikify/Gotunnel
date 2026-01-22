@@ -37,7 +37,8 @@ const emit = defineEmits<{
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -47,10 +48,28 @@ const emit = defineEmits<{
 
 .modal-container {
   width: 100%;
-  background: var(--color-bg-tertiary);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: 16px;
   border: 1px solid var(--color-border);
   overflow: hidden;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  position: relative;
+}
+
+/* 顶部高光 */
+.modal-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 100%);
 }
 
 .modal-header {
@@ -69,20 +88,20 @@ const emit = defineEmits<{
 }
 
 .close-btn {
-  background: var(--color-bg-elevated);
+  background: var(--glass-bg-light);
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 6px;
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .close-btn:hover {
-  background: rgba(244, 33, 46, 0.15);
+  background: rgba(239, 68, 68, 0.15);
   color: var(--color-error);
 }
 

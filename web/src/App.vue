@@ -290,13 +290,16 @@ const handleApplyServerUpdate = () => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-primary);
+  background: var(--gradient-bg);
+  position: relative;
 }
 
-/* Header */
+/* Header - 毛玻璃效果 */
 .app-header {
-  height: 56px;
-  background: var(--color-bg-secondary);
+  height: 64px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
@@ -305,41 +308,62 @@ const handleApplyServerUpdate = () => {
   position: sticky;
   top: 0;
   z-index: 100;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* 头部顶部高光线 */
+.app-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%);
 }
 
 .logo {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-text-primary);
+  font-size: 20px;
+  font-weight: 700;
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   letter-spacing: -0.5px;
 }
 
 /* Navigation */
 .header-nav {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 8px;
+  padding: 10px 18px;
   color: var(--color-text-secondary);
   text-decoration: none;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 14px;
-  transition: all 0.15s;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
 .nav-item:hover {
   color: var(--color-text-primary);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--glass-bg-light);
 }
 
 .nav-item.active {
-  color: var(--color-text-primary);
-  background: var(--color-accent);
+  color: white;
+  background: var(--gradient-accent);
+  box-shadow: 0 4px 15px var(--color-accent-glow);
 }
 
 .nav-icon {
@@ -354,21 +378,24 @@ const handleApplyServerUpdate = () => {
 }
 
 .user-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   color: var(--color-text-secondary);
-  transition: color 0.15s;
+  transition: all 0.2s ease;
+  padding: 4px;
+  border-radius: 8px;
 }
 
 .user-icon:hover {
   color: var(--color-text-primary);
+  background: var(--glass-bg-light);
 }
 
 /* Theme Menu */
 .header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .theme-menu {
@@ -377,14 +404,17 @@ const handleApplyServerUpdate = () => {
 }
 
 .theme-icon {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
   color: var(--color-text-secondary);
-  transition: color 0.15s;
+  transition: all 0.2s ease;
+  border-radius: 8px;
 }
 
 .theme-icon:hover {
   color: var(--color-text-primary);
+  background: var(--glass-bg-light);
 }
 
 .theme-dropdown {
@@ -392,21 +422,24 @@ const handleApplyServerUpdate = () => {
   top: 100%;
   right: 0;
   margin-top: 8px;
-  background: var(--color-bg-tertiary);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 4px;
-  min-width: 120px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 130px;
+  box-shadow: var(--shadow-lg);
 }
 
 .dropdown-item.active {
-  background: var(--color-accent);
+  background: var(--gradient-accent);
   color: white;
+  box-shadow: 0 2px 8px var(--color-accent-glow);
 }
 
 .dropdown-item.active:hover {
-  background: var(--color-accent-hover);
+  filter: brightness(1.1);
 }
 
 .user-dropdown {
@@ -414,31 +447,33 @@ const handleApplyServerUpdate = () => {
   top: 100%;
   right: 0;
   margin-top: 8px;
-  background: var(--color-bg-tertiary);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 4px;
-  min-width: 140px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 150px;
+  box-shadow: var(--shadow-lg);
 }
 
 .dropdown-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 10px 14px;
   background: none;
   border: none;
   color: var(--color-text-primary);
   font-size: 14px;
   cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.15s;
+  border-radius: 8px;
+  transition: all 0.2s ease;
 }
 
 .dropdown-item:hover {
-  background: var(--color-bg-elevated);
+  background: var(--glass-bg-hover);
 }
 
 .dropdown-icon {
@@ -451,10 +486,12 @@ const handleApplyServerUpdate = () => {
   overflow-y: auto;
 }
 
-/* Footer */
+/* Footer - 毛玻璃效果 */
 .app-footer {
-  height: 48px;
-  background: var(--color-bg-secondary);
+  height: 52px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-top: 1px solid var(--color-border);
   display: flex;
   align-items: center;
@@ -466,20 +503,24 @@ const handleApplyServerUpdate = () => {
 .footer-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .brand {
   font-weight: 600;
-  color: var(--color-text-primary);
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .version {
-  padding: 2px 8px;
-  background: var(--color-bg-elevated);
+  padding: 4px 10px;
+  background: var(--glass-bg-light);
   color: var(--color-text-secondary);
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 12px;
+  border: 1px solid var(--color-border);
 }
 
 .version-info {
@@ -499,24 +540,33 @@ const handleApplyServerUpdate = () => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
 }
 
 .update-status:hover {
-  opacity: 0.8;
+  transform: translateY(-1px);
 }
 
 .update-status.latest {
-  color: #00ba7c;
-  background: rgba(0, 186, 124, 0.1);
+  color: var(--color-success);
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
 }
 
 .update-status.has-update {
-  color: #f7931a;
-  background: rgba(247, 147, 26, 0.1);
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.2);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-warning-glow); }
+  50% { box-shadow: 0 0 8px 2px var(--color-warning-glow); }
 }
 
 .status-icon {
@@ -562,11 +612,12 @@ const handleApplyServerUpdate = () => {
   }
 }
 
-/* Update Modal */
+/* Update Modal - 毛玻璃效果 */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -574,16 +625,18 @@ const handleApplyServerUpdate = () => {
 }
 
 .update-modal {
-  background: var(--color-bg-tertiary);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: 16px;
   width: 90%;
   max-width: 480px;
   max-height: 80vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
 .modal-header {
@@ -681,29 +734,32 @@ const handleApplyServerUpdate = () => {
 }
 
 .modal-btn {
-  padding: 8px 16px;
-  border-radius: 6px;
+  padding: 10px 18px;
+  border-radius: 10px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
-  background: var(--color-bg-elevated);
+  transition: all 0.2s ease;
+  background: var(--glass-bg);
   border: 1px solid var(--color-border);
   color: var(--color-text-primary);
 }
 
 .modal-btn:hover:not(:disabled) {
-  background: var(--color-border);
+  background: var(--glass-bg-hover);
+  transform: translateY(-1px);
 }
 
 .modal-btn.primary {
-  background: var(--color-accent);
+  background: var(--gradient-accent);
   border: none;
   color: white;
+  box-shadow: 0 4px 15px var(--color-accent-glow);
 }
 
 .modal-btn.primary:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  box-shadow: 0 6px 20px var(--color-accent-glow);
+  filter: brightness(1.1);
 }
 
 .modal-btn:disabled {

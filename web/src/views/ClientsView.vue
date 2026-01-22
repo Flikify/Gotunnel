@@ -106,16 +106,60 @@ onMounted(loadClients)
 
 <style scoped>
 .clients-page {
-  min-height: calc(100vh - 108px);
-  background: var(--color-bg-primary);
+  min-height: calc(100vh - 116px);
   position: relative;
   overflow: hidden;
   padding: 32px;
 }
 
-/* Hide particles */
+/* 动画背景粒子 */
 .particles {
-  display: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.15;
+  filter: blur(60px);
+  animation: float 20s ease-in-out infinite;
+}
+
+.particle-1 {
+  width: 350px;
+  height: 350px;
+  background: var(--color-accent);
+  top: -80px;
+  right: -80px;
+}
+
+.particle-2 {
+  width: 280px;
+  height: 280px;
+  background: #8b5cf6;
+  bottom: -40px;
+  left: -40px;
+  animation-delay: -5s;
+}
+
+.particle-3 {
+  width: 220px;
+  height: 220px;
+  background: var(--color-success);
+  top: 40%;
+  left: 30%;
+  animation-delay: -10s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -30px) scale(1.05); }
+  50% { transform: translate(-20px, 20px) scale(0.95); }
+  75% { transform: translate(-30px, -20px) scale(1.02); }
 }
 
 .clients-content {
@@ -147,11 +191,34 @@ onMounted(loadClients)
 }
 
 .stat-card {
-  background: var(--color-bg-tertiary);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: 16px;
   border: 1px solid var(--color-border);
   padding: 20px;
   text-align: center;
+  box-shadow: var(--shadow-card);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
 .stat-value {
@@ -169,9 +236,26 @@ onMounted(loadClients)
 
 /* Glass Card */
 .glass-card {
-  background: var(--color-bg-tertiary);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: 16px;
   border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  position: relative;
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%);
 }
 
 .card-header {
@@ -216,16 +300,18 @@ onMounted(loadClients)
 }
 
 .client-card {
-  background: var(--color-bg-elevated);
-  border-radius: 10px;
-  padding: 16px;
-  border: 1px solid var(--color-border-light);
+  background: var(--glass-bg-light);
+  border-radius: 12px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   position: relative;
 }
 .client-card:hover {
-  background: var(--color-border);
+  background: var(--glass-bg-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .client-header {
@@ -243,7 +329,7 @@ onMounted(loadClients)
 }
 .client-status.online {
   background: var(--color-success);
-  box-shadow: 0 0 8px rgba(0, 186, 124, 0.6);
+  box-shadow: 0 0 10px var(--color-success-glow);
 }
 
 .client-name {
@@ -272,38 +358,44 @@ onMounted(loadClients)
 .client-tag {
   display: inline-block;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
 }
 .client-tag.online {
-  background: rgba(0, 186, 124, 0.15);
+  background: rgba(16, 185, 129, 0.15);
   color: var(--color-success);
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 .client-tag.offline {
-  background: var(--color-bg-tertiary);
+  background: var(--glass-bg-light);
   color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
 }
 
 /* Button */
 .glass-btn {
-  background: var(--color-bg-elevated);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur-light);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 16px;
   color: var(--color-text-primary);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
 }
-.glass-btn:hover { background: var(--color-border); }
+.glass-btn:hover {
+  background: var(--glass-bg-hover);
+  transform: translateY(-1px);
+}
 .glass-btn.small { padding: 6px 12px; font-size: 12px; }
 
 /* Heartbeat Indicator */
 .heartbeat-indicator {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 18px;
+  right: 18px;
 }
 
 .heartbeat-dot {
@@ -317,6 +409,7 @@ onMounted(loadClients)
 .heartbeat-indicator.online .heartbeat-dot {
   background: var(--color-success);
   animation: heartbeat-pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 8px var(--color-success-glow);
 }
 
 .heartbeat-indicator.offline .heartbeat-dot {
@@ -326,11 +419,11 @@ onMounted(loadClients)
 
 @keyframes heartbeat-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(0, 186, 124, 0.5);
+    box-shadow: 0 0 0 0 var(--color-success-glow);
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(0, 186, 124, 0);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
     transform: scale(1.1);
   }
 }

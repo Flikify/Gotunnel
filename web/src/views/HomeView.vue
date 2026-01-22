@@ -260,16 +260,78 @@ onMounted(() => {
 <style scoped>
 /* Container */
 .dashboard-container {
-  min-height: calc(100vh - 108px);
-  background: var(--color-bg-primary);
+  min-height: calc(100vh - 116px);
   position: relative;
   overflow: hidden;
   padding: 32px;
 }
 
-/* Hide particles */
+/* 动画背景粒子 */
 .particles {
-  display: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.15;
+  filter: blur(60px);
+  animation: float 20s ease-in-out infinite;
+}
+
+.particle-1 {
+  width: 400px;
+  height: 400px;
+  background: var(--color-accent);
+  top: -100px;
+  right: -100px;
+}
+
+.particle-2 {
+  width: 300px;
+  height: 300px;
+  background: #8b5cf6;
+  bottom: -50px;
+  left: -50px;
+  animation-delay: -5s;
+}
+
+.particle-3 {
+  width: 250px;
+  height: 250px;
+  background: var(--color-info);
+  top: 50%;
+  left: 50%;
+  animation-delay: -10s;
+}
+
+.particle-4 {
+  width: 200px;
+  height: 200px;
+  background: var(--color-success);
+  bottom: 20%;
+  right: 20%;
+  animation-delay: -15s;
+}
+
+.particle-5 {
+  width: 350px;
+  height: 350px;
+  background: #ec4899;
+  top: 30%;
+  left: 10%;
+  animation-delay: -7s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -30px) scale(1.05); }
+  50% { transform: translate(-20px, 20px) scale(0.95); }
+  75% { transform: translate(-30px, -20px) scale(1.02); }
 }
 
 /* Main content */
@@ -304,56 +366,76 @@ onMounted(() => {
   }
 }
 
-/* Glass stat card */
+/* Glass stat card - 毛玻璃效果 */
 .glass-stat {
-  background: var(--color-bg-tertiary);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: 16px;
   border: 1px solid var(--color-border);
   padding: 20px;
   display: flex;
   align-items: flex-start;
   gap: 16px;
   position: relative;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-card);
+}
+
+/* 卡片顶部高光 */
+.glass-stat::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%);
 }
 
 .glass-stat:hover {
-  background: var(--color-bg-elevated);
+  background: var(--glass-bg-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
 /* Stat icon */
 .stat-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .stat-icon.outbound {
-  background: var(--color-accent);
+  background: var(--gradient-accent);
 }
 
 .stat-icon.inbound {
-  background: #8b5cf6;
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
 }
 
 .stat-icon.clients {
-  background: var(--color-success);
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
 }
 
 .stat-icon.rules {
-  background: var(--color-warning);
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
 }
 
 .stat-icon.total-out {
-  background: #0284c7;
+  background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
 }
 
 .stat-icon.total-in {
-  background: #9333ea;
+  background: linear-gradient(135deg, #9333ea 0%, #c084fc 100%);
 }
 
 .stat-icon svg {
@@ -456,11 +538,12 @@ onMounted(() => {
 .online-indicator.active .pulse {
   background: var(--color-success);
   animation: pulse-animation 2s ease-in-out infinite;
+  box-shadow: 0 0 8px var(--color-success-glow);
 }
 
 @keyframes pulse-animation {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 186, 124, 0.5); }
-  50% { box-shadow: 0 0 0 6px rgba(0, 186, 124, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-success-glow); }
+  50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
 }
 
 /* Chart Section */
@@ -573,10 +656,27 @@ onMounted(() => {
   color: var(--color-text-muted);
 }
 
-/* Glass card base */
+/* Glass card base - 毛玻璃效果 */
 .glass-card {
-  background: var(--color-bg-tertiary);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: 16px;
   border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  position: relative;
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%);
 }
 </style>
