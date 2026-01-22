@@ -101,77 +101,26 @@ const handleLogin = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
+  background: var(--color-bg-primary);
   padding: 16px;
   position: relative;
   overflow: hidden;
 }
 
-/* Particles */
+/* 移除浮动粒子动画 */
 .particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.particle {
-  position: absolute;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
-  animation: float-particle 20s ease-in-out infinite;
-}
-
-.particle-1 {
-  width: 300px;
-  height: 300px;
-  top: -100px;
-  left: -100px;
-  animation-delay: 0s;
-}
-
-.particle-2 {
-  width: 200px;
-  height: 200px;
-  bottom: -50px;
-  right: -50px;
-  animation-delay: -5s;
-}
-
-.particle-3 {
-  width: 150px;
-  height: 150px;
-  top: 50%;
-  right: 10%;
-  animation-delay: -10s;
-}
-
-.particle-4 {
-  width: 100px;
-  height: 100px;
-  bottom: 20%;
-  left: 10%;
-  animation-delay: -15s;
-}
-
-@keyframes float-particle {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
-  25% { transform: translate(30px, -40px) scale(1.1); opacity: 0.5; }
-  50% { transform: translate(-20px, -80px) scale(0.9); opacity: 0.4; }
-  75% { transform: translate(-40px, -40px) scale(1.05); opacity: 0.35; }
+  display: none;
 }
 
 /* Login card */
 .login-card {
   width: 100%;
-  max-width: 400px;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  padding: 40px;
+  max-width: 380px;
+  background: var(--color-bg-tertiary);
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  padding: 40px 32px;
   position: relative;
   z-index: 10;
 }
@@ -183,32 +132,31 @@ const handleLogin = async () => {
 }
 
 .logo-icon {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   margin: 0 auto 16px;
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
-  border-radius: 16px;
+  background: var(--color-accent);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 16px rgba(96, 165, 250, 0.4);
 }
 
 .logo-icon svg {
   color: white;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
 }
 
 .logo-text {
-  font-size: 28px;
-  font-weight: 700;
-  color: white;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-text-primary);
   margin: 0 0 8px 0;
 }
 
 .subtitle {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   margin: 0;
   font-size: 14px;
 }
@@ -229,31 +177,27 @@ const handleLogin = async () => {
 .form-label {
   font-size: 14px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-text-primary);
 }
 
 .glass-input {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 14px 16px;
-  color: white;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--color-text-primary);
   font-size: 15px;
   width: 100%;
-  transition: all 0.2s ease;
+  transition: all 0.15s;
   outline: none;
 }
 
 .glass-input:focus {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.1);
+  border-color: var(--color-accent);
 }
 
 .glass-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
 }
 
 .glass-input:disabled {
@@ -266,11 +210,11 @@ const handleLogin = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 12px;
-  color: #fca5a5;
+  padding: 12px 14px;
+  background: rgba(244, 33, 46, 0.1);
+  border: 1px solid rgba(244, 33, 46, 0.3);
+  border-radius: 8px;
+  color: var(--color-error);
   font-size: 14px;
 }
 
@@ -280,33 +224,27 @@ const handleLogin = async () => {
 
 /* Button */
 .glass-button {
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  background: var(--color-accent);
   border: none;
-  border-radius: 12px;
-  padding: 14px 24px;
+  border-radius: 8px;
+  padding: 12px 24px;
   color: white;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-shadow: 0 4px 16px rgba(96, 165, 250, 0.4);
 }
 
 .glass-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(96, 165, 250, 0.5);
-}
-
-.glass-button:active:not(:disabled) {
-  transform: translateY(0);
+  background: var(--color-accent-hover);
 }
 
 .glass-button:disabled {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
@@ -329,8 +267,8 @@ const handleLogin = async () => {
   text-align: center;
   margin-top: 24px;
   padding-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.5);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 </style>

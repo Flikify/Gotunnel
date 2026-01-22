@@ -3,16 +3,20 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import {
   HomeOutline, DesktopOutline, SettingsOutline,
-  PersonCircleOutline, LogOutOutline, LogoGithub, ServerOutline, CheckmarkCircleOutline, ArrowUpCircleOutline, CloseOutline
+  PersonCircleOutline, LogOutOutline, LogoGithub, ServerOutline, CheckmarkCircleOutline, ArrowUpCircleOutline, CloseOutline,
+  SunnyOutline, MoonOutline, ContrastOutline
 } from '@vicons/ionicons5'
 import { getServerStatus, getVersionInfo, checkServerUpdate, applyServerUpdate, removeToken, getToken, type UpdateInfo } from './api'
 import { useToast } from './composables/useToast'
 import { useConfirm } from './composables/useConfirm'
+import { useTheme, type ThemeMode } from './composables/useTheme'
 
 const router = useRouter()
 const route = useRoute()
 const message = useToast()
 const dialog = useConfirm()
+const { themeMode, setTheme } = useTheme()
+const showThemeMenu = ref(false)
 const serverInfo = ref({ bind_addr: '', bind_port: 0 })
 const clientCount = ref(0)
 const version = ref('')
@@ -91,8 +95,23 @@ const toggleUserMenu = () => {
   showUserMenu.value = !showUserMenu.value
 }
 
+const toggleThemeMenu = () => {
+  showThemeMenu.value = !showThemeMenu.value
+}
+
+const selectTheme = (mode: ThemeMode) => {
+  setTheme(mode)
+  showThemeMenu.value = false
+}
+
+const themeIcon = computed(() => {
+  if (themeMode.value === 'light') return SunnyOutline
+  if (themeMode.value === 'dark') return MoonOutline
+  return ContrastOutline
+})
+
 const openUpdateModal = () => {
-  if (updateInfo.value) {
+  if (updateInfo.value && updateInfo.value.available) {
     showUpdateModal.value = true
   }
 }
@@ -154,6 +173,25 @@ const handleApplyServerUpdate = () => {
         </router-link>
       </nav>
       <div class="header-right">
+        <!-- Theme Switcher -->
+        <div class="theme-menu" @click="toggleThemeMenu">
+          <component :is="themeIcon" class="theme-icon" />
+          <div v-if="showThemeMenu" class="theme-dropdown" @click.stop>
+            <button class="dropdown-item" :class="{ active: themeMode === 'light' }" @click="selectTheme('light')">
+              <SunnyOutline class="dropdown-icon" />
+              <span>浅色</span>
+            </button>
+            <button class="dropdown-item" :class="{ active: themeMode === 'dark' }" @click="selectTheme('dark')">
+              <MoonOutline class="dropdown-icon" />
+              <span>深色</span>
+            </button>
+            <button class="dropdown-item" :class="{ active: themeMode === 'auto' }" @click="selectTheme('auto')">
+              <ContrastOutline class="dropdown-icon" />
+              <span>自动</span>
+            </button>
+          </div>
+        </div>
+        <!-- User Menu -->
         <div class="user-menu" @click="toggleUserMenu">
           <PersonCircleOutline class="user-icon" />
           <div v-if="showUserMenu" class="user-dropdown" @click.stop>
@@ -177,7 +215,7 @@ const handleApplyServerUpdate = () => {
         <span class="brand">GoTunnel</span>
         <div v-if="version" class="version-info">
           <ServerOutline class="version-icon" />
-          <span class="version">v{{ version }}</span>
+          <span class="version">{{ version.startsWith('v') ? version : 'v' + version }}</span>
           <span v-if="updateInfo" class="update-status" :class="{ latest: !updateInfo.available, 'has-update': updateInfo.available }" @click="openUpdateModal">
             <template v-if="updateInfo.available">
               <ArrowUpCircleOutline class="status-icon" />
@@ -252,16 +290,14 @@ const handleApplyServerUpdate = () => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
+  background: var(--color-bg-primary);
 }
 
 /* Header */
 .app-header {
-  height: 60px;
-  background: rgba(15, 12, 41, 0.9);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  height: 56px;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -272,9 +308,10 @@ const handleApplyServerUpdate = () => {
 }
 
 .logo {
-  font-size: 20px;
-  font-weight: 700;
-  color: white;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  letter-spacing: -0.5px;
 }
 
 /* Navigation */
@@ -288,21 +325,21 @@ const handleApplyServerUpdate = () => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   text-decoration: none;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 14px;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .nav-item:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-item.active {
-  color: white;
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  color: var(--color-text-primary);
+  background: var(--color-accent);
 }
 
 .nav-icon {
@@ -319,12 +356,57 @@ const handleApplyServerUpdate = () => {
 .user-icon {
   width: 28px;
   height: 28px;
-  color: rgba(255, 255, 255, 0.8);
-  transition: color 0.2s;
+  color: var(--color-text-secondary);
+  transition: color 0.15s;
 }
 
 .user-icon:hover {
+  color: var(--color-text-primary);
+}
+
+/* Theme Menu */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.theme-menu {
+  position: relative;
+  cursor: pointer;
+}
+
+.theme-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--color-text-secondary);
+  transition: color 0.15s;
+}
+
+.theme-icon:hover {
+  color: var(--color-text-primary);
+}
+
+.theme-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 120px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.dropdown-item.active {
+  background: var(--color-accent);
   color: white;
+}
+
+.dropdown-item.active:hover {
+  background: var(--color-accent-hover);
 }
 
 .user-dropdown {
@@ -332,12 +414,12 @@ const handleApplyServerUpdate = () => {
   top: 100%;
   right: 0;
   margin-top: 8px;
-  background: rgba(30, 27, 75, 0.95);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 4px;
   min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .dropdown-item {
@@ -345,19 +427,18 @@ const handleApplyServerUpdate = () => {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 12px;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
+  color: var(--color-text-primary);
+  font-size: 14px;
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: var(--color-bg-elevated);
 }
 
 .dropdown-icon {
@@ -373,10 +454,8 @@ const handleApplyServerUpdate = () => {
 /* Footer */
 .app-footer {
   height: 48px;
-  background: rgba(15, 12, 41, 0.9);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-secondary);
+  border-top: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -392,13 +471,13 @@ const handleApplyServerUpdate = () => {
 
 .brand {
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text-primary);
 }
 
 .version {
   padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.7);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
   border-radius: 4px;
   font-size: 12px;
 }
@@ -412,7 +491,7 @@ const handleApplyServerUpdate = () => {
 .version-icon {
   width: 14px;
   height: 14px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-secondary);
 }
 
 .update-status {
@@ -423,7 +502,7 @@ const handleApplyServerUpdate = () => {
   padding: 2px 8px;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .update-status:hover {
@@ -431,13 +510,13 @@ const handleApplyServerUpdate = () => {
 }
 
 .update-status.latest {
-  color: #34d399;
-  background: rgba(52, 211, 153, 0.15);
+  color: #00ba7c;
+  background: rgba(0, 186, 124, 0.1);
 }
 
 .update-status.has-update {
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.15);
+  color: #f7931a;
+  background: rgba(247, 147, 26, 0.1);
 }
 
 .status-icon {
@@ -449,13 +528,13 @@ const handleApplyServerUpdate = () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   text-decoration: none;
-  transition: color 0.2s;
+  transition: color 0.15s;
 }
 
 .footer-link:hover {
-  color: white;
+  color: var(--color-text-primary);
 }
 
 .footer-icon {
@@ -464,7 +543,7 @@ const handleApplyServerUpdate = () => {
 }
 
 .copyright {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
 }
 
 /* Responsive */
@@ -487,8 +566,7 @@ const handleApplyServerUpdate = () => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -496,21 +574,21 @@ const handleApplyServerUpdate = () => {
 }
 
 .update-modal {
-  background: rgba(30, 27, 75, 0.95);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
   width: 90%;
   max-width: 480px;
   max-height: 80vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 .modal-header {
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -520,21 +598,21 @@ const handleApplyServerUpdate = () => {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: white;
+  color: var(--color-text-primary);
 }
 
 .close-btn {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   cursor: pointer;
   padding: 4px;
   display: flex;
-  transition: color 0.2s;
+  transition: color 0.15s;
 }
 
 .close-btn:hover {
-  color: white;
+  color: var(--color-text-primary);
 }
 
 .modal-body {
@@ -557,18 +635,18 @@ const handleApplyServerUpdate = () => {
 }
 
 .info-label {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 .info-value {
-  color: white;
+  color: var(--color-text-primary);
   font-size: 13px;
   font-weight: 500;
 }
 
 .info-value.highlight {
-  color: #34d399;
+  color: var(--color-success);
 }
 
 .release-note {
@@ -578,7 +656,7 @@ const handleApplyServerUpdate = () => {
 .note-label {
   display: block;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
 
@@ -586,8 +664,8 @@ const handleApplyServerUpdate = () => {
   margin: 0;
   white-space: pre-wrap;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(0, 0, 0, 0.2);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
   padding: 12px;
   border-radius: 8px;
   max-height: 200px;
@@ -596,7 +674,7 @@ const handleApplyServerUpdate = () => {
 
 .modal-footer {
   padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -604,22 +682,28 @@ const handleApplyServerUpdate = () => {
 
 .modal-btn {
   padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: white;
+  transition: all 0.15s;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
 }
 
 .modal-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--color-border);
 }
 
 .modal-btn.primary {
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  background: var(--color-accent);
   border: none;
+  color: white;
+}
+
+.modal-btn.primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
 }
 
 .modal-btn:disabled {

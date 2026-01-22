@@ -13,11 +13,23 @@ import (
 
 // 版本信息
 var Version = "1.0.0"
+var GitCommit = ""
+var BuildTime = ""
 
 // SetVersion 设置版本号（由 main 包在初始化时调用）
 func SetVersion(v string) {
 	if v != "" {
 		Version = v
+	}
+}
+
+// SetBuildInfo 设置构建信息（由 main 包在初始化时调用）
+func SetBuildInfo(gitCommit, buildTime string) {
+	if gitCommit != "" {
+		GitCommit = gitCommit
+	}
+	if buildTime != "" {
+		BuildTime = buildTime
 	}
 }
 
@@ -43,8 +55,8 @@ type Info struct {
 func GetInfo() Info {
 	return Info{
 		Version:   Version,
-		GitCommit: "",
-		BuildTime: "",
+		GitCommit: GitCommit,
+		BuildTime: BuildTime,
 		GoVersion: runtime.Version(),
 		OS:        runtime.GOOS,
 		Arch:      runtime.GOARCH,

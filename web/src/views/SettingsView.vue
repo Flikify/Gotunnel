@@ -19,7 +19,6 @@ const savingConfig = ref(false)
 
 // 配置表单
 const configForm = ref({
-  bind_addr: '',
   heartbeat_sec: 30,
   heartbeat_timeout: 90,
   web_username: '',
@@ -45,7 +44,6 @@ const loadServerConfig = async () => {
     serverConfig.value = data
     // 填充表单
     configForm.value = {
-      bind_addr: data.server.bind_addr,
       heartbeat_sec: data.server.heartbeat_sec,
       heartbeat_timeout: data.server.heartbeat_timeout,
       web_username: data.web.username,
@@ -64,7 +62,6 @@ const handleSaveConfig = async () => {
   try {
     const updateReq: any = {
       server: {
-        bind_addr: configForm.value.bind_addr,
         heartbeat_sec: configForm.value.heartbeat_sec,
         heartbeat_timeout: configForm.value.heartbeat_timeout
       },
@@ -158,17 +155,6 @@ onMounted(() => {
         <div class="card-body">
           <div v-if="configLoading" class="loading-state">加载中...</div>
           <div v-else-if="serverConfig" class="config-form">
-            <div class="form-group">
-              <label class="form-label">服务器地址</label>
-              <input
-                v-model="configForm.bind_addr"
-                type="text"
-                class="glass-input"
-                placeholder="0.0.0.0"
-              />
-              <span class="form-hint">服务器监听地址，修改后需重启生效</span>
-            </div>
-
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">心跳间隔 (秒)</label>
@@ -223,9 +209,9 @@ onMounted(() => {
                 v-model="configForm.plugin_store_url"
                 type="text"
                 class="glass-input"
-                placeholder="https://example.com/plugins"
+                placeholder="https://git.92coco.cn/flik/GoTunnel-Plugins/raw/branch/main/store.json"
               />
-              <span class="form-hint">插件商店的 API 地址</span>
+              <span class="form-hint">插件商店的 API 地址，留空使用默认地址</span>
             </div>
 
             <div class="form-actions">
@@ -249,32 +235,15 @@ onMounted(() => {
 <style scoped>
 .settings-page {
   min-height: calc(100vh - 108px);
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
+  background: var(--color-bg-primary);
   position: relative;
   overflow: hidden;
   padding: 32px;
 }
 
+/* Hide particles */
 .particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.particle {
-  position: absolute;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
-  animation: float-particle 20s ease-in-out infinite;
-}
-
-.particle-1 { width: 250px; height: 250px; top: -80px; right: -50px; }
-.particle-2 { width: 180px; height: 180px; bottom: 10%; left: 5%; animation-delay: -7s; }
-.particle-3 { width: 120px; height: 120px; top: 50%; right: 15%; animation-delay: -12s; }
-
-@keyframes float-particle {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
-  50% { transform: translate(-20px, -60px) scale(0.95); opacity: 0.4; }
+  display: none;
 }
 
 .settings-content {
@@ -291,29 +260,27 @@ onMounted(() => {
 .page-title {
   font-size: 28px;
   font-weight: 700;
-  color: white;
+  color: var(--color-text-primary);
   margin: 0 0 8px 0;
 }
 
 .page-subtitle {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   margin: 0;
   font-size: 14px;
 }
 
 /* Glass Card */
 .glass-card {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--color-bg-tertiary);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
   margin-bottom: 20px;
 }
 
 .card-header {
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -323,7 +290,7 @@ onMounted(() => {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: white;
+  color: var(--color-text-primary);
 }
 
 .card-body {
@@ -349,12 +316,12 @@ onMounted(() => {
 
 .info-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
 }
 
 .info-value {
   font-size: 14px;
-  color: white;
+  color: var(--color-text-primary);
   font-weight: 500;
 }
 
@@ -366,7 +333,7 @@ onMounted(() => {
 .loading-state, .empty-state {
   text-align: center;
   padding: 32px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
 }
 
 /* Update Alert */
@@ -378,20 +345,20 @@ onMounted(() => {
 }
 
 .update-alert.success {
-  background: rgba(52, 211, 153, 0.15);
-  border: 1px solid rgba(52, 211, 153, 0.3);
-  color: #34d399;
+  background: rgba(0, 186, 124, 0.15);
+  border: 1px solid rgba(0, 186, 124, 0.3);
+  color: var(--color-success);
 }
 
 .update-alert.info {
-  background: rgba(96, 165, 250, 0.15);
-  border: 1px solid rgba(96, 165, 250, 0.3);
-  color: #60a5fa;
+  background: rgba(29, 155, 240, 0.15);
+  border: 1px solid rgba(29, 155, 240, 0.3);
+  color: var(--color-info);
 }
 
 /* Download Info */
 .download-info {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   font-size: 13px;
   margin-bottom: 12px;
 }
@@ -404,7 +371,7 @@ onMounted(() => {
 .note-label {
   display: block;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
   margin-bottom: 6px;
 }
 
@@ -412,8 +379,8 @@ onMounted(() => {
   margin: 0;
   white-space: pre-wrap;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(0, 0, 0, 0.2);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
   padding: 12px;
   border-radius: 8px;
   max-height: 150px;
@@ -422,21 +389,21 @@ onMounted(() => {
 
 /* Glass Button */
 .glass-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 16px;
-  color: white;
+  color: var(--color-text-primary);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .glass-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--color-border);
 }
 
 .glass-btn:disabled {
@@ -450,15 +417,19 @@ onMounted(() => {
 }
 
 .glass-btn.primary {
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  background: var(--color-accent);
   border: none;
+}
+
+.glass-btn.primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
 }
 
 /* Icon styles */
 .header-icon {
   width: 20px;
   height: 20px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
 }
 
 .btn-icon {
@@ -481,13 +452,13 @@ onMounted(() => {
 
 .form-label {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
 .form-hint {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
 }
 
 .form-row {
@@ -504,7 +475,7 @@ onMounted(() => {
 
 .form-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-border-light);
   margin: 8px 0;
 }
 
@@ -514,22 +485,21 @@ onMounted(() => {
 
 /* Glass Input */
 .glass-input {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 14px;
-  color: white;
+  color: var(--color-text-primary);
   font-size: 14px;
   outline: none;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .glass-input:focus {
-  border-color: rgba(96, 165, 250, 0.5);
-  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--color-accent);
 }
 
 .glass-input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--color-text-muted);
 }
 </style>

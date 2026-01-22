@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
@@ -463,9 +463,22 @@ const handleRestartClient = () => {
 }
 
 // Lifecycle
+const pollTimer = ref<number | null>(null)
+
 onMounted(() => {
   loadRuleSchemas()
   loadClient()
+  // 启动自动轮询，每 5 秒刷新一次
+  pollTimer.value = window.setInterval(() => {
+    loadClient()
+  }, 5000)
+})
+
+onUnmounted(() => {
+  if (pollTimer.value) {
+    clearInterval(pollTimer.value)
+    pollTimer.value = null
+  }
 })
 
 // Log Viewer
@@ -552,6 +565,10 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
           <div class="glass-card">
             <div class="card-header">
               <h3>客户端状态</h3>
+              <!-- Heartbeat indicator -->
+              <div class="heartbeat-indicator" :class="{ online: online, offline: !online }">
+                <span class="heartbeat-dot"></span>
+              </div>
             </div>
             <div class="card-body">
               <div class="stat-item">
@@ -568,6 +585,9 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                   {{ clientVersion || '-' }}
                   <span v-if="clientUpdate?.available" class="update-badge" @click="handleApplyClientUpdate">
                     可更新
+                  </span>
+                  <span v-else-if="clientUpdate && !clientUpdate.available" class="latest-badge">
+                    最新版本
                   </span>
                 </span>
               </div>
@@ -644,32 +664,6 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
             </div>
           </div>
 
-          <!-- Update Card -->
-          <div class="glass-card">
-            <div class="card-header">
-              <h3>客户端更新</h3>
-              <button class="glass-btn tiny" :disabled="!online || checkingUpdate" @click="handleCheckClientUpdate">
-                <RefreshOutline class="btn-icon-sm" />
-                检查
-              </button>
-            </div>
-            <div class="card-body">
-              <div v-if="clientOs && clientArch" class="platform-info">
-                平台: {{ clientOs }}/{{ clientArch }}
-              </div>
-              <div v-if="!clientUpdate" class="empty-hint">点击检查更新</div>
-              <template v-else>
-                <div v-if="clientUpdate.download_url" class="update-available">
-                  <p>发现新版本 {{ clientUpdate.latest }}</p>
-                  <button class="glass-btn primary small" :disabled="updatingClient" @click="handleApplyClientUpdate">
-                    <CloudDownloadOutline class="btn-icon-sm" />
-                    更新
-                  </button>
-                </div>
-                <div v-else class="empty-hint">已是最新版本</div>
-              </template>
-            </div>
-          </div>
         </div>
 
         <!-- Right Column -->
@@ -885,32 +879,15 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 <style scoped>
 .client-page {
   min-height: calc(100vh - 108px);
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
+  background: var(--color-bg-primary);
   position: relative;
   overflow: hidden;
   padding: 32px;
 }
 
+/* Hide particles */
 .particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.particle {
-  position: absolute;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
-  animation: float-particle 20s ease-in-out infinite;
-}
-
-.particle-1 { width: 250px; height: 250px; top: -80px; right: -50px; }
-.particle-2 { width: 180px; height: 180px; bottom: 10%; left: 5%; animation-delay: -7s; }
-.particle-3 { width: 120px; height: 120px; top: 50%; right: 15%; animation-delay: -12s; }
-
-@keyframes float-particle {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
-  50% { transform: translate(-20px, -60px) scale(0.95); opacity: 0.4; }
+  display: none;
 }
 
 .client-content {
@@ -937,26 +914,26 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 }
 
 .back-btn, .edit-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
   display: flex;
   align-items: center;
 }
 
 .back-btn:hover, .edit-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
 }
 
 .page-title {
   font-size: 24px;
   font-weight: 700;
-  color: white;
+  color: var(--color-text-primary);
   margin: 0;
 }
 
@@ -965,13 +942,13 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
-  background: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
+  background: rgba(244, 33, 46, 0.15);
+  color: var(--color-error);
 }
 
 .status-tag.online {
-  background: rgba(52, 211, 153, 0.2);
-  color: #34d399;
+  background: rgba(0, 186, 124, 0.15);
+  color: var(--color-success);
 }
 
 .header-actions {
@@ -981,21 +958,21 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 
 /* Glass Button */
 .glass-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 16px;
-  color: white;
+  color: var(--color-text-primary);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .glass-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--color-bg-elevated);
 }
 
 .glass-btn:disabled {
@@ -1004,20 +981,24 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 }
 
 .glass-btn.primary {
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  background: var(--color-accent);
   border: none;
 }
 
+.glass-btn.primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
 .glass-btn.danger {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  background: rgba(244, 33, 46, 0.15);
+  border-color: rgba(244, 33, 46, 0.3);
+  color: var(--color-error);
 }
 
 .glass-btn.warning {
-  background: rgba(251, 191, 36, 0.2);
-  border-color: rgba(251, 191, 36, 0.3);
-  color: #fcd34d;
+  background: rgba(247, 147, 26, 0.15);
+  border-color: rgba(247, 147, 26, 0.3);
+  color: var(--color-warning);
 }
 
 .glass-btn.small { padding: 6px 12px; font-size: 12px; }
@@ -1043,17 +1024,15 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 
 /* Glass Card */
 .glass-card {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--color-bg-tertiary);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
   overflow: hidden;
 }
 
 .card-header {
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1063,13 +1042,47 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: white;
+  color: var(--color-text-primary);
+}
+
+/* Heartbeat Indicator */
+.heartbeat-indicator {
+  position: relative;
+}
+
+.heartbeat-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-error);
+}
+
+.heartbeat-indicator.online .heartbeat-dot {
+  background: var(--color-success);
+  animation: heartbeat-pulse 2s ease-in-out infinite;
+}
+
+.heartbeat-indicator.offline .heartbeat-dot {
+  background: var(--color-error);
+  animation: none;
+}
+
+@keyframes heartbeat-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 186, 124, 0.5);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(0, 186, 124, 0);
+    transform: scale(1.1);
+  }
 }
 
 .card-body { padding: 20px; }
 .card-actions {
   padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--color-border-light);
   display: flex;
   gap: 8px;
 }
@@ -1079,18 +1092,18 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   display: flex;
   justify-content: space-between;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .stat-item:last-child { border-bottom: none; }
 
 .stat-label {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 .stat-value {
-  color: white;
+  color: var(--color-text-primary);
   font-size: 13px;
 }
 
@@ -1104,15 +1117,25 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   margin-left: 8px;
   padding: 2px 8px;
   font-size: 11px;
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
+  background: rgba(247, 147, 26, 0.15);
+  color: var(--color-warning);
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .update-badge:hover {
-  background: rgba(251, 191, 36, 0.3);
+  background: rgba(247, 147, 26, 0.25);
+}
+
+.latest-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: rgba(0, 186, 124, 0.15);
+  color: var(--color-success);
+  border-radius: 10px;
 }
 
 /* Mini Stats */
@@ -1129,23 +1152,23 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   display: block;
   font-size: 28px;
   font-weight: 700;
-  color: white;
+  color: var(--color-text-primary);
 }
 
 .mini-stat-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
 }
 
 /* Update Card */
 .platform-info {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
   margin-bottom: 8px;
 }
 
 .empty-hint {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
   font-size: 13px;
   text-align: center;
   padding: 16px 0;
@@ -1153,7 +1176,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 
 .update-available p {
   margin: 0 0 8px 0;
-  color: #34d399;
+  color: var(--color-success);
   font-size: 13px;
 }
 
@@ -1161,7 +1184,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .empty-state {
   text-align: center;
   padding: 32px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
 }
 
 .rules-table {
@@ -1177,37 +1200,37 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 }
 
 .table-header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 500;
 }
 
 .table-row {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.8);
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
-.rule-name { font-weight: 500; color: white; }
+.rule-name { font-weight: 500; color: var(--color-text-primary); }
 .rule-mapping { font-family: monospace; font-size: 12px; }
 .rule-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
 /* Icon Button */
 .icon-btn {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-elevated);
   border: none;
   border-radius: 6px;
   padding: 4px 10px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-text-secondary);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .icon-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: var(--color-border);
+  color: var(--color-text-primary);
 }
 
 .icon-btn:disabled {
@@ -1216,19 +1239,19 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 }
 
 .icon-btn.danger {
-  color: #fca5a5;
+  color: var(--color-error);
 }
 
 .icon-btn.danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(244, 33, 46, 0.15);
 }
 
 .icon-btn.success {
-  color: #34d399;
+  color: var(--color-success);
 }
 
 .icon-btn.success:hover:not(:disabled) {
-  background: rgba(52, 211, 153, 0.2);
+  background: rgba(0, 186, 124, 0.15);
 }
 
 /* Plugins List */
@@ -1239,8 +1262,8 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 }
 
 .plugin-item {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  background: var(--color-bg-elevated);
+  border-radius: 10px;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -1255,13 +1278,13 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 
 .plugin-name {
   font-weight: 600;
-  color: white;
+  color: var(--color-text-primary);
   font-size: 14px;
 }
 
 .plugin-version {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
 }
 
 .plugin-meta {
@@ -1269,7 +1292,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   align-items: center;
   gap: 12px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
 }
 
 .plugin-actions {
@@ -1280,10 +1303,10 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 
 /* Store Plugin Card */
 .store-plugin-card {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  background: var(--color-bg-elevated);
+  border-radius: 10px;
   padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border-light);
 }
 
 .store-plugin-header {
@@ -1295,12 +1318,12 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 
 .store-plugin-name {
   font-weight: 600;
-  color: white;
+  color: var(--color-text-primary);
   font-size: 14px;
 }
 
 .store-plugin-desc {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   font-size: 12px;
   margin: 0 0 12px 0;
   line-height: 1.5;
@@ -1325,29 +1348,29 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .form-label {
   display: block;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 
 .form-input {
   width: 100%;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 12px;
-  color: white;
+  color: var(--color-text-primary);
   font-size: 14px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.15s;
   box-sizing: border-box;
 }
 
 .form-input:focus {
-  border-color: rgba(167, 139, 250, 0.5);
+  border-color: var(--color-accent);
 }
 
 .form-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
 }
 
 .form-input:disabled {
@@ -1357,26 +1380,26 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 
 .form-select {
   width: 100%;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 12px;
-  color: white;
+  color: var(--color-text-primary);
   font-size: 14px;
   outline: none;
   cursor: pointer;
 }
 
 .form-select option {
-  background: #1e1b4b;
-  color: white;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
 }
 
 .form-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-secondary);
   font-size: 13px;
   cursor: pointer;
 }
@@ -1384,13 +1407,13 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .form-toggle input[type="checkbox"] {
   width: 18px;
   height: 18px;
-  accent-color: #a78bfa;
+  accent-color: var(--color-accent);
 }
 
 .loading-state {
   text-align: center;
   padding: 32px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
 }
 
 /* Dropdown Menu */
@@ -1403,9 +1426,8 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   top: 100%;
   right: 0;
   margin-top: 4px;
-  background: rgba(30, 27, 75, 0.95);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 4px;
   min-width: 100px;
@@ -1418,17 +1440,17 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   padding: 8px 12px;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-text-secondary);
   font-size: 13px;
   text-align: left;
   cursor: pointer;
   border-radius: 4px;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .dropdown-menu button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
 }
 
 .dropdown-menu button:disabled {
@@ -1437,11 +1459,11 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 }
 
 .dropdown-menu button.danger {
-  color: #fca5a5;
+  color: var(--color-error);
 }
 
 .dropdown-menu button.danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(244, 33, 46, 0.15);
 }
 
 /* Icon styles */
@@ -1463,7 +1485,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .plugin-icon {
   width: 18px;
   height: 18px;
-  color: #a78bfa;
+  color: var(--color-accent);
 }
 
 .settings-icon {
@@ -1482,20 +1504,20 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .system-stat-label {
   width: 40px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
 }
 
 .progress-bar {
   flex: 1;
   height: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-elevated);
   border-radius: 4px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #60a5fa, #a78bfa);
+  background: var(--color-accent);
   border-radius: 4px;
   transition: width 0.3s ease;
 }
@@ -1504,13 +1526,13 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   width: 50px;
   text-align: right;
   font-size: 12px;
-  color: white;
+  color: var(--color-text-primary);
   font-family: monospace;
 }
 
 .system-stat-detail {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
   text-align: right;
   margin-bottom: 12px;
   margin-top: -4px;

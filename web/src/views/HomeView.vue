@@ -138,8 +138,10 @@ onMounted(() => {
           </div>
           <div class="stat-content">
             <span class="stat-label">24h出站</span>
-            <span class="stat-value">{{ formatted24hOutbound.value }}</span>
-            <span class="stat-unit">{{ formatted24hOutbound.unit }}</span>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ formatted24hOutbound.value }}</span>
+              <span class="stat-unit-inline">{{ formatted24hOutbound.unit }}</span>
+            </div>
           </div>
         </div>
 
@@ -152,8 +154,10 @@ onMounted(() => {
           </div>
           <div class="stat-content">
             <span class="stat-label">24h入站</span>
-            <span class="stat-value">{{ formatted24hInbound.value }}</span>
-            <span class="stat-unit">{{ formatted24hInbound.unit }}</span>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ formatted24hInbound.value }}</span>
+              <span class="stat-unit-inline">{{ formatted24hInbound.unit }}</span>
+            </div>
           </div>
         </div>
 
@@ -166,8 +170,10 @@ onMounted(() => {
           </div>
           <div class="stat-content">
             <span class="stat-label">总出站</span>
-            <span class="stat-value">{{ formattedTotalOutbound.value }}</span>
-            <span class="stat-unit">{{ formattedTotalOutbound.unit }}</span>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ formattedTotalOutbound.value }}</span>
+              <span class="stat-unit-inline">{{ formattedTotalOutbound.unit }}</span>
+            </div>
           </div>
         </div>
 
@@ -180,8 +186,10 @@ onMounted(() => {
           </div>
           <div class="stat-content">
             <span class="stat-label">总入站</span>
-            <span class="stat-value">{{ formattedTotalInbound.value }}</span>
-            <span class="stat-unit">{{ formattedTotalInbound.unit }}</span>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ formattedTotalInbound.value }}</span>
+              <span class="stat-unit-inline">{{ formattedTotalInbound.unit }}</span>
+            </div>
           </div>
         </div>
 
@@ -250,75 +258,18 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Container with gradient background */
+/* Container */
 .dashboard-container {
   min-height: calc(100vh - 108px);
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
+  background: var(--color-bg-primary);
   position: relative;
   overflow: hidden;
   padding: 32px;
 }
 
-/* Floating particles */
+/* Hide particles */
 .particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.particle {
-  position: absolute;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
-  animation: float-particle 20s ease-in-out infinite;
-}
-
-.particle-1 {
-  width: 300px;
-  height: 300px;
-  top: -100px;
-  right: -50px;
-  animation-delay: 0s;
-}
-
-.particle-2 {
-  width: 200px;
-  height: 200px;
-  bottom: 10%;
-  left: 5%;
-  animation-delay: -5s;
-}
-
-.particle-3 {
-  width: 150px;
-  height: 150px;
-  top: 40%;
-  right: 20%;
-  animation-delay: -10s;
-}
-
-.particle-4 {
-  width: 100px;
-  height: 100px;
-  top: 20%;
-  left: 30%;
-  animation-delay: -15s;
-}
-
-.particle-5 {
-  width: 80px;
-  height: 80px;
-  bottom: 30%;
-  right: 10%;
-  animation-delay: -8s;
-}
-
-@keyframes float-particle {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
-  25% { transform: translate(30px, -40px) scale(1.1); opacity: 0.5; }
-  50% { transform: translate(-20px, -80px) scale(0.9); opacity: 0.4; }
-  75% { transform: translate(-40px, -40px) scale(1.05); opacity: 0.35; }
+  display: none;
 }
 
 /* Main content */
@@ -355,31 +306,26 @@ onMounted(() => {
 
 /* Glass stat card */
 .glass-stat {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  padding: 24px;
+  background: var(--color-bg-tertiary);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  padding: 20px;
   display: flex;
   align-items: flex-start;
   gap: 16px;
   position: relative;
-  transition: all 0.25s ease;
+  transition: all 0.15s;
 }
 
 .glass-stat:hover {
-  background: rgba(255, 255, 255, 0.12);
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  background: var(--color-bg-elevated);
 }
 
 /* Stat icon */
 .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -387,33 +333,27 @@ onMounted(() => {
 }
 
 .stat-icon.outbound {
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+  background: var(--color-accent);
 }
 
 .stat-icon.inbound {
-  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+  background: #8b5cf6;
 }
 
 .stat-icon.clients {
-  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
-  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
+  background: var(--color-success);
 }
 
 .stat-icon.rules {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4);
+  background: var(--color-warning);
 }
 
 .stat-icon.total-out {
-  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
-  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.4);
+  background: #0284c7;
 }
 
 .stat-icon.total-in {
-  background: linear-gradient(135deg, #c084fc 0%, #9333ea 100%);
-  box-shadow: 0 4px 16px rgba(147, 51, 234, 0.4);
+  background: #9333ea;
 }
 
 .stat-icon svg {
@@ -426,28 +366,40 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-height: 48px;
+  min-height: 44px;
   justify-content: center;
 }
 
 .stat-label {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   font-weight: 500;
   line-height: 1.2;
 }
 
 .stat-value {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
-  color: white;
+  color: var(--color-text-primary);
   line-height: 1.2;
 }
 
 .stat-unit {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
   line-height: 1.2;
+}
+
+.stat-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.stat-unit-inline {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  font-weight: 500;
 }
 
 /* Client count special styling */
@@ -458,17 +410,17 @@ onMounted(() => {
 }
 
 .client-count .stat-value.online {
-  color: #34d399;
+  color: var(--color-success);
 }
 
 .client-count .stat-value.total {
   font-size: 24px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-secondary);
 }
 
 .stat-separator {
   font-size: 20px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
 }
 
 /* Stat trend indicator */
@@ -482,8 +434,8 @@ onMounted(() => {
 }
 
 .stat-trend.up {
-  background: rgba(52, 211, 153, 0.2);
-  color: #34d399;
+  background: rgba(0, 186, 124, 0.15);
+  color: var(--color-success);
 }
 
 /* Online indicator with pulse */
@@ -495,20 +447,20 @@ onMounted(() => {
 
 .online-indicator .pulse {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--color-text-muted);
 }
 
 .online-indicator.active .pulse {
-  background: #34d399;
+  background: var(--color-success);
   animation: pulse-animation 2s ease-in-out infinite;
 }
 
 @keyframes pulse-animation {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
-  50% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 186, 124, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(0, 186, 124, 0); }
 }
 
 /* Chart Section */
@@ -524,9 +476,9 @@ onMounted(() => {
 }
 
 .section-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: white;
+  color: var(--color-text-primary);
   margin: 0;
 }
 
@@ -540,7 +492,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-secondary);
 }
 
 .legend-dot {
@@ -550,11 +502,11 @@ onMounted(() => {
 }
 
 .legend-item.inbound .legend-dot {
-  background: #a78bfa;
+  background: #8b5cf6;
 }
 
 .legend-item.outbound .legend-dot {
-  background: #60a5fa;
+  background: var(--color-accent);
 }
 
 /* Chart Card */
@@ -599,34 +551,32 @@ onMounted(() => {
 }
 
 .bar.inbound {
-  background: linear-gradient(180deg, #a78bfa 0%, #8b5cf6 100%);
+  background: #8b5cf6;
 }
 
 .bar.outbound {
-  background: linear-gradient(180deg, #60a5fa 0%, #3b82f6 100%);
+  background: var(--color-accent);
 }
 
 .bar-label {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .chart-hint {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--color-border);
   text-align: center;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
 }
 
 /* Glass card base */
 .glass-card {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--color-bg-tertiary);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
 }
 </style>

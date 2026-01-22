@@ -13,9 +13,12 @@ import (
 
 // 版本信息（通过 ldflags 注入）
 var Version string
+var BuildTime string
+var GitCommit string
 
 func init() {
 	version.SetVersion(Version)
+	version.SetBuildInfo(GitCommit, BuildTime)
 }
 
 func main() {

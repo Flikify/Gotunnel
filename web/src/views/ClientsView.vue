@@ -92,6 +92,10 @@ onMounted(loadClients)
               <div class="client-tag" :class="client.online ? 'online' : 'offline'">
                 {{ client.online ? '在线' : '离线' }}
               </div>
+              <!-- Heartbeat indicator -->
+              <div class="heartbeat-indicator" :class="{ online: client.online, offline: !client.online }">
+                <span class="heartbeat-dot"></span>
+              </div>
             </div>
           </div>
         </div>
@@ -103,32 +107,15 @@ onMounted(loadClients)
 <style scoped>
 .clients-page {
   min-height: calc(100vh - 108px);
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #581c87 100%);
+  background: var(--color-bg-primary);
   position: relative;
   overflow: hidden;
   padding: 32px;
 }
 
+/* Hide particles */
 .particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.particle {
-  position: absolute;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05));
-  animation: float-particle 20s ease-in-out infinite;
-}
-
-.particle-1 { width: 250px; height: 250px; top: -80px; right: -50px; }
-.particle-2 { width: 180px; height: 180px; bottom: 10%; left: 5%; animation-delay: -7s; }
-.particle-3 { width: 120px; height: 120px; top: 50%; right: 15%; animation-delay: -12s; }
-
-@keyframes float-particle {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
-  50% { transform: translate(-20px, -60px) scale(0.95); opacity: 0.4; }
+  display: none;
 }
 
 .clients-content {
@@ -142,11 +129,11 @@ onMounted(loadClients)
 .page-title {
   font-size: 28px;
   font-weight: 700;
-  color: white;
+  color: var(--color-text-primary);
   margin: 0 0 8px 0;
 }
 .page-subtitle {
-  color: rgba(255,255,255,0.6);
+  color: var(--color-text-secondary);
   margin: 0;
   font-size: 14px;
 }
@@ -160,10 +147,9 @@ onMounted(loadClients)
 }
 
 .stat-card {
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--color-bg-tertiary);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
   padding: 20px;
   text-align: center;
 }
@@ -172,26 +158,25 @@ onMounted(loadClients)
   display: block;
   font-size: 32px;
   font-weight: 700;
-  color: white;
+  color: var(--color-text-primary);
 }
-.stat-value.online { color: #34d399; }
-.stat-value.offline { color: rgba(255,255,255,0.5); }
+.stat-value.online { color: var(--color-success); }
+.stat-value.offline { color: var(--color-text-muted); }
 .stat-label {
   font-size: 13px;
-  color: rgba(255,255,255,0.6);
+  color: var(--color-text-secondary);
 }
 
 /* Glass Card */
 .glass-card {
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--color-bg-tertiary);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
 }
 
 .card-header {
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid var(--color-border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -200,18 +185,18 @@ onMounted(loadClients)
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: white;
+  color: var(--color-text-primary);
 }
 .card-body { padding: 20px; }
 
 .loading-state, .empty-state {
   text-align: center;
   padding: 48px;
-  color: rgba(255,255,255,0.5);
+  color: var(--color-text-muted);
 }
 .empty-hint {
   font-size: 13px;
-  color: rgba(255,255,255,0.3);
+  color: var(--color-text-muted);
   margin-top: 8px;
 }
 
@@ -231,17 +216,16 @@ onMounted(loadClients)
 }
 
 .client-card {
-  background: rgba(255,255,255,0.05);
-  border-radius: 12px;
+  background: var(--color-bg-elevated);
+  border-radius: 10px;
   padding: 16px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--color-border-light);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
   position: relative;
 }
 .client-card:hover {
-  background: rgba(255,255,255,0.1);
-  transform: translateY(-2px);
+  background: var(--color-border);
 }
 
 .client-header {
@@ -255,23 +239,23 @@ onMounted(loadClients)
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.3);
+  background: var(--color-text-muted);
 }
 .client-status.online {
-  background: #34d399;
-  box-shadow: 0 0 8px rgba(52,211,153,0.6);
+  background: var(--color-success);
+  box-shadow: 0 0 8px rgba(0, 186, 124, 0.6);
 }
 
 .client-name {
   font-size: 15px;
   font-weight: 600;
-  color: white;
+  color: var(--color-text-primary);
   margin: 0;
 }
 
 .client-id {
   font-size: 12px;
-  color: rgba(255,255,255,0.4);
+  color: var(--color-text-muted);
   margin: 0 0 8px 0;
   font-family: monospace;
 }
@@ -281,7 +265,7 @@ onMounted(loadClients)
   flex-direction: column;
   gap: 4px;
   font-size: 13px;
-  color: rgba(255,255,255,0.6);
+  color: var(--color-text-secondary);
   margin-bottom: 12px;
 }
 
@@ -293,25 +277,61 @@ onMounted(loadClients)
   font-weight: 500;
 }
 .client-tag.online {
-  background: rgba(52,211,153,0.2);
-  color: #34d399;
+  background: rgba(0, 186, 124, 0.15);
+  color: var(--color-success);
 }
 .client-tag.offline {
-  background: rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.5);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
 }
 
 /* Button */
 .glass-btn {
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.15);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 16px;
-  color: white;
+  color: var(--color-text-primary);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
-.glass-btn:hover { background: rgba(255,255,255,0.2); }
+.glass-btn:hover { background: var(--color-border); }
 .glass-btn.small { padding: 6px 12px; font-size: 12px; }
+
+/* Heartbeat Indicator */
+.heartbeat-indicator {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.heartbeat-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-error);
+}
+
+.heartbeat-indicator.online .heartbeat-dot {
+  background: var(--color-success);
+  animation: heartbeat-pulse 2s ease-in-out infinite;
+}
+
+.heartbeat-indicator.offline .heartbeat-dot {
+  background: var(--color-error);
+  animation: none;
+}
+
+@keyframes heartbeat-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 186, 124, 0.5);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(0, 186, 124, 0);
+    transform: scale(1.1);
+  }
+}
 </style>
