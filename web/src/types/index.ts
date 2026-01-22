@@ -76,6 +76,7 @@ export interface ClientDetail {
   remote_addr?: string
   os?: string
   arch?: string
+  version?: string
 }
 
 // 服务器状态

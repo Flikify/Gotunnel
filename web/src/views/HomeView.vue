@@ -37,7 +37,24 @@ const loadTrafficStats = async () => {
 const loadTrafficHourly = async () => {
   try {
     const { data } = await getTrafficHourly()
-    trafficHistory.value = data.records || []
+    const records = data.records || []
+    // 如果没有数据，生成从当前时间开始的24小时空数据
+    if (records.length === 0) {
+      const now = new Date()
+      const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours())
+      const emptyRecords: TrafficRecord[] = []
+      for (let i = 23; i >= 0; i--) {
+        const ts = new Date(currentHour.getTime() - i * 3600 * 1000)
+        emptyRecords.push({
+          timestamp: Math.floor(ts.getTime() / 1000),
+          inbound: 0,
+          outbound: 0
+        })
+      }
+      trafficHistory.value = emptyRecords
+    } else {
+      trafficHistory.value = records
+    }
   } catch (e) {
     console.error('Failed to load hourly traffic', e)
   }
@@ -106,8 +123,8 @@ onMounted(() => {
     <div class="dashboard-content">
       <!-- Header -->
       <div class="dashboard-header">
-        <h1 class="text-3xl font-bold text-white mb-2">Dashboard</h1>
-        <p class="text-white/70">Monitor your tunnel connections and traffic</p>
+        <h1 class="text-3xl font-bold text-white mb-2">仪表盘</h1>
+        <p class="text-white/70">监控隧道连接和流量状态</p>
       </div>
 
       <!-- Stats Grid -->
@@ -225,9 +242,6 @@ onMounted(() => {
                 <span class="bar-label">{{ formatHour(data.timestamp) }}</span>
               </div>
             </div>
-          </div>
-          <div class="chart-hint" v-if="trafficHistory.length === 0">
-            <span>暂无流量数据</span>
           </div>
         </div>
       </div>
@@ -411,25 +425,29 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  min-height: 48px;
+  justify-content: center;
 }
 
 .stat-label {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.6);
   font-weight: 500;
+  line-height: 1.2;
 }
 
 .stat-value {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: white;
-  line-height: 1.1;
+  line-height: 1.2;
 }
 
 .stat-unit {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
+  line-height: 1.2;
 }
 
 /* Client count special styling */

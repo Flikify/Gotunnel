@@ -1,23 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { CloudDownloadOutline, RefreshOutline, ServerOutline, SettingsOutline, SaveOutline } from '@vicons/ionicons5'
-import GlassTag from '../components/GlassTag.vue'
+import { ServerOutline, SettingsOutline, SaveOutline } from '@vicons/ionicons5'
 import { useToast } from '../composables/useToast'
-import { useConfirm } from '../composables/useConfirm'
 import {
-  getVersionInfo, checkServerUpdate, applyServerUpdate,
-  getServerConfig, updateServerConfig,
-  type UpdateInfo, type VersionInfo, type ServerConfigResponse
+  getVersionInfo, getServerConfig, updateServerConfig,
+  type VersionInfo, type ServerConfigResponse
 } from '../api'
 
 const message = useToast()
-const dialog = useConfirm()
 
 const versionInfo = ref<VersionInfo | null>(null)
-const serverUpdate = ref<UpdateInfo | null>(null)
 const loading = ref(true)
-const checkingServer = ref(false)
-const updatingServer = ref(false)
 
 // 服务器配置
 const serverConfig = ref<ServerConfigResponse | null>(null)
@@ -94,58 +87,6 @@ const handleSaveConfig = async () => {
   } finally {
     savingConfig.value = false
   }
-}
-
-const handleCheckServerUpdate = async () => {
-  checkingServer.value = true
-  try {
-    const { data } = await checkServerUpdate()
-    serverUpdate.value = data
-    if (data.available) {
-      message.success('发现新版本: ' + data.latest)
-    } else {
-      message.info('已是最新版本')
-    }
-  } catch (e: any) {
-    message.error(e.response?.data || '检查更新失败')
-  } finally {
-    checkingServer.value = false
-  }
-}
-
-const handleApplyServerUpdate = () => {
-  if (!serverUpdate.value?.download_url) {
-    message.error('没有可用的下载链接')
-    return
-  }
-
-  dialog.warning({
-    title: '确认更新服务端',
-    content: `即将更新服务端到 ${serverUpdate.value.latest}，更新后服务器将自动重启。确定要继续吗？`,
-    positiveText: '更新并重启',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      updatingServer.value = true
-      try {
-        await applyServerUpdate(serverUpdate.value!.download_url)
-        message.success('更新已开始，服务器将在几秒后重启')
-        setTimeout(() => {
-          window.location.reload()
-        }, 5000)
-      } catch (e: any) {
-        message.error(e.response?.data || '更新失败')
-        updatingServer.value = false
-      }
-    }
-  })
-}
-
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 onMounted(() => {
@@ -299,50 +240,6 @@ onMounted(() => {
             </div>
           </div>
           <div v-else class="empty-state">无法加载配置信息</div>
-        </div>
-      </div>
-
-      <!-- Server Update Card -->
-      <div class="glass-card">
-        <div class="card-header">
-          <h3>服务端更新</h3>
-          <button class="glass-btn small" :disabled="checkingServer" @click="handleCheckServerUpdate">
-            <RefreshOutline class="btn-icon" />
-            检查更新
-          </button>
-        </div>
-        <div class="card-body">
-          <div v-if="!serverUpdate" class="empty-state">
-            点击检查更新按钮查看是否有新版本
-          </div>
-          <template v-else>
-            <div v-if="serverUpdate.available" class="update-alert success">
-              发现新版本 {{ serverUpdate.latest }}，当前版本 {{ serverUpdate.current }}
-            </div>
-            <div v-else class="update-alert info">
-              当前已是最新版本 {{ serverUpdate.current }}
-            </div>
-
-            <div v-if="serverUpdate.download_url" class="download-info">
-              下载文件: {{ serverUpdate.asset_name }}
-              <GlassTag style="margin-left: 8px;">{{ formatBytes(serverUpdate.asset_size) }}</GlassTag>
-            </div>
-
-            <div v-if="serverUpdate.release_note" class="release-note">
-              <span class="note-label">更新日志:</span>
-              <pre>{{ serverUpdate.release_note }}</pre>
-            </div>
-
-            <button
-              v-if="serverUpdate.available && serverUpdate.download_url"
-              class="glass-btn primary"
-              :disabled="updatingServer"
-              @click="handleApplyServerUpdate"
-            >
-              <CloudDownloadOutline class="btn-icon" />
-              下载并更新服务端
-            </button>
-          </template>
         </div>
       </div>
     </div>

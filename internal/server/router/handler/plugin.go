@@ -371,7 +371,7 @@ func (h *PluginHandler) UpdateClientConfig(c *gin.Context) {
 	}
 
 	// 如果客户端在线，同步配置
-	online, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
+	online, _, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
 	if online {
 		if err := h.app.GetServer().SyncPluginConfigToClient(clientID, pluginName, req.Config); err != nil {
 			PartialSuccess(c, gin.H{"status": "partial", "port_changed": portChanged}, "config saved but sync failed: "+err.Error())

@@ -115,7 +115,7 @@ func (h *ClientHandler) Get(c *gin.Context) {
 		return
 	}
 
-	online, lastPing, remoteAddr, clientOS, clientArch := h.app.GetServer().GetClientStatus(clientID)
+	online, lastPing, remoteAddr, clientOS, clientArch, clientVersion := h.app.GetServer().GetClientStatus(clientID)
 
 	// 复制插件列表
 	plugins := make([]db.ClientPlugin, len(client.Plugins))
@@ -155,6 +155,7 @@ func (h *ClientHandler) Get(c *gin.Context) {
 		RemoteAddr: remoteAddr,
 		OS:         clientOS,
 		Arch:       clientArch,
+		Version:    clientVersion,
 	}
 
 	Success(c, resp)
@@ -241,7 +242,7 @@ func (h *ClientHandler) Delete(c *gin.Context) {
 func (h *ClientHandler) PushConfig(c *gin.Context) {
 	clientID := c.Param("id")
 
-	online, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
+	online, _, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
 	if !online {
 		ClientNotOnline(c)
 		return
@@ -310,7 +311,7 @@ func (h *ClientHandler) Restart(c *gin.Context) {
 func (h *ClientHandler) InstallPlugins(c *gin.Context) {
 	clientID := c.Param("id")
 
-	online, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
+	online, _, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
 	if !online {
 		ClientNotOnline(c)
 		return
@@ -448,6 +449,17 @@ func (h *ClientHandler) deleteClientPlugin(clientID, pluginID string) error {
 	client.Plugins = newPlugins
 	client.Rules = newRules
 	return h.app.GetClientStore().UpdateClient(client)
+}
+
+// GetSystemStats 获取客户端系统状态
+func (h *ClientHandler) GetSystemStats(c *gin.Context) {
+	clientID := c.Param("id")
+	stats, err := h.app.GetServer().GetClientSystemStats(clientID)
+	if err != nil {
+		ClientNotOnline(c)
+		return
+	}
+	Success(c, stats)
 }
 
 // validateClientID 验证客户端 ID 格式

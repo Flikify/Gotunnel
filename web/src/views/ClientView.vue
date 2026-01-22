@@ -15,7 +15,7 @@ import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
   getClientPluginConfig, updateClientPluginConfig,
   getStorePlugins, installStorePlugin, getRuleSchemas, startClientPlugin, restartClientPlugin, stopClientPlugin, deleteClientPlugin,
-  checkClientUpdate, applyClientUpdate, type UpdateInfo
+  checkClientUpdate, applyClientUpdate, getClientSystemStats, type UpdateInfo, type SystemStats
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 import LogViewer from '../components/LogViewer.vue'
@@ -37,11 +37,16 @@ const clientPlugins = ref<ClientPlugin[]>([])
 const loading = ref(false)
 const clientOs = ref('')
 const clientArch = ref('')
+const clientVersion = ref('')
 
 // 客户端更新相关
 const clientUpdate = ref<UpdateInfo | null>(null)
 const checkingUpdate = ref(false)
 const updatingClient = ref(false)
+
+// 系统状态相关
+const systemStats = ref<SystemStats | null>(null)
+const loadingStats = ref(false)
 
 // Rule Schemas
 const pluginRuleSchemas = ref<RuleSchemasMap>({})
@@ -103,12 +108,52 @@ const loadClient = async () => {
     clientPlugins.value = data.plugins || []
     clientOs.value = data.os || ''
     clientArch.value = data.arch || ''
+    clientVersion.value = data.version || ''
+
+    // 如果客户端在线且有平台信息，自动检测更新
+    if (data.online && data.os && data.arch) {
+      autoCheckClientUpdate()
+      loadSystemStats()
+    }
   } catch (e) {
     message.error('加载客户端信息失败')
     console.error(e)
   } finally {
     loading.value = false
   }
+}
+
+// 自动检测客户端更新（静默）
+const autoCheckClientUpdate = async () => {
+  try {
+    const { data } = await checkClientUpdate(clientOs.value, clientArch.value)
+    clientUpdate.value = data
+  } catch (e) {
+    console.error('Auto check update failed', e)
+  }
+}
+
+// 加载系统状态
+const loadSystemStats = async () => {
+  if (!online.value) return
+  loadingStats.value = true
+  try {
+    const { data } = await getClientSystemStats(clientId)
+    systemStats.value = data
+  } catch (e) {
+    console.error('Failed to load system stats', e)
+  } finally {
+    loadingStats.value = false
+  }
+}
+
+// 格式化字节大小
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 // 客户端更新
@@ -473,11 +518,11 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
       <div class="page-header">
         <div class="header-left">
           <button class="back-btn" @click="router.push('/')">
-            <n-icon size="20"><ArrowBackOutline /></n-icon>
+            <ArrowBackOutline class="btn-icon-lg" />
           </button>
           <h1 class="page-title">{{ nickname || clientId }}</h1>
           <button class="edit-btn" @click="openRenameModal">
-            <n-icon size="16"><CreateOutline /></n-icon>
+            <CreateOutline class="btn-icon" />
           </button>
           <span class="status-tag" :class="{ online }">
             {{ online ? '在线' : '离线' }}
@@ -485,15 +530,15 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
         </div>
         <div class="header-actions">
           <button v-if="online" class="glass-btn primary" @click="pushConfigToClient(clientId).then(() => message.success('已推送'))">
-            <n-icon size="16"><PushOutline /></n-icon>
+            <PushOutline class="btn-icon" />
             <span>推送配置</span>
           </button>
           <button class="glass-btn" @click="showLogViewer=true">
-            <n-icon size="16"><DocumentTextOutline /></n-icon>
+            <DocumentTextOutline class="btn-icon" />
             <span>日志</span>
           </button>
           <button class="glass-btn danger" @click="confirmDelete">
-            <n-icon size="16"><TrashOutline /></n-icon>
+            <TrashOutline class="btn-icon" />
             <span>删除</span>
           </button>
         </div>
@@ -516,6 +561,15 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
               <div class="stat-item">
                 <span class="stat-label">远程 IP</span>
                 <span class="stat-value">{{ remoteAddr || '-' }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">客户端版本</span>
+                <span class="stat-value">
+                  {{ clientVersion || '-' }}
+                  <span v-if="clientUpdate?.available" class="update-badge" @click="handleApplyClientUpdate">
+                    可更新
+                  </span>
+                </span>
               </div>
               <div class="stat-item">
                 <span class="stat-label">最后心跳</span>
@@ -545,12 +599,57 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
             </div>
           </div>
 
+          <!-- System Stats Card -->
+          <div class="glass-card" v-if="online">
+            <div class="card-header">
+              <h3>系统状态</h3>
+              <button class="glass-btn tiny" :disabled="loadingStats" @click="loadSystemStats">
+                <RefreshOutline class="btn-icon-sm" />
+                刷新
+              </button>
+            </div>
+            <div class="card-body">
+              <div v-if="!systemStats" class="empty-hint">
+                {{ loadingStats ? '加载中...' : '点击刷新获取状态' }}
+              </div>
+              <template v-else>
+                <div class="system-stat-item">
+                  <span class="system-stat-label">CPU</span>
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: systemStats.cpu_usage + '%' }"></div>
+                  </div>
+                  <span class="system-stat-value">{{ systemStats.cpu_usage.toFixed(1) }}%</span>
+                </div>
+                <div class="system-stat-item">
+                  <span class="system-stat-label">内存</span>
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: systemStats.memory_usage + '%' }"></div>
+                  </div>
+                  <span class="system-stat-value">{{ systemStats.memory_usage.toFixed(1) }}%</span>
+                </div>
+                <div class="system-stat-detail">
+                  {{ formatBytes(systemStats.memory_used) }} / {{ formatBytes(systemStats.memory_total) }}
+                </div>
+                <div class="system-stat-item">
+                  <span class="system-stat-label">磁盘</span>
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: systemStats.disk_usage + '%' }"></div>
+                  </div>
+                  <span class="system-stat-value">{{ systemStats.disk_usage.toFixed(1) }}%</span>
+                </div>
+                <div class="system-stat-detail">
+                  {{ formatBytes(systemStats.disk_used) }} / {{ formatBytes(systemStats.disk_total) }}
+                </div>
+              </template>
+            </div>
+          </div>
+
           <!-- Update Card -->
           <div class="glass-card">
             <div class="card-header">
               <h3>客户端更新</h3>
               <button class="glass-btn tiny" :disabled="!online || checkingUpdate" @click="handleCheckClientUpdate">
-                <n-icon size="14"><RefreshOutline /></n-icon>
+                <RefreshOutline class="btn-icon-sm" />
                 检查
               </button>
             </div>
@@ -563,7 +662,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                 <div v-if="clientUpdate.download_url" class="update-available">
                   <p>发现新版本 {{ clientUpdate.latest }}</p>
                   <button class="glass-btn primary small" :disabled="updatingClient" @click="handleApplyClientUpdate">
-                    <n-icon size="14"><CloudDownloadOutline /></n-icon>
+                    <CloudDownloadOutline class="btn-icon-sm" />
                     更新
                   </button>
                 </div>
@@ -580,7 +679,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
             <div class="card-header">
               <h3>代理规则</h3>
               <button class="glass-btn primary small" @click="openCreateRule">
-                <n-icon size="14"><AddOutline /></n-icon>
+                <AddOutline class="btn-icon-sm" />
                 添加规则
               </button>
             </div>
@@ -757,7 +856,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
         <div v-for="plugin in storePlugins" :key="plugin.name" class="store-plugin-card">
           <div class="store-plugin-header">
             <span class="store-plugin-name">{{ plugin.name }}</span>
-            <n-tag size="small">v{{ plugin.version }}</n-tag>
+            <GlassTag>v{{ plugin.version }}</GlassTag>
           </div>
           <p class="store-plugin-desc">{{ plugin.description }}</p>
           <button class="glass-btn primary small full" @click="handleInstallStorePlugin(plugin)">
@@ -998,6 +1097,22 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .stat-value.mono {
   font-family: monospace;
   font-size: 12px;
+}
+
+.update-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.update-badge:hover {
+  background: rgba(251, 191, 36, 0.3);
 }
 
 /* Mini Stats */
@@ -1335,6 +1450,16 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   height: 14px;
 }
 
+.btn-icon-lg {
+  width: 20px;
+  height: 20px;
+}
+
+.btn-icon-sm {
+  width: 14px;
+  height: 14px;
+}
+
 .plugin-icon {
   width: 18px;
   height: 18px;
@@ -1344,5 +1469,50 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .settings-icon {
   width: 16px;
   height: 16px;
+}
+
+/* System Stats */
+.system-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.system-stat-label {
+  width: 40px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #60a5fa, #a78bfa);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.system-stat-value {
+  width: 50px;
+  text-align: right;
+  font-size: 12px;
+  color: white;
+  font-family: monospace;
+}
+
+.system-stat-detail {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: right;
+  margin-bottom: 12px;
+  margin-top: -4px;
 }
 </style>

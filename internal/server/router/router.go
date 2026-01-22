@@ -69,6 +69,7 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		api.POST("/client/:id/restart", clientHandler.Restart)
 		api.POST("/client/:id/install-plugins", clientHandler.InstallPlugins)
 		api.POST("/client/:id/plugin/:pluginID/:action", clientHandler.PluginAction)
+		api.GET("/client/:id/system-stats", clientHandler.GetSystemStats)
 
 		// 配置管理
 		configHandler := handler.NewConfigHandler(app)

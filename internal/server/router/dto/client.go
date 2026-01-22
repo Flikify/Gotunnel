@@ -32,6 +32,7 @@ type ClientResponse struct {
 	RemoteAddr string               `json:"remote_addr,omitempty" example:"192.168.1.100:54321"`
 	OS         string               `json:"os,omitempty" example:"linux"`
 	Arch       string               `json:"arch,omitempty" example:"amd64"`
+	Version    string               `json:"version,omitempty" example:"1.0.0"`
 }
 
 // ClientListItem 客户端列表项

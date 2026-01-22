@@ -19,6 +19,8 @@ import (
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/relay"
 	"github.com/gotunnel/pkg/update"
+	"github.com/gotunnel/pkg/utils"
+	"github.com/gotunnel/pkg/version"
 	"github.com/hashicorp/yamux"
 )
 
@@ -181,6 +183,7 @@ func (c *Client) connect() error {
 		Token:    c.Token,
 		OS:       runtime.GOOS,
 		Arch:     runtime.GOARCH,
+		Version:  version.Version,
 	}
 	msg, _ := protocol.NewMessage(protocol.MsgTypeAuth, authReq)
 	if err := protocol.WriteMessage(conn, msg); err != nil {
@@ -286,6 +289,8 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handlePluginStatusQuery(stream, msg)
 	case protocol.MsgTypePluginAPIRequest:
 		c.handlePluginAPIRequest(stream, msg)
+	case protocol.MsgTypeSystemStatsRequest:
+		c.handleSystemStatsRequest(stream, msg)
 	}
 }
 
@@ -1172,4 +1177,28 @@ func (c *Client) sendPluginAPIResponse(stream net.Conn, status int, headers map[
 	}
 	msg, _ := protocol.NewMessage(protocol.MsgTypePluginAPIResponse, resp)
 	protocol.WriteMessage(stream, msg)
+}
+
+// handleSystemStatsRequest 处理系统状态请求
+func (c *Client) handleSystemStatsRequest(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	stats, err := utils.GetSystemStats()
+	if err != nil {
+		log.Printf("[Client] Failed to get system stats: %v", err)
+		return
+	}
+
+	resp := protocol.SystemStatsResponse{
+		CPUUsage:    stats.CPUUsage,
+		MemoryTotal: stats.MemoryTotal,
+		MemoryUsed:  stats.MemoryUsed,
+		MemoryUsage: stats.MemoryUsage,
+		DiskTotal:   stats.DiskTotal,
+		DiskUsed:    stats.DiskUsed,
+		DiskUsage:   stats.DiskUsage,
+	}
+
+	respMsg, _ := protocol.NewMessage(protocol.MsgTypeSystemStatsResponse, resp)
+	protocol.WriteMessage(stream, respMsg)
 }

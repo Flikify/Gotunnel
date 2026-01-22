@@ -45,7 +45,7 @@ func (h *PluginAPIHandler) ProxyRequest(c *gin.Context) {
 	}
 
 	// 检查客户端是否在线
-	online, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
+	online, _, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
 	if !online {
 		ClientNotOnline(c)
 		return

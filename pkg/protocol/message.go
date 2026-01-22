@@ -71,6 +71,10 @@ const (
 	// 插件 API 路由消息
 	MsgTypePluginAPIRequest  uint8 = 90 // 插件 API 请求
 	MsgTypePluginAPIResponse uint8 = 91 // 插件 API 响应
+
+	// 系统状态消息
+	MsgTypeSystemStatsRequest  uint8 = 100 // 请求系统状态
+	MsgTypeSystemStatsResponse uint8 = 101 // 系统状态响应
 )
 
 // Message 基础消息结构
@@ -83,8 +87,9 @@ type Message struct {
 type AuthRequest struct {
 	ClientID string `json:"client_id"`
 	Token    string `json:"token"`
-	OS       string `json:"os,omitempty"`   // 客户端操作系统
-	Arch     string `json:"arch,omitempty"` // 客户端架构
+	OS       string `json:"os,omitempty"`      // 客户端操作系统
+	Arch     string `json:"arch,omitempty"`    // 客户端架构
+	Version  string `json:"version,omitempty"` // 客户端版本
 }
 
 // AuthResponse 认证响应
@@ -440,4 +445,18 @@ func NewMessage(msgType uint8, data interface{}) (*Message, error) {
 // ParsePayload 解析消息载荷
 func (m *Message) ParsePayload(v interface{}) error {
 	return json.Unmarshal(m.Payload, v)
+}
+
+// SystemStatsRequest 系统状态请求
+type SystemStatsRequest struct{}
+
+// SystemStatsResponse 系统状态响应
+type SystemStatsResponse struct {
+	CPUUsage    float64 `json:"cpu_usage"`    // CPU 使用率 (0-100)
+	MemoryTotal uint64  `json:"memory_total"` // 总内存 (字节)
+	MemoryUsed  uint64  `json:"memory_used"`  // 已用内存 (字节)
+	MemoryUsage float64 `json:"memory_usage"` // 内存使用率 (0-100)
+	DiskTotal   uint64  `json:"disk_total"`   // 总磁盘 (字节)
+	DiskUsed    uint64  `json:"disk_used"`    // 已用磁盘 (字节)
+	DiskUsage   float64 `json:"disk_usage"`   // 磁盘使用率 (0-100)
 }

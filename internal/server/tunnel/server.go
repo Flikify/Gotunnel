@@ -86,6 +86,7 @@ type ClientSession struct {
 	RemoteAddr string // 客户端 IP 地址
 	OS         string // 客户端操作系统
 	Arch       string // 客户端架构
+	Version    string // 客户端版本
 	Session    *yamux.Session
 	Rules      []protocol.ProxyRule
 	Listeners  map[int]net.Listener
@@ -289,11 +290,11 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	security.LogAuthSuccess(clientIP, clientID)
-	s.setupClientSession(conn, clientID, authReq.OS, authReq.Arch, rules)
+	s.setupClientSession(conn, clientID, authReq.OS, authReq.Arch, authReq.Version, rules)
 }
 
 // setupClientSession 建立客户端会话
-func (s *Server) setupClientSession(conn net.Conn, clientID, clientOS, clientArch string, rules []protocol.ProxyRule) {
+func (s *Server) setupClientSession(conn net.Conn, clientID, clientOS, clientArch, clientVersion string, rules []protocol.ProxyRule) {
 	session, err := yamux.Server(conn, nil)
 	if err != nil {
 		log.Printf("[Server] Yamux error: %v", err)
@@ -311,6 +312,7 @@ func (s *Server) setupClientSession(conn net.Conn, clientID, clientOS, clientArc
 		RemoteAddr: remoteAddr,
 		OS:         clientOS,
 		Arch:       clientArch,
+		Version:    clientVersion,
 		Session:    session,
 		Rules:      rules,
 		Listeners:  make(map[int]net.Listener),
@@ -571,16 +573,16 @@ func (s *Server) sendHeartbeat(cs *ClientSession) bool {
 }
 
 // GetClientStatus 获取客户端状态
-func (s *Server) GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientOS, clientArch string) {
+func (s *Server) GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientOS, clientArch, clientVersion string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if cs, ok := s.clients[clientID]; ok {
 		cs.mu.Lock()
 		defer cs.mu.Unlock()
-		return true, cs.LastPing.Format(time.RFC3339), cs.RemoteAddr, cs.OS, cs.Arch
+		return true, cs.LastPing.Format(time.RFC3339), cs.RemoteAddr, cs.OS, cs.Arch, cs.Version
 	}
-	return false, "", "", "", ""
+	return false, "", "", "", "", ""
 }
 
 // GetClientPluginStatus 获取客户端插件运行状态
@@ -633,6 +635,7 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 	RemoteAddr string
 	OS         string
 	Arch       string
+	Version    string
 } {
 	// 先复制客户端引用，避免嵌套锁
 	s.mu.RLock()
@@ -648,6 +651,7 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 		RemoteAddr string
 		OS         string
 		Arch       string
+		Version    string
 	})
 
 	for _, cs := range clients {
@@ -658,12 +662,14 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 			RemoteAddr string
 			OS         string
 			Arch       string
+			Version    string
 		}{
 			Online:     true,
 			LastPing:   cs.LastPing.Format(time.RFC3339),
 			RemoteAddr: cs.RemoteAddr,
 			OS:         cs.OS,
 			Arch:       cs.Arch,
+			Version:    cs.Version,
 		}
 		cs.mu.Unlock()
 	}
@@ -1868,4 +1874,47 @@ func (s *Server) StopClientLogStream(sessionID string) {
 // boolPtr 返回 bool 值的指针
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// GetClientSystemStats 获取客户端系统状态
+func (s *Server) GetClientSystemStats(clientID string) (*protocol.SystemStatsResponse, error) {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("client %s not online", clientID)
+	}
+
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+
+	// 设置超时
+	stream.SetDeadline(time.Now().Add(10 * time.Second))
+
+	// 发送请求
+	msg, _ := protocol.NewMessage(protocol.MsgTypeSystemStatsRequest, nil)
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return nil, err
+	}
+
+	// 读取响应
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Type != protocol.MsgTypeSystemStatsResponse {
+		return nil, fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+
+	var stats protocol.SystemStatsResponse
+	if err := resp.ParsePayload(&stats); err != nil {
+		return nil, err
+	}
+
+	return &stats, nil
 }

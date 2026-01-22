@@ -3,17 +3,23 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import {
   HomeOutline, DesktopOutline, SettingsOutline,
-  PersonCircleOutline, LogOutOutline, LogoGithub, ServerOutline, CheckmarkCircleOutline, ArrowUpCircleOutline
+  PersonCircleOutline, LogOutOutline, LogoGithub, ServerOutline, CheckmarkCircleOutline, ArrowUpCircleOutline, CloseOutline
 } from '@vicons/ionicons5'
-import { getServerStatus, getVersionInfo, checkServerUpdate, removeToken, getToken, type UpdateInfo } from './api'
+import { getServerStatus, getVersionInfo, checkServerUpdate, applyServerUpdate, removeToken, getToken, type UpdateInfo } from './api'
+import { useToast } from './composables/useToast'
+import { useConfirm } from './composables/useConfirm'
 
 const router = useRouter()
 const route = useRoute()
+const message = useToast()
+const dialog = useConfirm()
 const serverInfo = ref({ bind_addr: '', bind_port: 0 })
 const clientCount = ref(0)
 const version = ref('')
 const showUserMenu = ref(false)
 const updateInfo = ref<UpdateInfo | null>(null)
+const showUpdateModal = ref(false)
+const updatingServer = ref(false)
 
 const isLoginPage = computed(() => route.path === '/login')
 
@@ -84,6 +90,48 @@ const logout = () => {
 const toggleUserMenu = () => {
   showUserMenu.value = !showUserMenu.value
 }
+
+const openUpdateModal = () => {
+  if (updateInfo.value) {
+    showUpdateModal.value = true
+  }
+}
+
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+const handleApplyServerUpdate = () => {
+  if (!updateInfo.value?.download_url) {
+    message.error('没有可用的下载链接')
+    return
+  }
+
+  dialog.warning({
+    title: '确认更新服务端',
+    content: `即将更新服务端到 ${updateInfo.value.latest}，更新后服务器将自动重启。确定要继续吗？`,
+    positiveText: '更新并重启',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      updatingServer.value = true
+      try {
+        await applyServerUpdate(updateInfo.value!.download_url)
+        message.success('更新已开始，服务器将在几秒后重启')
+        showUpdateModal.value = false
+        setTimeout(() => {
+          window.location.reload()
+        }, 5000)
+      } catch (e: any) {
+        message.error(e.response?.data || '更新失败')
+        updatingServer.value = false
+      }
+    }
+  })
+}
 </script>
 
 <template>
@@ -130,7 +178,7 @@ const toggleUserMenu = () => {
         <div v-if="version" class="version-info">
           <ServerOutline class="version-icon" />
           <span class="version">v{{ version }}</span>
-          <span v-if="updateInfo" class="update-status" :class="{ latest: !updateInfo.available, 'has-update': updateInfo.available }">
+          <span v-if="updateInfo" class="update-status" :class="{ latest: !updateInfo.available, 'has-update': updateInfo.available }" @click="openUpdateModal">
             <template v-if="updateInfo.available">
               <ArrowUpCircleOutline class="status-icon" />
               <span>新版本 ({{ updateInfo.latest }})</span>
@@ -148,6 +196,53 @@ const toggleUserMenu = () => {
       </a>
       <span class="copyright">© 2024 Flik. MIT License</span>
     </footer>
+
+    <!-- Update Modal -->
+    <div v-if="showUpdateModal" class="modal-overlay" @click.self="showUpdateModal = false">
+      <div class="update-modal">
+        <div class="modal-header">
+          <h3>系统更新</h3>
+          <button class="close-btn" @click="showUpdateModal = false">
+            <CloseOutline />
+          </button>
+        </div>
+        <div class="modal-body" v-if="updateInfo">
+          <div class="update-info-grid">
+            <div class="info-row">
+              <span class="info-label">当前版本</span>
+              <span class="info-value">{{ updateInfo.current }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">最新版本</span>
+              <span class="info-value highlight">{{ updateInfo.latest }}</span>
+            </div>
+            <div v-if="updateInfo.asset_name" class="info-row">
+              <span class="info-label">文件名</span>
+              <span class="info-value">{{ updateInfo.asset_name }}</span>
+            </div>
+            <div v-if="updateInfo.asset_size" class="info-row">
+              <span class="info-label">文件大小</span>
+              <span class="info-value">{{ formatBytes(updateInfo.asset_size) }}</span>
+            </div>
+          </div>
+          <div v-if="updateInfo.release_note" class="release-note">
+            <span class="note-label">更新日志</span>
+            <pre>{{ updateInfo.release_note }}</pre>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn" @click="showUpdateModal = false">取消</button>
+          <button
+            v-if="updateInfo?.available && updateInfo?.download_url"
+            class="modal-btn primary"
+            :disabled="updatingServer"
+            @click="handleApplyServerUpdate"
+          >
+            {{ updatingServer ? '更新中...' : '立即更新' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
   <RouterView v-else />
 </template>
@@ -327,6 +422,12 @@ const toggleUserMenu = () => {
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.update-status:hover {
+  opacity: 0.8;
 }
 
 .update-status.latest {
@@ -380,5 +481,149 @@ const toggleUserMenu = () => {
   .copyright {
     display: none;
   }
+}
+
+/* Update Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.update-modal {
+  background: rgba(30, 27, 75, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: white;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.update-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.info-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+}
+
+.info-value {
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.info-value.highlight {
+  color: #34d399;
+}
+
+.release-note {
+  margin-top: 16px;
+}
+
+.note-label {
+  display: block;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+}
+
+.release-note pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 12px;
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.modal-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-btn.primary {
+  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  border: none;
+}
+
+.modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

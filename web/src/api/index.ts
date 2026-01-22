@@ -196,6 +196,19 @@ export interface TrafficRecord {
 export const getTrafficStats = () => get<TrafficStats>('/traffic/stats')
 export const getTrafficHourly = () => get<{ records: TrafficRecord[] }>('/traffic/hourly')
 
+// 客户端系统状态
+export interface SystemStats {
+  cpu_usage: number
+  memory_total: number
+  memory_used: number
+  memory_usage: number
+  disk_total: number
+  disk_used: number
+  disk_usage: number
+}
+
+export const getClientSystemStats = (clientId: string) => get<SystemStats>(`/client/${clientId}/system-stats`)
+
 // 服务器配置
 export interface ServerConfigInfo {
   bind_addr: string

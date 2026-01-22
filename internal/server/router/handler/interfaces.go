@@ -19,13 +19,14 @@ type AppInterface interface {
 
 // ServerInterface 服务端接口
 type ServerInterface interface {
-	GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientOS, clientArch string)
+	GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientOS, clientArch, clientVersion string)
 	GetAllClientStatus() map[string]struct {
 		Online     bool
 		LastPing   string
 		RemoteAddr string
 		OS         string
 		Arch       string
+		Version    string
 	}
 	ReloadConfig() error
 	GetBindAddr() string
@@ -57,6 +58,8 @@ type ServerInterface interface {
 	IsPortAvailable(port int, excludeClientID string) bool
 	// 插件 API 代理
 	ProxyPluginAPIRequest(clientID string, req protocol.PluginAPIRequest) (*protocol.PluginAPIResponse, error)
+	// 系统状态
+	GetClientSystemStats(clientID string) (*protocol.SystemStatsResponse, error)
 }
 
 // ConfigField 配置字段
