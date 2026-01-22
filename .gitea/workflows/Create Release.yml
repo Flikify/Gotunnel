@@ -180,19 +180,18 @@ jobs:
           cat release_notes.md
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: akkuman/gitea-release-action@v1
         with:
           tag_name: ${{ inputs.version }}
           name: Release ${{ inputs.version }}
           body_path: release_notes.md
-          files: |
+          files: |-
             dist/*.tar.gz
             dist/*.zip
             dist/SHA256SUMS
           draft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.ACCOUNT_TOKEN }}
+          token: ${{ secrets.ACCOUNT_TOKEN }}
       
       - name: Release created successfully
         run: |
