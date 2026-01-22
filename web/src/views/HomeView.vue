@@ -123,91 +123,84 @@ onMounted(() => {
     <div class="dashboard-content">
       <!-- Header -->
       <div class="dashboard-header">
-        <h1 class="text-3xl font-bold text-white mb-2">仪表盘</h1>
-        <p class="text-white/70">监控隧道连接和流量状态</p>
+        <h1 class="dashboard-title">仪表盘</h1>
+        <p class="dashboard-subtitle">监控隧道连接和流量状态</p>
       </div>
 
       <!-- Stats Grid -->
       <div class="stats-grid">
-        <!-- Outbound Traffic -->
+        <!-- 24H Traffic Combined -->
         <div class="stat-card glass-stat">
-          <div class="stat-icon outbound">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12" />
+          <div class="stat-icon-large traffic-24h">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
           </div>
-          <div class="stat-content">
-            <span class="stat-label">24h出站</span>
-            <div class="stat-value-row">
-              <span class="stat-value">{{ formatted24hOutbound.value }}</span>
-              <span class="stat-unit-inline">{{ formatted24hOutbound.unit }}</span>
+          <div class="stat-details">
+            <div class="stat-row">
+              <span class="stat-title">24H 出站</span>
+              <div class="stat-data">
+                <span class="stat-number">{{ formatted24hOutbound.value }}</span>
+                <span class="stat-unit">{{ formatted24hOutbound.unit }}</span>
+              </div>
+            </div>
+            <div class="stat-row">
+              <span class="stat-title">24H 入站</span>
+              <div class="stat-data">
+                <span class="stat-number">{{ formatted24hInbound.value }}</span>
+                <span class="stat-unit">{{ formatted24hInbound.unit }}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Inbound Traffic -->
+        <!-- Total Traffic Combined -->
         <div class="stat-card glass-stat">
-          <div class="stat-icon inbound">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 13l-5 5m0 0l-5-5m5 5V6" />
+          <div class="stat-icon-large traffic-total">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
-          <div class="stat-content">
-            <span class="stat-label">24h入站</span>
-            <div class="stat-value-row">
-              <span class="stat-value">{{ formatted24hInbound.value }}</span>
-              <span class="stat-unit-inline">{{ formatted24hInbound.unit }}</span>
+          <div class="stat-details">
+            <div class="stat-row">
+              <span class="stat-title">总出站</span>
+              <div class="stat-data">
+                <span class="stat-number">{{ formattedTotalOutbound.value }}</span>
+                <span class="stat-unit">{{ formattedTotalOutbound.unit }}</span>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <!-- Total Outbound Traffic -->
-        <div class="stat-card glass-stat">
-          <div class="stat-icon total-out">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12" />
-            </svg>
-          </div>
-          <div class="stat-content">
-            <span class="stat-label">总出站</span>
-            <div class="stat-value-row">
-              <span class="stat-value">{{ formattedTotalOutbound.value }}</span>
-              <span class="stat-unit-inline">{{ formattedTotalOutbound.unit }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Total Inbound Traffic -->
-        <div class="stat-card glass-stat">
-          <div class="stat-icon total-in">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 13l-5 5m0 0l-5-5m5 5V6" />
-            </svg>
-          </div>
-          <div class="stat-content">
-            <span class="stat-label">总入站</span>
-            <div class="stat-value-row">
-              <span class="stat-value">{{ formattedTotalInbound.value }}</span>
-              <span class="stat-unit-inline">{{ formattedTotalInbound.unit }}</span>
+            <div class="stat-row">
+              <span class="stat-title">总入站</span>
+              <div class="stat-data">
+                <span class="stat-number">{{ formattedTotalInbound.value }}</span>
+                <span class="stat-unit">{{ formattedTotalInbound.unit }}</span>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Client Count -->
         <div class="stat-card glass-stat">
-          <div class="stat-icon clients">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div class="stat-icon-large clients">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
             </svg>
           </div>
-          <div class="stat-content">
-            <span class="stat-label">客户端</span>
-            <div class="client-count">
-              <span class="stat-value online">{{ onlineClients }}</span>
-              <span class="stat-separator">/</span>
-              <span class="stat-value total">{{ clients.length }}</span>
+          <div class="stat-details">
+            <div class="stat-row">
+              <span class="stat-title">在线客户端</span>
+              <div class="stat-data">
+                <span class="stat-number online">{{ onlineClients }}</span>
+                <span class="stat-unit">个</span>
+              </div>
             </div>
-            <span class="stat-unit">在线 / 总数</span>
+            <div class="stat-row">
+              <span class="stat-title">总客户端</span>
+              <div class="stat-data">
+                <span class="stat-number">{{ clients.length }}</span>
+                <span class="stat-unit">个</span>
+              </div>
+            </div>
           </div>
           <div class="online-indicator" :class="{ active: onlineClients > 0 }">
             <span class="pulse"></span>
@@ -216,15 +209,19 @@ onMounted(() => {
 
         <!-- Rules Count -->
         <div class="stat-card glass-stat">
-          <div class="stat-icon rules">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div class="stat-icon-large rules">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
             </svg>
           </div>
-          <div class="stat-content">
-            <span class="stat-label">代理规则</span>
-            <span class="stat-value">{{ totalRules }}</span>
-            <span class="stat-unit">条规则</span>
+          <div class="stat-details">
+            <div class="stat-row single">
+              <span class="stat-title">代理规则</span>
+              <div class="stat-data">
+                <span class="stat-number">{{ totalRules }}</span>
+                <span class="stat-unit">条</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -346,10 +343,23 @@ onMounted(() => {
   margin-bottom: 32px;
 }
 
+.dashboard-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 8px 0;
+}
+
+.dashboard-subtitle {
+  color: var(--color-text-secondary);
+  margin: 0;
+  font-size: 14px;
+}
+
 /* Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   margin-bottom: 32px;
 }
@@ -375,7 +385,7 @@ onMounted(() => {
   border: 1px solid var(--color-border);
   padding: 20px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
   position: relative;
   transition: all 0.2s ease;
@@ -402,11 +412,11 @@ onMounted(() => {
   box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
-/* Stat icon */
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+/* Large Stat icon */
+.stat-icon-large {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -414,110 +424,71 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
-.stat-icon.outbound {
+.stat-icon-large.traffic-24h {
   background: var(--gradient-accent);
 }
 
-.stat-icon.inbound {
+.stat-icon-large.traffic-total {
   background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
 }
 
-.stat-icon.clients {
+.stat-icon-large.clients {
   background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
 }
 
-.stat-icon.rules {
+.stat-icon-large.rules {
   background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
 }
 
-.stat-icon.total-out {
-  background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
-}
-
-.stat-icon.total-in {
-  background: linear-gradient(135deg, #9333ea 0%, #c084fc 100%);
-}
-
-.stat-icon svg {
+.icon-lg {
+  width: 32px;
+  height: 32px;
   color: white;
 }
 
-/* Stat content */
-.stat-content {
+/* Stat details */
+.stat-details {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-height: 44px;
-  justify-content: center;
+  gap: 8px;
 }
 
-.stat-label {
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stat-row.single {
+  padding: 12px 0;
+}
+
+.stat-title {
   font-size: 13px;
   color: var(--color-text-secondary);
   font-weight: 500;
-  line-height: 1.2;
 }
 
-.stat-value {
-  font-size: 26px;
+.stat-data {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.stat-number {
+  font-size: 20px;
   font-weight: 700;
   color: var(--color-text-primary);
-  line-height: 1.2;
+}
+
+.stat-number.online {
+  color: var(--color-success);
 }
 
 .stat-unit {
   font-size: 12px;
   color: var(--color-text-muted);
-  line-height: 1.2;
-}
-
-.stat-value-row {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.stat-unit-inline {
-  font-size: 14px;
-  color: var(--color-text-muted);
-  font-weight: 500;
-}
-
-/* Client count special styling */
-.client-count {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.client-count .stat-value.online {
-  color: var(--color-success);
-}
-
-.client-count .stat-value.total {
-  font-size: 24px;
-  color: var(--color-text-secondary);
-}
-
-.stat-separator {
-  font-size: 20px;
-  color: var(--color-text-muted);
-}
-
-/* Stat trend indicator */
-.stat-trend {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  font-size: 12px;
-}
-
-.stat-trend.up {
-  background: rgba(0, 186, 124, 0.15);
-  color: var(--color-success);
 }
 
 /* Online indicator with pulse */

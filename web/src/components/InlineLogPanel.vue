@@ -134,9 +134,9 @@ onUnmounted(() => {
 
 <style scoped>
 .inline-log-panel {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--glass-bg);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border);
   overflow: hidden;
 }
 
@@ -145,8 +145,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--glass-bg-light);
 }
 
 .toolbar-left {
@@ -158,7 +158,7 @@ onUnmounted(() => {
 .log-title {
   font-size: 13px;
   font-weight: 600;
-  color: white;
+  color: var(--color-text-primary);
 }
 
 .streaming-badge {
@@ -166,8 +166,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #34d399;
-  background: rgba(52, 211, 153, 0.15);
+  color: var(--color-success);
+  background: rgba(16, 185, 129, 0.15);
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -176,7 +176,7 @@ onUnmounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #34d399;
+  background: var(--color-success);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -192,11 +192,11 @@ onUnmounted(() => {
 }
 
 .tool-btn {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-border);
   border: none;
   border-radius: 6px;
   padding: 6px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
@@ -205,8 +205,8 @@ onUnmounted(() => {
 }
 
 .tool-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
 }
 
 .tool-icon {
@@ -219,14 +219,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .auto-scroll-toggle input {
   width: 14px;
   height: 14px;
-  accent-color: #a78bfa;
+  accent-color: var(--color-accent);
 }
 
 .log-content {
@@ -235,6 +235,7 @@ onUnmounted(() => {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 12px;
   line-height: 1.6;
+  background: var(--color-bg-elevated);
 }
 
 .log-loading,
@@ -243,7 +244,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -259,7 +260,7 @@ onUnmounted(() => {
 }
 
 .log-time {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-muted);
   flex-shrink: 0;
 }
 
@@ -269,12 +270,12 @@ onUnmounted(() => {
 }
 
 .log-src {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
   flex-shrink: 0;
 }
 
 .log-msg {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -289,11 +290,11 @@ onUnmounted(() => {
 }
 
 .log-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--color-border);
   border-radius: 3px;
 }
 
 .log-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--color-text-muted);
 }
 </style>

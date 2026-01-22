@@ -15,7 +15,8 @@ import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
   getClientPluginConfig, updateClientPluginConfig,
   getStorePlugins, installStorePlugin, getRuleSchemas, startClientPlugin, restartClientPlugin, stopClientPlugin, deleteClientPlugin,
-  checkClientUpdate, applyClientUpdate, getClientSystemStats, type UpdateInfo, type SystemStats
+  checkClientUpdate, applyClientUpdate, getClientSystemStats, getVersionInfo,
+  type UpdateInfo, type SystemStats
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 import LogViewer from '../components/LogViewer.vue'
@@ -42,6 +43,7 @@ const clientVersion = ref('')
 // 客户端更新相关
 const clientUpdate = ref<UpdateInfo | null>(null)
 const updatingClient = ref(false)
+const serverVersion = ref('')
 
 // 系统状态相关
 const systemStats = ref<SystemStats | null>(null)
@@ -92,6 +94,61 @@ const needsLocalAddr = (type: string) => {
 const getExtraFields = (type: string): ConfigField[] => {
   const schema = pluginRuleSchemas.value[type]
   return schema?.extra_fields || []
+}
+
+// 加载服务端版本
+const loadServerVersion = async () => {
+  try {
+    const { data } = await getVersionInfo()
+    serverVersion.value = data.version || ''
+  } catch (e) {
+    console.error('Failed to load server version', e)
+  }
+}
+
+// 版本比较函数：返回 -1 (v1 < v2), 0 (v1 == v2), 1 (v1 > v2)
+const compareVersions = (v1: string, v2: string): number => {
+  const normalize = (v: string) => v.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0)
+  const parts1 = normalize(v1)
+  const parts2 = normalize(v2)
+  const len = Math.max(parts1.length, parts2.length)
+  for (let i = 0; i < len; i++) {
+    const p1 = parts1[i] || 0
+    const p2 = parts2[i] || 0
+    if (p1 < p2) return -1
+    if (p1 > p2) return 1
+  }
+  return 0
+}
+
+// 判断客户端是否需要更新
+// 逻辑：如果客户端最新版>=服务端版本，则目标版本为服务端版本；否则为客户端最新版
+const needsUpdate = (): boolean => {
+  if (!clientUpdate.value?.latest || !clientVersion.value) return false
+  const latestClientVer = clientUpdate.value.latest
+  const currentClientVer = clientVersion.value
+  const serverVer = serverVersion.value
+
+  // 确定目标版本
+  let targetVersion = latestClientVer
+  if (serverVer && compareVersions(latestClientVer, serverVer) >= 0) {
+    targetVersion = serverVer
+  }
+
+  // 比较当前客户端版本和目标版本
+  return compareVersions(currentClientVer, targetVersion) < 0
+}
+
+// 获取目标更新版本
+const getTargetVersion = (): string => {
+  if (!clientUpdate.value?.latest) return ''
+  const latestClientVer = clientUpdate.value.latest
+  const serverVer = serverVersion.value
+
+  if (serverVer && compareVersions(latestClientVer, serverVer) >= 0) {
+    return serverVer
+  }
+  return latestClientVer
 }
 
 // Actions
@@ -441,6 +498,7 @@ const pollTimer = ref<number | null>(null)
 
 onMounted(() => {
   loadRuleSchemas()
+  loadServerVersion()
   loadClient()
   // 启动自动轮询，每 5 秒刷新一次
   pollTimer.value = window.setInterval(() => {
@@ -557,10 +615,10 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                 <span class="stat-label">客户端版本</span>
                 <span class="stat-value">
                   {{ clientVersion || '-' }}
-                  <span v-if="clientUpdate?.available" class="update-badge" @click="handleApplyClientUpdate">
-                    可更新
+                  <span v-if="needsUpdate()" class="update-badge" @click="handleApplyClientUpdate">
+                    可更新 → {{ getTargetVersion() }}
                   </span>
-                  <span v-else-if="clientUpdate && !clientUpdate.available" class="latest-badge">
+                  <span v-else-if="clientVersion" class="latest-badge">
                     最新版本
                   </span>
                 </span>
@@ -853,7 +911,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 <style scoped>
 .client-page {
   min-height: calc(100vh - 108px);
-  background: var(--color-bg-primary);
+  background: transparent;
   position: relative;
   overflow: hidden;
   padding: 32px;
@@ -1484,7 +1542,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .progress-bar {
   flex: 1;
   height: 8px;
-  background: var(--color-bg-elevated);
+  background: var(--color-border);
   border-radius: 4px;
   overflow: hidden;
 }

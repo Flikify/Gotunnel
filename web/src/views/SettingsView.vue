@@ -235,7 +235,7 @@ onMounted(() => {
 <style scoped>
 .settings-page {
   min-height: calc(100vh - 108px);
-  background: var(--color-bg-primary);
+  background: transparent;
   position: relative;
   overflow: hidden;
   padding: 32px;
