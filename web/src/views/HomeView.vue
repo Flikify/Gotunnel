@@ -1,33 +1,46 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { getClients } from '../api'
+import { getClients, getTrafficStats, getTrafficHourly, type TrafficRecord } from '../api'
 import type { ClientStatus } from '../types'
 
 const clients = ref<ClientStatus[]>([])
 
-// Mock data for traffic (API not implemented yet)
-const trafficStats = ref({
-  inbound: 0,
-  outbound: 0,
-  inboundUnit: 'GB',
-  outboundUnit: 'GB'
-})
+// 流量统计数据
+const traffic24h = ref({ inbound: 0, outbound: 0 })
+const trafficTotal = ref({ inbound: 0, outbound: 0 })
+const trafficHistory = ref<TrafficRecord[]>([])
 
-// Mock 24h traffic data for chart
-const trafficHistory = ref<Array<{ hour: string; inbound: number; outbound: number }>>([])
-
-const generateMockTrafficData = () => {
-  const data = []
-  const now = new Date()
-  for (let i = 23; i >= 0; i--) {
-    const hour = new Date(now.getTime() - i * 60 * 60 * 1000)
-    data.push({
-      hour: hour.getHours().toString().padStart(2, '0') + ':00',
-      inbound: Math.random() * 100,
-      outbound: Math.random() * 80
-    })
+// 格式化字节数
+const formatBytes = (bytes: number): { value: string; unit: string } => {
+  if (bytes === 0) return { value: '0', unit: 'B' }
+  const k = 1024
+  const sizes: string[] = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
+  return {
+    value: parseFloat((bytes / Math.pow(k, i)).toFixed(2)).toString(),
+    unit: sizes[i] as string
   }
-  trafficHistory.value = data
+}
+
+// 加载流量统计
+const loadTrafficStats = async () => {
+  try {
+    const { data } = await getTrafficStats()
+    traffic24h.value = data.traffic_24h
+    trafficTotal.value = data.traffic_total
+  } catch (e) {
+    console.error('Failed to load traffic stats', e)
+  }
+}
+
+// 加载每小时流量
+const loadTrafficHourly = async () => {
+  try {
+    const { data } = await getTrafficHourly()
+    trafficHistory.value = data.records || []
+  } catch (e) {
+    console.error('Failed to load hourly traffic', e)
+  }
 }
 
 const loadClients = async () => {
@@ -47,6 +60,12 @@ const totalRules = computed(() => {
   return clients.value.reduce((sum, c) => sum + (c.rule_count || 0), 0)
 })
 
+// 格式化后的流量统计
+const formatted24hInbound = computed(() => formatBytes(traffic24h.value.inbound))
+const formatted24hOutbound = computed(() => formatBytes(traffic24h.value.outbound))
+const formattedTotalInbound = computed(() => formatBytes(trafficTotal.value.inbound))
+const formattedTotalOutbound = computed(() => formatBytes(trafficTotal.value.outbound))
+
 // Chart helpers
 const maxTraffic = computed(() => {
   const max = Math.max(
@@ -59,9 +78,16 @@ const getBarHeight = (value: number) => {
   return (value / maxTraffic.value) * 100
 }
 
+// 格式化时间戳为小时
+const formatHour = (timestamp: number) => {
+  const date = new Date(timestamp * 1000)
+  return date.getHours().toString().padStart(2, '0') + ':00'
+}
+
 onMounted(() => {
   loadClients()
-  generateMockTrafficData()
+  loadTrafficStats()
+  loadTrafficHourly()
 })
 </script>
 
@@ -94,9 +120,9 @@ onMounted(() => {
             </svg>
           </div>
           <div class="stat-content">
-            <span class="stat-label">出站流量</span>
-            <span class="stat-value">{{ trafficStats.outbound.toFixed(2) }}</span>
-            <span class="stat-unit">{{ trafficStats.outboundUnit }}</span>
+            <span class="stat-label">24h出站</span>
+            <span class="stat-value">{{ formatted24hOutbound.value }}</span>
+            <span class="stat-unit">{{ formatted24hOutbound.unit }}</span>
           </div>
         </div>
 
@@ -108,9 +134,37 @@ onMounted(() => {
             </svg>
           </div>
           <div class="stat-content">
-            <span class="stat-label">入站流量</span>
-            <span class="stat-value">{{ trafficStats.inbound.toFixed(2) }}</span>
-            <span class="stat-unit">{{ trafficStats.inboundUnit }}</span>
+            <span class="stat-label">24h入站</span>
+            <span class="stat-value">{{ formatted24hInbound.value }}</span>
+            <span class="stat-unit">{{ formatted24hInbound.unit }}</span>
+          </div>
+        </div>
+
+        <!-- Total Outbound Traffic -->
+        <div class="stat-card glass-stat">
+          <div class="stat-icon total-out">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">总出站</span>
+            <span class="stat-value">{{ formattedTotalOutbound.value }}</span>
+            <span class="stat-unit">{{ formattedTotalOutbound.unit }}</span>
+          </div>
+        </div>
+
+        <!-- Total Inbound Traffic -->
+        <div class="stat-card glass-stat">
+          <div class="stat-icon total-in">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 13l-5 5m0 0l-5-5m5 5V6" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">总入站</span>
+            <span class="stat-value">{{ formattedTotalInbound.value }}</span>
+            <span class="stat-unit">{{ formattedTotalInbound.unit }}</span>
           </div>
         </div>
 
@@ -168,12 +222,12 @@ onMounted(() => {
                   <div class="bar inbound" :style="{ height: getBarHeight(data.inbound) + '%' }"></div>
                   <div class="bar outbound" :style="{ height: getBarHeight(data.outbound) + '%' }"></div>
                 </div>
-                <span class="bar-label">{{ data.hour }}</span>
+                <span class="bar-label">{{ formatHour(data.timestamp) }}</span>
               </div>
             </div>
           </div>
-          <div class="chart-hint">
-            <span>流量统计功能开发中，当前显示模拟数据</span>
+          <div class="chart-hint" v-if="trafficHistory.length === 0">
+            <span>暂无流量数据</span>
           </div>
         </div>
       </div>
@@ -268,7 +322,7 @@ onMounted(() => {
 /* Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: 32px;
 }
@@ -336,6 +390,16 @@ onMounted(() => {
 .stat-icon.rules {
   background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
   box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4);
+}
+
+.stat-icon.total-out {
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.4);
+}
+
+.stat-icon.total-in {
+  background: linear-gradient(135deg, #c084fc 0%, #9333ea 100%);
+  box-shadow: 0 4px 16px rgba(147, 51, 234, 0.4);
 }
 
 .stat-icon svg {

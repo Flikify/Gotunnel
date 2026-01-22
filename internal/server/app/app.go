@@ -21,16 +21,18 @@ type WebServer struct {
 	Config        *config.ServerConfig
 	ConfigPath    string
 	JSPluginStore db.JSPluginStore
+	TrafficStore  db.TrafficStore
 }
 
 // NewWebServer 创建Web服务
-func NewWebServer(cs db.ClientStore, srv router.ServerInterface, cfg *config.ServerConfig, cfgPath string, jsStore db.JSPluginStore) *WebServer {
+func NewWebServer(cs db.ClientStore, srv router.ServerInterface, cfg *config.ServerConfig, cfgPath string, store db.Store) *WebServer {
 	return &WebServer{
 		ClientStore:   cs,
 		Server:        srv,
 		Config:        cfg,
 		ConfigPath:    cfgPath,
-		JSPluginStore: jsStore,
+		JSPluginStore: store,
+		TrafficStore:  store,
 	}
 }
 
@@ -108,4 +110,9 @@ func (w *WebServer) SaveConfig() error {
 // GetJSPluginStore 获取 JS 插件存储
 func (w *WebServer) GetJSPluginStore() db.JSPluginStore {
 	return w.JSPluginStore
+}
+
+// GetTrafficStore 获取流量存储
+func (w *WebServer) GetTrafficStore() db.TrafficStore {
+	return w.TrafficStore
 }

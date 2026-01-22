@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { CloudDownloadOutline, RefreshOutline, ServerOutline } from '@vicons/ionicons5'
+import { CloudDownloadOutline, RefreshOutline, ServerOutline, SettingsOutline, SaveOutline } from '@vicons/ionicons5'
 import GlassTag from '../components/GlassTag.vue'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
 import {
   getVersionInfo, checkServerUpdate, applyServerUpdate,
-  type UpdateInfo, type VersionInfo
+  getServerConfig, updateServerConfig,
+  type UpdateInfo, type VersionInfo, type ServerConfigResponse
 } from '../api'
 
 const message = useToast()
@@ -18,6 +19,20 @@ const loading = ref(true)
 const checkingServer = ref(false)
 const updatingServer = ref(false)
 
+// 服务器配置
+const serverConfig = ref<ServerConfigResponse | null>(null)
+const configLoading = ref(false)
+const savingConfig = ref(false)
+
+// 配置表单
+const configForm = ref({
+  bind_addr: '',
+  heartbeat_sec: 30,
+  heartbeat_timeout: 90,
+  web_username: '',
+  web_password: ''
+})
+
 const loadVersionInfo = async () => {
   try {
     const { data } = await getVersionInfo()
@@ -26,6 +41,53 @@ const loadVersionInfo = async () => {
     console.error('Failed to load version info', e)
   } finally {
     loading.value = false
+  }
+}
+
+const loadServerConfig = async () => {
+  configLoading.value = true
+  try {
+    const { data } = await getServerConfig()
+    serverConfig.value = data
+    // 填充表单
+    configForm.value = {
+      bind_addr: data.server.bind_addr,
+      heartbeat_sec: data.server.heartbeat_sec,
+      heartbeat_timeout: data.server.heartbeat_timeout,
+      web_username: data.web.username,
+      web_password: ''
+    }
+  } catch (e) {
+    console.error('Failed to load server config', e)
+  } finally {
+    configLoading.value = false
+  }
+}
+
+const handleSaveConfig = async () => {
+  savingConfig.value = true
+  try {
+    const updateReq: any = {
+      server: {
+        bind_addr: configForm.value.bind_addr,
+        heartbeat_sec: configForm.value.heartbeat_sec,
+        heartbeat_timeout: configForm.value.heartbeat_timeout
+      },
+      web: {
+        username: configForm.value.web_username
+      }
+    }
+    // 只有填写了密码才更新
+    if (configForm.value.web_password) {
+      updateReq.web.password = configForm.value.web_password
+    }
+    await updateServerConfig(updateReq)
+    message.success('配置已保存，部分配置需要重启服务后生效')
+    configForm.value.web_password = ''
+  } catch (e: any) {
+    message.error(e.response?.data || '保存配置失败')
+  } finally {
+    savingConfig.value = false
   }
 }
 
@@ -83,6 +145,7 @@ const formatBytes = (bytes: number): string => {
 
 onMounted(() => {
   loadVersionInfo()
+  loadServerConfig()
 })
 </script>
 
@@ -137,6 +200,87 @@ onMounted(() => {
             </div>
           </div>
           <div v-else class="empty-state">无法加载版本信息</div>
+        </div>
+      </div>
+
+      <!-- Server Config Card -->
+      <div class="glass-card">
+        <div class="card-header">
+          <h3>服务器配置</h3>
+          <SettingsOutline class="header-icon" />
+        </div>
+        <div class="card-body">
+          <div v-if="configLoading" class="loading-state">加载中...</div>
+          <div v-else-if="serverConfig" class="config-form">
+            <div class="form-group">
+              <label class="form-label">服务器地址</label>
+              <input
+                v-model="configForm.bind_addr"
+                type="text"
+                class="glass-input"
+                placeholder="0.0.0.0"
+              />
+              <span class="form-hint">服务器监听地址，修改后需重启生效</span>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">心跳间隔 (秒)</label>
+                <input
+                  v-model.number="configForm.heartbeat_sec"
+                  type="number"
+                  class="glass-input"
+                  min="1"
+                  max="300"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">心跳超时 (秒)</label>
+                <input
+                  v-model.number="configForm.heartbeat_timeout"
+                  type="number"
+                  class="glass-input"
+                  min="1"
+                  max="600"
+                />
+              </div>
+            </div>
+
+            <div class="form-divider"></div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Web 用户名</label>
+                <input
+                  v-model="configForm.web_username"
+                  type="text"
+                  class="glass-input"
+                  placeholder="admin"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Web 密码</label>
+                <input
+                  v-model="configForm.web_password"
+                  type="password"
+                  class="glass-input"
+                  placeholder="留空则不修改"
+                />
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button
+                class="glass-btn primary"
+                :disabled="savingConfig"
+                @click="handleSaveConfig"
+              >
+                <SaveOutline class="btn-icon" />
+                保存配置
+              </button>
+            </div>
+          </div>
+          <div v-else class="empty-state">无法加载配置信息</div>
         </div>
       </div>
 
@@ -405,5 +549,72 @@ onMounted(() => {
 .btn-icon {
   width: 14px;
   height: 14px;
+}
+
+/* Config Form */
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.form-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 500px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 8px 0;
+}
+
+.form-actions {
+  margin-top: 8px;
+}
+
+/* Glass Input */
+.glass-input {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: white;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.glass-input:focus {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.glass-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
 }
 </style>

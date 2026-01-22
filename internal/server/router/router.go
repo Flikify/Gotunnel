@@ -110,6 +110,11 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		logHandler := handler.NewLogHandler(app)
 		api.GET("/client/:id/logs", logHandler.StreamLogs)
 
+		// 流量统计
+		trafficHandler := handler.NewTrafficHandler(app)
+		api.GET("/traffic/stats", trafficHandler.GetStats)
+		api.GET("/traffic/hourly", trafficHandler.GetHourly)
+
 		// 插件 API 代理 (通过 Web API 访问客户端插件)
 		pluginAPIHandler := handler.NewPluginAPIHandler(app)
 		api.Any("/client/:id/plugin-api/:pluginID/*route", pluginAPIHandler.ProxyRequest)

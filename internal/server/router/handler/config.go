@@ -42,10 +42,9 @@ func (h *ConfigHandler) Get(c *gin.Context) {
 			HeartbeatTimeout: cfg.Server.HeartbeatTimeout,
 		},
 		Web: dto.WebConfigInfo{
-			Enabled:  cfg.Web.Enabled,
-			BindAddr: cfg.Web.BindAddr,
-			BindPort: cfg.Web.BindPort,
-			Username: cfg.Web.Username,
+			Enabled:  cfg.Server.Web.Enabled,
+			BindPort: cfg.Server.Web.BindPort,
+			Username: cfg.Server.Web.Username,
 			Password: "****",
 		},
 	}
@@ -93,15 +92,12 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 
 	// 更新 Web 配置
 	if req.Web != nil {
-		cfg.Web.Enabled = req.Web.Enabled
-		if req.Web.BindAddr != "" {
-			cfg.Web.BindAddr = req.Web.BindAddr
-		}
+		cfg.Server.Web.Enabled = req.Web.Enabled
 		if req.Web.BindPort > 0 {
-			cfg.Web.BindPort = req.Web.BindPort
+			cfg.Server.Web.BindPort = req.Web.BindPort
 		}
-		cfg.Web.Username = req.Web.Username
-		cfg.Web.Password = req.Web.Password
+		cfg.Server.Web.Username = req.Web.Username
+		cfg.Server.Web.Password = req.Web.Password
 	}
 
 	if err := h.app.SaveConfig(); err != nil {

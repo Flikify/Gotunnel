@@ -180,3 +180,47 @@ export const createLogStream = (
 
   return eventSource
 }
+
+// 流量统计
+export interface TrafficStats {
+  traffic_24h: { inbound: number; outbound: number }
+  traffic_total: { inbound: number; outbound: number }
+}
+
+export interface TrafficRecord {
+  timestamp: number
+  inbound: number
+  outbound: number
+}
+
+export const getTrafficStats = () => get<TrafficStats>('/traffic/stats')
+export const getTrafficHourly = () => get<{ records: TrafficRecord[] }>('/traffic/hourly')
+
+// 服务器配置
+export interface ServerConfigInfo {
+  bind_addr: string
+  bind_port: number
+  token: string
+  heartbeat_sec: number
+  heartbeat_timeout: number
+}
+
+export interface WebConfigInfo {
+  enabled: boolean
+  bind_port: number
+  username: string
+  password: string
+}
+
+export interface ServerConfigResponse {
+  server: ServerConfigInfo
+  web: WebConfigInfo
+}
+
+export interface UpdateServerConfigRequest {
+  server?: Partial<ServerConfigInfo>
+  web?: Partial<WebConfigInfo>
+}
+
+export const getServerConfig = () => get<ServerConfigResponse>('/config')
+export const updateServerConfig = (config: UpdateServerConfigRequest) => put('/config', config)

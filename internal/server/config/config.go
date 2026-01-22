@@ -11,7 +11,6 @@ import (
 // ServerConfig 服务端配置
 type ServerConfig struct {
 	Server      ServerSettings      `yaml:"server"`
-	Web         WebSettings         `yaml:"web"`
 	PluginStore PluginStoreSettings `yaml:"plugin_store"`
 	JSPlugins   []JSPluginConfig    `yaml:"js_plugins,omitempty"`
 }
@@ -44,19 +43,19 @@ func (s *PluginStoreSettings) GetPluginStoreURL() string {
 
 // ServerSettings 服务端设置
 type ServerSettings struct {
-	BindAddr         string `yaml:"bind_addr"`
-	BindPort         int    `yaml:"bind_port"`
-	Token            string `yaml:"token"`
-	HeartbeatSec     int    `yaml:"heartbeat_sec"`
-	HeartbeatTimeout int    `yaml:"heartbeat_timeout"`
-	DBPath           string `yaml:"db_path"`
-	TLSDisabled      bool   `yaml:"tls_disabled"` // 默认启用 TLS，设置为 true 禁用
+	BindAddr         string      `yaml:"bind_addr"`
+	BindPort         int         `yaml:"bind_port"`
+	Token            string      `yaml:"token"`
+	HeartbeatSec     int         `yaml:"heartbeat_sec"`
+	HeartbeatTimeout int         `yaml:"heartbeat_timeout"`
+	DBPath           string      `yaml:"db_path"`
+	TLSDisabled      bool        `yaml:"tls_disabled"`
+	Web              WebSettings `yaml:"web"`
 }
 
 // WebSettings Web控制台设置
 type WebSettings struct {
 	Enabled  bool   `yaml:"enabled"`
-	BindAddr string `yaml:"bind_addr"`
 	BindPort int    `yaml:"bind_port"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
@@ -99,12 +98,9 @@ func setDefaults(cfg *ServerConfig) {
 	}
 
 	// Web 默认启用
-	if cfg.Web.BindAddr == "" {
-		cfg.Web.BindAddr = "0.0.0.0"
-	}
-	if cfg.Web.BindPort == 0 {
-		cfg.Web.BindPort = 7500
-		cfg.Web.Enabled = true
+	if cfg.Server.Web.BindPort == 0 {
+		cfg.Server.Web.BindPort = 7500
+		cfg.Server.Web.Enabled = true
 	}
 
 	// Token 未配置时自动生成 32 位
@@ -126,11 +122,11 @@ func generateToken(length int) string {
 
 // GenerateWebCredentials 生成 Web 控制台凭据
 func GenerateWebCredentials(cfg *ServerConfig) bool {
-	if cfg.Web.Username == "" {
-		cfg.Web.Username = "admin"
+	if cfg.Server.Web.Username == "" {
+		cfg.Server.Web.Username = "admin"
 	}
-	if cfg.Web.Password == "" {
-		cfg.Web.Password = generateToken(16)
+	if cfg.Server.Web.Password == "" {
+		cfg.Server.Web.Password = generateToken(16)
 		return true // 表示生成了新密码
 	}
 	return false

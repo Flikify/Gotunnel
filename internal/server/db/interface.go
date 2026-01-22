@@ -76,5 +76,21 @@ type JSPluginStore interface {
 type Store interface {
 	ClientStore
 	JSPluginStore
+	TrafficStore
 	Close() error
+}
+
+// TrafficRecord 流量记录
+type TrafficRecord struct {
+	Timestamp int64 `json:"timestamp"` // Unix 时间戳（小时级别）
+	Inbound   int64 `json:"inbound"`   // 入站流量（字节）
+	Outbound  int64 `json:"outbound"`  // 出站流量（字节）
+}
+
+// TrafficStore 流量存储接口
+type TrafficStore interface {
+	AddTraffic(inbound, outbound int64) error
+	GetTotalTraffic() (inbound, outbound int64, err error)
+	Get24HourTraffic() (inbound, outbound int64, err error)
+	GetHourlyTraffic(hours int) ([]TrafficRecord, error)
 }

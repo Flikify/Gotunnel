@@ -14,6 +14,7 @@ type AppInterface interface {
 	GetConfigPath() string
 	SaveConfig() error
 	GetJSPluginStore() db.JSPluginStore
+	GetTrafficStore() db.TrafficStore
 }
 
 // ServerInterface 服务端接口
