@@ -660,11 +660,12 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                 刷新
               </button>
             </div>
-            <div class="card-body">
-              <div v-if="!systemStats" class="empty-hint">
-                {{ loadingStats ? '加载中...' : '点击刷新获取状态' }}
-              </div>
-              <template v-else>
+            <div class="card-body system-stats-body">
+              <Transition name="fade-slide" mode="out-in">
+                <div v-if="!systemStats" class="empty-hint" key="empty">
+                  {{ loadingStats ? '加载中...' : '点击刷新获取状态' }}
+                </div>
+                <div v-else class="system-stats-content" key="stats">
                 <div class="system-stat-item">
                   <span class="system-stat-label">CPU</span>
                   <div class="progress-bar">
@@ -692,7 +693,8 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                 <div class="system-stat-detail">
                   {{ formatBytes(systemStats.disk_used) }} / {{ formatBytes(systemStats.disk_total) }}
                 </div>
-              </template>
+                </div>
+              </Transition>
             </div>
           </div>
 
@@ -917,9 +919,54 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   padding: 32px;
 }
 
-/* Hide particles */
+/* Particles */
 .particles {
-  display: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.15;
+  filter: blur(60px);
+  animation: float 20s ease-in-out infinite;
+}
+
+.particle-1 {
+  width: 350px;
+  height: 350px;
+  background: var(--color-accent);
+  top: -80px;
+  right: -80px;
+}
+
+.particle-2 {
+  width: 280px;
+  height: 280px;
+  background: #8b5cf6;
+  bottom: -40px;
+  left: -40px;
+  animation-delay: -5s;
+}
+
+.particle-3 {
+  width: 220px;
+  height: 220px;
+  background: var(--color-success);
+  top: 40%;
+  left: 30%;
+  animation-delay: -10s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -30px) scale(1.05); }
+  50% { transform: translate(-20px, 20px) scale(0.95); }
+  75% { transform: translate(-30px, -20px) scale(1.02); }
 }
 
 .client-content {
@@ -1042,6 +1089,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   display: grid;
   grid-template-columns: 300px 1fr;
   gap: 24px;
+  align-items: start;
 }
 
 @media (max-width: 900px) {
@@ -1523,6 +1571,31 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .settings-icon {
   width: 16px;
   height: 16px;
+}
+
+/* System Stats Transition */
+.system-stats-body {
+  overflow: hidden;
+}
+
+.system-stats-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 
 /* System Stats */

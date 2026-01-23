@@ -243,7 +243,52 @@ onMounted(() => {
 
 /* Hide particles */
 .particles {
-  display: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.15;
+  filter: blur(60px);
+  animation: float 20s ease-in-out infinite;
+}
+
+.particle-1 {
+  width: 350px;
+  height: 350px;
+  background: var(--color-accent);
+  top: -80px;
+  right: -80px;
+}
+
+.particle-2 {
+  width: 280px;
+  height: 280px;
+  background: #8b5cf6;
+  bottom: -40px;
+  left: -40px;
+  animation-delay: -5s;
+}
+
+.particle-3 {
+  width: 220px;
+  height: 220px;
+  background: var(--color-success);
+  top: 40%;
+  left: 30%;
+  animation-delay: -10s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -30px) scale(1.05); }
+  50% { transform: translate(-20px, 20px) scale(0.95); }
+  75% { transform: translate(-30px, -20px) scale(1.02); }
 }
 
 .settings-content {
