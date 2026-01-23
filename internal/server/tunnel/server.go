@@ -348,7 +348,7 @@ func (s *Server) sendAuthResponse(conn net.Conn, success bool, message, clientID
 	return protocol.WriteMessage(conn, msg)
 }
 
-// sendProxyConfig 发送代理配置
+// sendProxyConfig 发送代理配置并等待客户端确认
 func (s *Server) sendProxyConfig(session *yamux.Session, rules []protocol.ProxyRule) error {
 	stream, err := session.Open()
 	if err != nil {
@@ -361,7 +361,20 @@ func (s *Server) sendProxyConfig(session *yamux.Session, rules []protocol.ProxyR
 	if err != nil {
 		return err
 	}
-	return protocol.WriteMessage(stream, msg)
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return err
+	}
+
+	// 等待客户端确认
+	ack, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return fmt.Errorf("wait config ack: %w", err)
+	}
+	if ack.Type != protocol.MsgTypeProxyReady {
+		return fmt.Errorf("unexpected ack type: %d", ack.Type)
+	}
+
+	return nil
 }
 
 // registerClient 注册客户端
