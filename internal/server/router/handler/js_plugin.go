@@ -177,8 +177,7 @@ func (h *JSPluginHandler) PushToClient(c *gin.Context) {
 	c.ShouldBindJSON(&pushReq) // 忽略错误，允许空请求体
 
 	// 检查客户端是否在线
-	online, _, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
-	if !online {
+	if !h.app.GetServer().IsClientOnline(clientID) {
 		ClientNotOnline(c)
 		return
 	}

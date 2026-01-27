@@ -87,6 +87,7 @@ type Message struct {
 type AuthRequest struct {
 	ClientID string `json:"client_id"`
 	Token    string `json:"token"`
+	Name     string `json:"name,omitempty"`    // 客户端名称（主机名）
 	OS       string `json:"os,omitempty"`      // 客户端操作系统
 	Arch     string `json:"arch,omitempty"`    // 客户端架构
 	Version  string `json:"version,omitempty"` // 客户端版本

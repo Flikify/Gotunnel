@@ -82,8 +82,7 @@ func (h *StoreHandler) Install(c *gin.Context) {
 	}
 
 	// 检查客户端是否在线
-	online, _, _, _, _, _ := h.app.GetServer().GetClientStatus(req.ClientID)
-	if !online {
+	if !h.app.GetServer().IsClientOnline(req.ClientID) {
 		ClientNotOnline(c)
 		return
 	}

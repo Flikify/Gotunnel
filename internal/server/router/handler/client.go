@@ -115,7 +115,7 @@ func (h *ClientHandler) Get(c *gin.Context) {
 		return
 	}
 
-	online, lastPing, remoteAddr, clientOS, clientArch, clientVersion := h.app.GetServer().GetClientStatus(clientID)
+	online, lastPing, remoteAddr, clientName, clientOS, clientArch, clientVersion := h.app.GetServer().GetClientStatus(clientID)
 
 	// 复制插件列表
 	plugins := make([]db.ClientPlugin, len(client.Plugins))
@@ -145,9 +145,15 @@ func (h *ClientHandler) Get(c *gin.Context) {
 		}
 	}
 
+	// 如果客户端在线且有名称，优先使用在线名称
+	nickname := client.Nickname
+	if online && clientName != "" && nickname == "" {
+		nickname = clientName
+	}
+
 	resp := dto.ClientResponse{
 		ID:         client.ID,
-		Nickname:   client.Nickname,
+		Nickname:   nickname,
 		Rules:      client.Rules,
 		Plugins:    plugins,
 		Online:     online,
@@ -242,8 +248,7 @@ func (h *ClientHandler) Delete(c *gin.Context) {
 func (h *ClientHandler) PushConfig(c *gin.Context) {
 	clientID := c.Param("id")
 
-	online, _, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
-	if !online {
+	if !h.app.GetServer().IsClientOnline(clientID) {
 		ClientNotOnline(c)
 		return
 	}
@@ -311,8 +316,7 @@ func (h *ClientHandler) Restart(c *gin.Context) {
 func (h *ClientHandler) InstallPlugins(c *gin.Context) {
 	clientID := c.Param("id")
 
-	online, _, _, _, _, _ := h.app.GetServer().GetClientStatus(clientID)
-	if !online {
+	if !h.app.GetServer().IsClientOnline(clientID) {
 		ClientNotOnline(c)
 		return
 	}

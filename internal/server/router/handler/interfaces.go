@@ -19,11 +19,13 @@ type AppInterface interface {
 
 // ServerInterface 服务端接口
 type ServerInterface interface {
-	GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientOS, clientArch, clientVersion string)
+	IsClientOnline(clientID string) bool
+	GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientName, clientOS, clientArch, clientVersion string)
 	GetAllClientStatus() map[string]struct {
 		Online     bool
 		LastPing   string
 		RemoteAddr string
+		Name       string
 		OS         string
 		Arch       string
 		Version    string

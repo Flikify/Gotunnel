@@ -83,6 +83,7 @@ type JSPluginEntry struct {
 // ClientSession 客户端会话
 type ClientSession struct {
 	ID         string
+	Name       string // 客户端名称（主机名）
 	RemoteAddr string // 客户端 IP 地址
 	OS         string // 客户端操作系统
 	Arch       string // 客户端架构
@@ -269,13 +270,21 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// 检查客户端是否存在，不存在则自动创建
 	exists, err := s.clientStore.ClientExists(clientID)
 	if err != nil || !exists {
-		newClient := &db.Client{ID: clientID, Rules: []protocol.ProxyRule{}}
+		newClient := &db.Client{ID: clientID, Nickname: authReq.Name, Rules: []protocol.ProxyRule{}}
 		if err := s.clientStore.CreateClient(newClient); err != nil {
 			log.Printf("[Server] Create client error: %v", err)
 			s.sendAuthResponse(conn, false, "failed to create client", "")
 			return
 		}
-		log.Printf("[Server] New client registered: %s", clientID)
+		log.Printf("[Server] New client registered: %s (%s)", clientID, authReq.Name)
+	} else if authReq.Name != "" {
+		// 客户端已存在，更新名称（如果提供了新名称）
+		if client, err := s.clientStore.GetClient(clientID); err == nil {
+			if client.Nickname == "" || client.Nickname != authReq.Name {
+				client.Nickname = authReq.Name
+				s.clientStore.UpdateClient(client)
+			}
+		}
 	}
 
 	rules, _ := s.clientStore.GetClientRules(clientID)
@@ -290,11 +299,11 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	security.LogAuthSuccess(clientIP, clientID)
-	s.setupClientSession(conn, clientID, authReq.OS, authReq.Arch, authReq.Version, rules)
+	s.setupClientSession(conn, clientID, authReq.Name, authReq.OS, authReq.Arch, authReq.Version, rules)
 }
 
 // setupClientSession 建立客户端会话
-func (s *Server) setupClientSession(conn net.Conn, clientID, clientOS, clientArch, clientVersion string, rules []protocol.ProxyRule) {
+func (s *Server) setupClientSession(conn net.Conn, clientID, clientName, clientOS, clientArch, clientVersion string, rules []protocol.ProxyRule) {
 	session, err := yamux.Server(conn, nil)
 	if err != nil {
 		log.Printf("[Server] Yamux error: %v", err)
@@ -309,6 +318,7 @@ func (s *Server) setupClientSession(conn net.Conn, clientID, clientOS, clientArc
 
 	cs := &ClientSession{
 		ID:         clientID,
+		Name:       clientName,
 		RemoteAddr: remoteAddr,
 		OS:         clientOS,
 		Arch:       clientArch,
@@ -586,16 +596,24 @@ func (s *Server) sendHeartbeat(cs *ClientSession) bool {
 }
 
 // GetClientStatus 获取客户端状态
-func (s *Server) GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientOS, clientArch, clientVersion string) {
+func (s *Server) GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientName, clientOS, clientArch, clientVersion string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if cs, ok := s.clients[clientID]; ok {
 		cs.mu.Lock()
 		defer cs.mu.Unlock()
-		return true, cs.LastPing.Format(time.RFC3339), cs.RemoteAddr, cs.OS, cs.Arch, cs.Version
+		return true, cs.LastPing.Format(time.RFC3339), cs.RemoteAddr, cs.Name, cs.OS, cs.Arch, cs.Version
 	}
-	return false, "", "", "", "", ""
+	return false, "", "", "", "", "", ""
+}
+
+// IsClientOnline 检查客户端是否在线
+func (s *Server) IsClientOnline(clientID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.clients[clientID]
+	return ok
 }
 
 // GetClientPluginStatus 获取客户端插件运行状态
@@ -646,6 +664,7 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 	Online     bool
 	LastPing   string
 	RemoteAddr string
+	Name       string
 	OS         string
 	Arch       string
 	Version    string
@@ -662,6 +681,7 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 		Online     bool
 		LastPing   string
 		RemoteAddr string
+		Name       string
 		OS         string
 		Arch       string
 		Version    string
@@ -673,6 +693,7 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 			Online     bool
 			LastPing   string
 			RemoteAddr string
+			Name       string
 			OS         string
 			Arch       string
 			Version    string
@@ -680,6 +701,7 @@ func (s *Server) GetAllClientStatus() map[string]struct {
 			Online:     true,
 			LastPing:   cs.LastPing.Format(time.RFC3339),
 			RemoteAddr: cs.RemoteAddr,
+			Name:       cs.Name,
 			OS:         cs.OS,
 			Arch:       cs.Arch,
 			Version:    cs.Version,

@@ -32,7 +32,6 @@ const (
 	reconnectDelay   = 5 * time.Second
 	disconnectDelay  = 3 * time.Second
 	udpBufferSize    = 65535
-	idFileName       = "id"
 )
 
 // Client 隧道客户端
@@ -40,6 +39,7 @@ type Client struct {
 	ServerAddr     string
 	Token          string
 	ID             string
+	Name           string // 客户端名称（主机名）
 	TLSEnabled     bool
 	TLSConfig      *tls.Config
 	DataDir        string // 数据目录
@@ -64,9 +64,13 @@ func NewClient(serverAddr, token, id string) *Client {
 		log.Printf("Failed to create data dir: %v", err)
 	}
 
+	// ID 优先级：命令行参数 > 机器ID
 	if id == "" {
-		id = loadClientID(dataDir)
+		id = getMachineID()
 	}
+
+	// 获取主机名作为客户端名称
+	hostname, _ := os.Hostname()
 
 	// 初始化日志收集器
 	logger, err := NewLogger(dataDir)
@@ -78,6 +82,7 @@ func NewClient(serverAddr, token, id string) *Client {
 		ServerAddr:     serverAddr,
 		Token:          token,
 		ID:             id,
+		Name:           hostname,
 		DataDir:        dataDir,
 		runningPlugins: make(map[string]plugin.ClientPlugin),
 		logger:         logger,
@@ -92,27 +97,6 @@ func (c *Client) InitVersionStore() error {
 	}
 	c.versionStore = store
 	return nil
-}
-
-// getIDFilePath 获取 ID 文件路径
-func getIDFilePath(dataDir string) string {
-	return filepath.Join(dataDir, idFileName)
-}
-
-// loadClientID 从本地文件加载客户端 ID
-func loadClientID(dataDir string) string {
-	data, err := os.ReadFile(getIDFilePath(dataDir))
-	if err != nil {
-		return ""
-	}
-	return string(data)
-}
-
-// saveClientID 保存客户端 ID 到本地文件
-func saveClientID(dataDir, id string) {
-	if err := os.WriteFile(getIDFilePath(dataDir), []byte(id), 0600); err != nil {
-		log.Printf("Failed to save client ID: %v", err)
-	}
 }
 
 // SetPluginRegistry 设置插件注册表
@@ -181,6 +165,7 @@ func (c *Client) connect() error {
 	authReq := protocol.AuthRequest{
 		ClientID: c.ID,
 		Token:    c.Token,
+		Name:     c.Name,
 		OS:       runtime.GOOS,
 		Arch:     runtime.GOARCH,
 		Version:  version.Version,
@@ -207,11 +192,10 @@ func (c *Client) connect() error {
 		return fmt.Errorf("auth failed: %s", authResp.Message)
 	}
 
-	// 如果服务端分配了新 ID，则更新并保存
+	// 如果服务端分配了新 ID，则更新
 	if authResp.ClientID != "" && authResp.ClientID != c.ID {
 		c.ID = authResp.ClientID
-		saveClientID(c.DataDir, c.ID)
-		c.logf("New ID assigned and saved: %s", c.ID)
+		c.logf("ID updated to: %s", c.ID)
 	}
 
 	c.logf("Authenticated as %s", c.ID)
