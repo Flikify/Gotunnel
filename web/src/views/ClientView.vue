@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
-  PushOutline, AddOutline, StorefrontOutline, DocumentTextOutline,
+  PushOutline, AddOutline, StorefrontOutline,
   ExtensionPuzzleOutline, SettingsOutline, RefreshOutline
 } from '@vicons/ionicons5'
 import GlassModal from '../components/GlassModal.vue'
@@ -19,7 +19,6 @@ import {
   type UpdateInfo, type SystemStats
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
-import LogViewer from '../components/LogViewer.vue'
 import InlineLogPanel from '../components/InlineLogPanel.vue'
 
 const route = useRoute()
@@ -513,9 +512,6 @@ onUnmounted(() => {
   }
 })
 
-// Log Viewer
-const showLogViewer = ref(false)
-
 // Plugin Menu
 const activePluginMenu = ref('')
 const togglePluginMenu = (pluginId: string) => {
@@ -577,10 +573,6 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
           <button v-if="online" class="glass-btn primary" @click="pushConfigToClient(clientId).then(() => message.success('已推送'))">
             <PushOutline class="btn-icon" />
             <span>推送配置</span>
-          </button>
-          <button class="glass-btn" @click="showLogViewer=true">
-            <DocumentTextOutline class="btn-icon" />
-            <span>日志</span>
           </button>
           <button class="glass-btn danger" @click="confirmDelete">
             <TrashOutline class="btn-icon" />
@@ -905,8 +897,6 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
         <button class="glass-btn primary" @click="confirmInstallPlugin">确认安装</button>
       </template>
     </GlassModal>
-
-    <LogViewer :visible="showLogViewer" @close="showLogViewer = false" :client-id="clientId" />
   </div>
 </template>
 

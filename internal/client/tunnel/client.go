@@ -55,9 +55,21 @@ type Client struct {
 
 // NewClient 创建客户端
 func NewClient(serverAddr, token, id string) *Client {
-	// 默认数据目录
-	home, _ := os.UserHomeDir()
-	dataDir := filepath.Join(home, ".gotunnel")
+	// 默认数据目录：优先使用用户主目录，失败时回退到当前工作目录
+	var dataDir string
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		dataDir = filepath.Join(home, ".gotunnel")
+	} else {
+		// UserHomeDir 失败（如 Android adb shell 环境），使用当前工作目录
+		if cwd, err := os.Getwd(); err == nil {
+			dataDir = filepath.Join(cwd, ".gotunnel")
+			log.Printf("[Client] UserHomeDir unavailable, using current directory: %s", dataDir)
+		} else {
+			// 最后回退到相对路径
+			dataDir = ".gotunnel"
+			log.Printf("[Client] Warning: using relative path for data directory")
+		}
+	}
 
 	// 确保数据目录存在
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
@@ -889,55 +901,96 @@ func (c *Client) sendUpdateResult(stream net.Conn, success bool, message string)
 func (c *Client) performSelfUpdate(downloadURL string) error {
 	c.logf("Starting self-update from: %s", downloadURL)
 
-	// 使用共享的下载和解压逻辑
-	binaryPath, cleanup, err := update.DownloadAndExtract(downloadURL, "client")
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
 	// 获取当前可执行文件路径
 	currentPath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("get executable: %w", err)
+		c.logErrorf("Update failed: cannot get executable path: %v", err)
+		return err
 	}
 	currentPath, _ = filepath.EvalSymlinks(currentPath)
+
+	// 预检查：验证是否有写权限（在下载前检查，避免浪费带宽）
+	if err := c.checkUpdatePermissions(currentPath); err != nil {
+		c.logErrorf("Update failed: %v", err)
+		c.logErrorf("Self-update is not supported in this environment. Please update manually.")
+		return err
+	}
+
+	// 使用共享的下载和解压逻辑
+	c.logf("Downloading update package...")
+	binaryPath, cleanup, err := update.DownloadAndExtract(downloadURL, "client")
+	if err != nil {
+		c.logErrorf("Update failed: download/extract error: %v", err)
+		return err
+	}
+	defer cleanup()
 
 	// Windows 需要特殊处理
 	if runtime.GOOS == "windows" {
 		return performWindowsClientUpdate(binaryPath, currentPath, c.ServerAddr, c.Token, c.ID)
 	}
 
-	// Linux/Mac: 直接替换
+	// Linux/Mac/Android: 直接替换
 	backupPath := currentPath + ".bak"
 
 	// 停止所有插件
 	c.stopAllPlugins()
 
 	// 备份当前文件
+	c.logf("Backing up current binary...")
 	if err := os.Rename(currentPath, backupPath); err != nil {
-		return fmt.Errorf("backup current: %w", err)
+		c.logErrorf("Update failed: cannot backup current binary: %v", err)
+		c.logErrorf("This may be due to insufficient permissions or read-only filesystem.")
+		return err
 	}
 
 	// 复制新文件（不能用 rename，可能跨文件系统）
+	c.logf("Installing new binary...")
 	if err := update.CopyFile(binaryPath, currentPath); err != nil {
 		os.Rename(backupPath, currentPath)
-		return fmt.Errorf("replace binary: %w", err)
+		c.logErrorf("Update failed: cannot install new binary: %v", err)
+		return err
 	}
 
 	// 设置执行权限
 	if err := os.Chmod(currentPath, 0755); err != nil {
 		os.Rename(backupPath, currentPath)
-		return fmt.Errorf("chmod: %w", err)
+		c.logErrorf("Update failed: cannot set execute permission: %v", err)
+		return err
 	}
 
 	// 删除备份
 	os.Remove(backupPath)
 
-	c.logf("Update completed, restarting...")
+	c.logf("Update completed successfully, restarting...")
 
 	// 重启进程
 	restartClientProcess(currentPath, c.ServerAddr, c.Token, c.ID)
+	return nil
+}
+
+// checkUpdatePermissions 检查是否有更新权限
+func (c *Client) checkUpdatePermissions(execPath string) error {
+	// 检查可执行文件所在目录是否可写
+	dir := filepath.Dir(execPath)
+	testFile := filepath.Join(dir, ".gotunnel_update_test")
+
+	f, err := os.Create(testFile)
+	if err != nil {
+		c.logErrorf("No write permission to directory: %s", dir)
+		return err
+	}
+	f.Close()
+	os.Remove(testFile)
+
+	// 检查可执行文件本身是否可写
+	f, err = os.OpenFile(execPath, os.O_WRONLY, 0)
+	if err != nil {
+		c.logErrorf("No write permission to executable: %s", execPath)
+		return err
+	}
+	f.Close()
+
 	return nil
 }
 
