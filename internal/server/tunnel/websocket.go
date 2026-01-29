@@ -142,5 +142,5 @@ func (s *Server) handleWebsocketProxyConn(cs *ClientSession, conn net.Conn, rule
 		return
 	}
 
-	relay.Relay(conn, stream)
+	relay.RelayWithStats(conn, stream, s.recordTraffic)
 }

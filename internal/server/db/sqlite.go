@@ -397,14 +397,19 @@ func (s *SQLiteStore) Get24HourTraffic() (inbound, outbound int64, err error) {
 	return
 }
 
-// GetHourlyTraffic 获取每小时流量记录
+// GetHourlyTraffic 获取每小时流量记录（始终返回完整的 hours 小时数据）
 func (s *SQLiteStore) GetHourlyTraffic(hours int) ([]TrafficRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
+	// 计算当前小时的起始时间戳
+	now := time.Now()
+	currentHour := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location())
+
+	// 查询数据库中的记录
+	cutoff := currentHour.Add(-time.Duration(hours-1) * time.Hour).Unix()
 	rows, err := s.db.Query(`
-		SELECT hour_ts, inbound, outbound FROM traffic_stats 
+		SELECT hour_ts, inbound, outbound FROM traffic_stats
 		WHERE hour_ts >= ? ORDER BY hour_ts ASC
 	`, cutoff)
 	if err != nil {
@@ -412,13 +417,26 @@ func (s *SQLiteStore) GetHourlyTraffic(hours int) ([]TrafficRecord, error) {
 	}
 	defer rows.Close()
 
-	var records []TrafficRecord
+	// 将数据库记录放入 map 以便快速查找
+	dbRecords := make(map[int64]TrafficRecord)
 	for rows.Next() {
 		var r TrafficRecord
 		if err := rows.Scan(&r.Timestamp, &r.Inbound, &r.Outbound); err != nil {
 			return nil, err
 		}
-		records = append(records, r)
+		dbRecords[r.Timestamp] = r
 	}
+
+	// 生成完整的 hours 小时数据
+	records := make([]TrafficRecord, hours)
+	for i := 0; i < hours; i++ {
+		ts := currentHour.Add(-time.Duration(hours-1-i) * time.Hour).Unix()
+		if r, ok := dbRecords[ts]; ok {
+			records[i] = r
+		} else {
+			records[i] = TrafficRecord{Timestamp: ts, Inbound: 0, Outbound: 0}
+		}
+	}
+
 	return records, nil
 }

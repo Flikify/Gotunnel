@@ -84,6 +84,7 @@ func main() {
 	registry := plugin.NewRegistry()
 	server.SetPluginRegistry(registry)
 	server.SetJSPluginStore(clientStore) // 设置 JS 插件存储，用于客户端重连时恢复插件
+	server.SetTrafficStore(clientStore)  // 设置流量存储，用于记录流量统计
 
 	// 启动 Web 控制台
 	if cfg.Server.Web.Enabled {

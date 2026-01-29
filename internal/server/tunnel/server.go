@@ -50,7 +50,8 @@ func generateClientID() string {
 // Server 隧道服务端
 type Server struct {
 	clientStore    db.ClientStore
-	jsPluginStore  db.JSPluginStore // JS 插件存储
+	jsPluginStore  db.JSPluginStore  // JS 插件存储
+	trafficStore   db.TrafficStore   // 流量存储
 	bindAddr       string
 	bindPort       int
 	token          string
@@ -159,6 +160,11 @@ func (s *Server) SetPluginRegistry(registry *plugin.Registry) {
 // SetJSPluginStore 设置 JS 插件存储
 func (s *Server) SetJSPluginStore(store db.JSPluginStore) {
 	s.jsPluginStore = store
+}
+
+// SetTrafficStore 设置流量存储
+func (s *Server) SetTrafficStore(store db.TrafficStore) {
+	s.trafficStore = store
 }
 
 // LoadJSPlugins 加载 JS 插件配置
@@ -536,7 +542,7 @@ func (s *Server) handleProxyConn(cs *ClientSession, conn net.Conn, rule protocol
 		return
 	}
 
-	relay.Relay(conn, stream)
+	relay.RelayWithStats(conn, stream, s.recordTraffic)
 }
 
 // heartbeatLoop 心跳检测循环
@@ -1224,7 +1230,7 @@ func (s *Server) handleClientPluginConn(cs *ClientSession, conn net.Conn, rule p
 		}
 	}
 
-	relay.Relay(conn, stream)
+	relay.RelayWithStats(conn, stream, s.recordTraffic)
 }
 
 // checkHTTPBasicAuth 检查 HTTP Basic Auth
@@ -1905,6 +1911,16 @@ func (s *Server) StopClientLogStream(sessionID string) {
 	}
 
 	s.logSessions.RemoveSession(sessionID)
+}
+
+// recordTraffic 记录流量统计
+func (s *Server) recordTraffic(inbound, outbound int64) {
+	if s.trafficStore == nil {
+		return
+	}
+	if err := s.trafficStore.AddTraffic(inbound, outbound); err != nil {
+		log.Printf("[Server] Record traffic error: %v", err)
+	}
 }
 
 // boolPtr 返回 bool 值的指针
