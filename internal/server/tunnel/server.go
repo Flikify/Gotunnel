@@ -278,9 +278,10 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 		log.Printf("[Server] New client registered: %s (%s)", clientID, authReq.Name)
 	} else if authReq.Name != "" {
-		// 客户端已存在，更新名称（如果提供了新名称）
+		// 客户端已存在，仅当 Nickname 为空时才用客户端名称更新
+		// 这样服务端手动设置的名称不会被客户端覆盖
 		if client, err := s.clientStore.GetClient(clientID); err == nil {
-			if client.Nickname == "" || client.Nickname != authReq.Name {
+			if client.Nickname == "" {
 				client.Nickname = authReq.Name
 				s.clientStore.UpdateClient(client)
 			}
