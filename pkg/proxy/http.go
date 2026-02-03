@@ -6,16 +6,19 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/gotunnel/pkg/relay"
 )
 
 // HTTPServer HTTP 代理服务
 type HTTPServer struct {
-	dialer Dialer
+	dialer  Dialer
+	onStats func(in, out int64) // 流量统计回调
 }
 
 // NewHTTPServer 创建 HTTP 代理服务
-func NewHTTPServer(dialer Dialer) *HTTPServer {
-	return &HTTPServer{dialer: dialer}
+func NewHTTPServer(dialer Dialer, onStats func(in, out int64)) *HTTPServer {
+	return &HTTPServer{dialer: dialer, onStats: onStats}
 }
 
 // HandleConn 处理 HTTP 代理连接
@@ -50,8 +53,8 @@ func (h *HTTPServer) handleConnect(conn net.Conn, req *http.Request) error {
 
 	conn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 
-	go io.Copy(remote, conn)
-	io.Copy(conn, remote)
+	// 双向转发 (带流量统计)
+	relay.RelayWithStats(conn, remote, h.onStats)
 	return nil
 }
 
@@ -82,7 +85,10 @@ func (h *HTTPServer) handleHTTP(conn net.Conn, req *http.Request, reader *bufio.
 		return err
 	}
 
-	// 转发响应
-	_, err = io.Copy(conn, remote)
+	// 转发响应 (带流量统计)
+	n, err := io.Copy(conn, remote)
+	if h.onStats != nil && n > 0 {
+		h.onStats(0, n) // 响应数据为出站流量
+	}
 	return err
 }

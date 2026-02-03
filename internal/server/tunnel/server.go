@@ -50,8 +50,8 @@ func generateClientID() string {
 // Server 隧道服务端
 type Server struct {
 	clientStore    db.ClientStore
-	jsPluginStore  db.JSPluginStore  // JS 插件存储
-	trafficStore   db.TrafficStore   // 流量存储
+	jsPluginStore  db.JSPluginStore // JS 插件存储
+	trafficStore   db.TrafficStore  // 流量存储
 	bindAddr       string
 	bindPort       int
 	token          string
@@ -514,8 +514,8 @@ func (s *Server) acceptProxyConns(cs *ClientSession, ln net.Listener, rule proto
 func (s *Server) acceptProxyServerConns(cs *ClientSession, ln net.Listener, rule protocol.ProxyRule) {
 	dialer := proxy.NewTunnelDialer(cs.Session)
 
-	// 使用内置 proxy 实现
-	proxyServer := proxy.NewServer(rule.Type, dialer)
+	// 使用内置 proxy 实现 (带流量统计)
+	proxyServer := proxy.NewServer(rule.Type, dialer, s.recordTraffic)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -963,6 +963,9 @@ func (s *Server) sendUDPPacket(cs *ClientSession, conn *net.UDPConn, clientAddr 
 		return
 	}
 
+	// 记录入站流量 (从外部接收的数据)
+	s.recordTraffic(int64(len(packet.Data)), 0)
+
 	// 等待客户端响应
 	respMsg, err := protocol.ReadMessage(stream)
 	if err != nil {
@@ -975,6 +978,8 @@ func (s *Server) sendUDPPacket(cs *ClientSession, conn *net.UDPConn, clientAddr 
 			return
 		}
 		conn.WriteToUDP(respPacket.Data, clientAddr)
+		// 记录出站流量 (发送回外部的数据)
+		s.recordTraffic(0, int64(len(respPacket.Data)))
 	}
 }
 
