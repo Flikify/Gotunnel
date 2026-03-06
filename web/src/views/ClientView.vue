@@ -5,7 +5,7 @@ import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, AddOutline, StorefrontOutline,
   ExtensionPuzzleOutline, SettingsOutline, RefreshOutline,
-  ImageOutline, TerminalOutline, PlayOutline
+  PlayOutline
 } from '@vicons/ionicons5'
 import GlassModal from '../components/GlassModal.vue'
 import GlassTag from '../components/GlassTag.vue'
@@ -18,7 +18,7 @@ import {
   getStorePlugins, installStorePlugin, getRuleSchemas, startClientPlugin, restartClientPlugin, stopClientPlugin, deleteClientPlugin,
   checkClientUpdate, applyClientUpdate, getClientSystemStats, getVersionInfo,
   getClientScreenshot, executeClientShell,
-  type UpdateInfo, type SystemStats, type ScreenshotData, type ShellResult
+  type UpdateInfo, type SystemStats, type ScreenshotData
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 import InlineLogPanel from '../components/InlineLogPanel.vue'
@@ -286,16 +286,16 @@ const executeShell = async () => {
 
 const handleShellHistory = (direction: 'up' | 'down') => {
     if (shellHistory.value.length === 0) return
-    
+
     if (direction === 'up') {
         if (historyIndex.value < shellHistory.value.length - 1) {
             historyIndex.value++
-            shellCommand.value = shellHistory.value[historyIndex.value]
+            shellCommand.value = shellHistory.value[historyIndex.value] || ''
         }
     } else {
         if (historyIndex.value > 0) {
             historyIndex.value--
-            shellCommand.value = shellHistory.value[historyIndex.value]
+            shellCommand.value = shellHistory.value[historyIndex.value] || ''
         } else if (historyIndex.value === 0) {
             historyIndex.value = -1
             shellCommand.value = ''
