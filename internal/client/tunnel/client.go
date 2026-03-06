@@ -910,10 +910,24 @@ func (c *Client) performSelfUpdate(downloadURL string) error {
 	currentPath, _ = filepath.EvalSymlinks(currentPath)
 
 	// 预检查：验证是否有写权限（在下载前检查，避免浪费带宽）
-	if err := c.checkUpdatePermissions(currentPath); err != nil {
-		c.logErrorf("Update failed: %v", err)
-		c.logErrorf("Self-update is not supported in this environment. Please update manually.")
-		return err
+	// Windows 跳过预检查，因为 Windows 更新通过 batch 脚本以提升权限执行
+	// 非 Windows：原始路径 → DataDir → 临时目录，逐级回退
+	fallbackDir := ""
+	if runtime.GOOS != "windows" {
+		if err := c.checkUpdatePermissions(currentPath); err != nil {
+			// 尝试 DataDir
+			fallbackDir = c.DataDir
+			testFile := filepath.Join(fallbackDir, ".gotunnel_update_test")
+			if f, err := os.Create(testFile); err != nil {
+				// DataDir 也不可写，回退到临时目录
+				fallbackDir = os.TempDir()
+				c.logf("DataDir not writable, falling back to temp directory: %s", fallbackDir)
+			} else {
+				f.Close()
+				os.Remove(testFile)
+				c.logf("Original path not writable, falling back to data directory: %s", fallbackDir)
+			}
+		}
 	}
 
 	// 使用共享的下载和解压逻辑
@@ -930,42 +944,58 @@ func (c *Client) performSelfUpdate(downloadURL string) error {
 		return performWindowsClientUpdate(binaryPath, currentPath, c.ServerAddr, c.Token, c.ID)
 	}
 
-	// Linux/Mac/Android: 直接替换
-	backupPath := currentPath + ".bak"
+	// 确定目标路径
+	targetPath := currentPath
+	if fallbackDir != "" {
+		targetPath = filepath.Join(fallbackDir, filepath.Base(currentPath))
+		c.logf("Will install to fallback path: %s", targetPath)
+	}
 
 	// 停止所有插件
 	c.stopAllPlugins()
 
-	// 备份当前文件
-	c.logf("Backing up current binary...")
-	if err := os.Rename(currentPath, backupPath); err != nil {
-		c.logErrorf("Update failed: cannot backup current binary: %v", err)
-		c.logErrorf("This may be due to insufficient permissions or read-only filesystem.")
-		return err
-	}
+	if fallbackDir == "" {
+		// 原地替换：备份 → 复制 → 清理
+		backupPath := currentPath + ".bak"
 
-	// 复制新文件（不能用 rename，可能跨文件系统）
-	c.logf("Installing new binary...")
-	if err := update.CopyFile(binaryPath, currentPath); err != nil {
-		os.Rename(backupPath, currentPath)
-		c.logErrorf("Update failed: cannot install new binary: %v", err)
-		return err
-	}
+		c.logf("Backing up current binary...")
+		if err := os.Rename(currentPath, backupPath); err != nil {
+			c.logErrorf("Update failed: cannot backup current binary: %v", err)
+			return err
+		}
 
-	// 设置执行权限
-	if err := os.Chmod(currentPath, 0755); err != nil {
-		os.Rename(backupPath, currentPath)
-		c.logErrorf("Update failed: cannot set execute permission: %v", err)
-		return err
-	}
+		c.logf("Installing new binary...")
+		if err := update.CopyFile(binaryPath, currentPath); err != nil {
+			os.Rename(backupPath, currentPath)
+			c.logErrorf("Update failed: cannot install new binary: %v", err)
+			return err
+		}
 
-	// 删除备份
-	os.Remove(backupPath)
+		if err := os.Chmod(currentPath, 0755); err != nil {
+			os.Rename(backupPath, currentPath)
+			c.logErrorf("Update failed: cannot set execute permission: %v", err)
+			return err
+		}
+
+		os.Remove(backupPath)
+	} else {
+		// 回退路径：直接复制到回退目录
+		c.logf("Installing new binary to data directory...")
+		if err := update.CopyFile(binaryPath, targetPath); err != nil {
+			c.logErrorf("Update failed: cannot install new binary: %v", err)
+			return err
+		}
+
+		if err := os.Chmod(targetPath, 0755); err != nil {
+			c.logErrorf("Update failed: cannot set execute permission: %v", err)
+			return err
+		}
+	}
 
 	c.logf("Update completed successfully, restarting...")
 
-	// 重启进程
-	restartClientProcess(currentPath, c.ServerAddr, c.Token, c.ID)
+	// 重启进程（从新路径启动）
+	restartClientProcess(targetPath, c.ServerAddr, c.Token, c.ID)
 	return nil
 }
 
@@ -1014,6 +1044,12 @@ func performWindowsClientUpdate(newFile, currentPath, serverAddr, token, id stri
 	}
 
 	batchScript := fmt.Sprintf(`@echo off
+:: Check for admin rights, request UAC elevation if needed
+net session >nul 2>&1
+if %%errorlevel%% neq 0 (
+    powershell -Command "Start-Process cmd -ArgumentList '/C \\"\"%%~f0\"\"' -Verb RunAs"
+    exit /b
+)
 ping 127.0.0.1 -n 2 > nul
 del "%s"
 move "%s" "%s"

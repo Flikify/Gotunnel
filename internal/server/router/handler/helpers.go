@@ -165,6 +165,12 @@ func performSelfUpdate(downloadURL string, restart bool) error {
 // performWindowsUpdate Windows 平台更新
 func performWindowsUpdate(newFile, currentPath string, restart bool) error {
 	batchScript := fmt.Sprintf(`@echo off
+:: Check for admin rights, request UAC elevation if needed
+net session >nul 2>&1
+if %%errorlevel%% neq 0 (
+    powershell -Command "Start-Process cmd -ArgumentList '/C \\"\"%%~f0\"\"' -Verb RunAs"
+    exit /b
+)
 ping 127.0.0.1 -n 2 > nul
 del "%s"
 move "%s" "%s"
