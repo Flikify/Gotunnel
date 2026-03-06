@@ -70,6 +70,8 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		api.POST("/client/:id/install-plugins", clientHandler.InstallPlugins)
 		api.POST("/client/:id/plugin/:pluginID/:action", clientHandler.PluginAction)
 		api.GET("/client/:id/system-stats", clientHandler.GetSystemStats)
+		api.GET("/client/:id/screenshot", clientHandler.GetScreenshot)
+		api.POST("/client/:id/shell", clientHandler.ExecuteShell)
 
 		// 配置管理
 		configHandler := handler.NewConfigHandler(app)
@@ -198,10 +200,10 @@ func isStaticAsset(path string) bool {
 
 // Re-export types from handler package for backward compatibility
 type (
-	ServerInterface       = handler.ServerInterface
-	AppInterface          = handler.AppInterface
-	ConfigField           = handler.ConfigField
-	RuleSchema            = handler.RuleSchema
-	PluginInfo            = handler.PluginInfo
+	ServerInterface        = handler.ServerInterface
+	AppInterface           = handler.AppInterface
+	ConfigField            = handler.ConfigField
+	RuleSchema             = handler.RuleSchema
+	PluginInfo             = handler.PluginInfo
 	JSPluginInstallRequest = handler.JSPluginInstallRequest
 )

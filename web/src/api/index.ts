@@ -209,6 +209,28 @@ export interface SystemStats {
 
 export const getClientSystemStats = (clientId: string) => get<SystemStats>(`/client/${clientId}/system-stats`)
 
+// 客户端截图
+export interface ScreenshotData {
+  data: string      // Base64 JPEG
+  width: number
+  height: number
+  timestamp: number
+  error?: string
+}
+
+export const getClientScreenshot = (clientId: string, quality?: number) =>
+  get<ScreenshotData>(`/client/${clientId}/screenshot${quality ? '?quality=' + quality : ''}`)
+
+// Shell 执行
+export interface ShellResult {
+  output: string
+  exit_code: number
+  error?: string
+}
+
+export const executeClientShell = (clientId: string, command: string, timeout?: number) =>
+  post<ShellResult>(`/client/${clientId}/shell`, { command, timeout: timeout || 30 })
+
 // 服务器配置
 export interface ServerConfigInfo {
   bind_addr: string

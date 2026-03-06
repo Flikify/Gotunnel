@@ -75,6 +75,14 @@ const (
 	// 系统状态消息
 	MsgTypeSystemStatsRequest  uint8 = 100 // 请求系统状态
 	MsgTypeSystemStatsResponse uint8 = 101 // 系统状态响应
+
+	// 截图消息
+	MsgTypeScreenshotRequest  uint8 = 102 // 请求截图
+	MsgTypeScreenshotResponse uint8 = 103 // 截图响应
+
+	// Shell 执行消息
+	MsgTypeShellExecuteRequest  uint8 = 104 // 执行 Shell 命令
+	MsgTypeShellExecuteResponse uint8 = 105 // Shell 执行结果
 )
 
 // Message 基础消息结构
@@ -460,4 +468,31 @@ type SystemStatsResponse struct {
 	DiskTotal   uint64  `json:"disk_total"`   // 总磁盘 (字节)
 	DiskUsed    uint64  `json:"disk_used"`    // 已用磁盘 (字节)
 	DiskUsage   float64 `json:"disk_usage"`   // 磁盘使用率 (0-100)
+}
+
+// ScreenshotRequest 截图请求
+type ScreenshotRequest struct {
+	Quality int `json:"quality"` // JPEG 质量 1-100, 0 使用默认值
+}
+
+// ScreenshotResponse 截图响应
+type ScreenshotResponse struct {
+	Data      string `json:"data"`            // Base64 编码的 JPEG 图片
+	Width     int    `json:"width"`           // 图片宽度
+	Height    int    `json:"height"`          // 图片高度
+	Timestamp int64  `json:"timestamp"`       // 截图时间戳
+	Error     string `json:"error,omitempty"` // 错误信息
+}
+
+// ShellExecuteRequest Shell 执行请求
+type ShellExecuteRequest struct {
+	Command string `json:"command"` // 要执行的命令
+	Timeout int    `json:"timeout"` // 超时秒数, 0 使用默认值 (30秒)
+}
+
+// ShellExecuteResponse Shell 执行响应
+type ShellExecuteResponse struct {
+	Output   string `json:"output"`          // stdout + stderr 组合输出
+	ExitCode int    `json:"exit_code"`       // 进程退出码
+	Error    string `json:"error,omitempty"` // 错误信息
 }

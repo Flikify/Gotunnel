@@ -466,6 +466,47 @@ func (h *ClientHandler) GetSystemStats(c *gin.Context) {
 	Success(c, stats)
 }
 
+// GetScreenshot 获取客户端截图
+func (h *ClientHandler) GetScreenshot(c *gin.Context) {
+	clientID := c.Param("id")
+	quality := 0
+	if q, ok := c.GetQuery("quality"); ok {
+		fmt.Sscanf(q, "%d", &quality)
+	}
+
+	screenshot, err := h.app.GetServer().GetClientScreenshot(clientID, quality)
+	if err != nil {
+		InternalError(c, err.Error())
+		return
+	}
+
+	Success(c, screenshot)
+}
+
+// ExecuteShellRequest Shell 执行请求体
+type ExecuteShellRequest struct {
+	Command string `json:"command" binding:"required"`
+	Timeout int    `json:"timeout"`
+}
+
+// ExecuteShell 执行 Shell 命令
+func (h *ClientHandler) ExecuteShell(c *gin.Context) {
+	clientID := c.Param("id")
+	var req ExecuteShellRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	result, err := h.app.GetServer().ExecuteClientShell(clientID, req.Command, req.Timeout)
+	if err != nil {
+		InternalError(c, err.Error())
+		return
+	}
+
+	Success(c, result)
+}
+
 // validateClientID 验证客户端 ID 格式
 func validateClientID(id string) bool {
 	if len(id) < 1 || len(id) > 64 {

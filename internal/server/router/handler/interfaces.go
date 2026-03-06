@@ -61,7 +61,12 @@ type ServerInterface interface {
 	// 插件 API 代理
 	ProxyPluginAPIRequest(clientID string, req protocol.PluginAPIRequest) (*protocol.PluginAPIResponse, error)
 	// 系统状态
+	// 系统状态
 	GetClientSystemStats(clientID string) (*protocol.SystemStatsResponse, error)
+	// 截图
+	GetClientScreenshot(clientID string, quality int) (*protocol.ScreenshotResponse, error)
+	// Shell 执行
+	ExecuteClientShell(clientID, command string, timeout int) (*protocol.ShellExecuteResponse, error)
 }
 
 // ConfigField 配置字段

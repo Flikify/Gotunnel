@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, AddOutline, StorefrontOutline,
-  ExtensionPuzzleOutline, SettingsOutline, RefreshOutline
+  ExtensionPuzzleOutline, SettingsOutline, RefreshOutline,
+  ImageOutline, TerminalOutline, PlayOutline
 } from '@vicons/ionicons5'
 import GlassModal from '../components/GlassModal.vue'
 import GlassTag from '../components/GlassTag.vue'
@@ -16,7 +17,8 @@ import {
   getClientPluginConfig, updateClientPluginConfig,
   getStorePlugins, installStorePlugin, getRuleSchemas, startClientPlugin, restartClientPlugin, stopClientPlugin, deleteClientPlugin,
   checkClientUpdate, applyClientUpdate, getClientSystemStats, getVersionInfo,
-  type UpdateInfo, type SystemStats
+  getClientScreenshot, executeClientShell,
+  type UpdateInfo, type SystemStats, type ScreenshotData, type ShellResult
 } from '../api'
 import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
 import InlineLogPanel from '../components/InlineLogPanel.vue'
@@ -45,8 +47,23 @@ const updatingClient = ref(false)
 const serverVersion = ref('')
 
 // 系统状态相关
-const systemStats = ref<SystemStats | null>(null)
-const loadingStats = ref(false)
+  // 系统状态相关
+  const systemStats = ref<SystemStats | null>(null)
+  const loadingStats = ref(false)
+  
+  // 截图相关
+  const screenshotData = ref<ScreenshotData | null>(null)
+  const loadingScreenshot = ref(false)
+  const autoRefreshScreenshot = ref(false)
+  const screenshotInterval = ref(5) // 默认 5s
+  const screenshotTimer = ref<number | null>(null)
+  
+  // Shell 相关
+  const shellCommand = ref('')
+  const shellOutput = ref('')
+  const executingShell = ref(false)
+  const shellHistory = ref<string[]>([])
+  const historyIndex = ref(-1)
 
 // Rule Schemas
 const pluginRuleSchemas = ref<RuleSchemasMap>({})
@@ -200,6 +217,90 @@ const loadSystemStats = async () => {
   } finally {
     loadingStats.value = false
   }
+}
+
+// 截图相关方法
+const loadScreenshot = async () => {
+  if (!online.value) return
+  loadingScreenshot.value = true
+  try {
+    const { data } = await getClientScreenshot(clientId, 70) // 默认质量 70
+    screenshotData.value = data
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '获取截图失败')
+  } finally {
+    loadingScreenshot.value = false
+  }
+}
+
+const toggleAutoRefresh = () => {
+  if (autoRefreshScreenshot.value) {
+    // 开启自动刷新
+    loadScreenshot()
+    screenshotTimer.value = window.setInterval(loadScreenshot, screenshotInterval.value * 1000)
+  } else {
+    // 关闭自动刷新
+    if (screenshotTimer.value) {
+      clearInterval(screenshotTimer.value)
+      screenshotTimer.value = null
+    }
+  }
+}
+
+// Shell 相关方法
+const executeShell = async () => {
+  if (!shellCommand.value.trim()) return
+  
+  const cmd = shellCommand.value.trim()
+  shellCommand.value = ''
+  executingShell.value = true
+  
+  // 添加到历史记录
+  shellHistory.value.unshift(cmd)
+  if (shellHistory.value.length > 50) shellHistory.value.pop()
+  historyIndex.value = -1
+  
+  shellOutput.value += `\n> ${cmd}\n`
+  
+  try {
+    const { data } = await executeClientShell(clientId, cmd)
+    if (data.error) {
+       shellOutput.value += `Error: ${data.error}\n`
+    } else {
+       shellOutput.value += data.output + '\n'
+    }
+    if (data.exit_code !== 0) {
+       shellOutput.value += `Exit Code: ${data.exit_code}\n`
+    }
+  } catch (e: any) {
+    shellOutput.value += `Error: ${e.message}\n`
+  } finally {
+    executingShell.value = false
+    // 滚动到底部 (需要 nextTick 和 ref)
+    setTimeout(() => {
+        const textarea = document.getElementById('shell-output')
+        if (textarea) textarea.scrollTop = textarea.scrollHeight
+    }, 100)
+  }
+}
+
+const handleShellHistory = (direction: 'up' | 'down') => {
+    if (shellHistory.value.length === 0) return
+    
+    if (direction === 'up') {
+        if (historyIndex.value < shellHistory.value.length - 1) {
+            historyIndex.value++
+            shellCommand.value = shellHistory.value[historyIndex.value]
+        }
+    } else {
+        if (historyIndex.value > 0) {
+            historyIndex.value--
+            shellCommand.value = shellHistory.value[historyIndex.value]
+        } else if (historyIndex.value === 0) {
+            historyIndex.value = -1
+            shellCommand.value = ''
+        }
+    }
 }
 
 // 格式化字节大小
@@ -687,6 +788,62 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                 </div>
                 </div>
               </Transition>
+            </div>
+          </div>
+
+          <!-- Screenshot Card -->
+          <div class="glass-card" v-if="online">
+            <div class="card-header">
+              <h3>屏幕截图</h3>
+              <div class="header-controls">
+                <GlassSwitch :model-value="autoRefreshScreenshot" @update:model-value="(v: boolean) => { autoRefreshScreenshot = v; toggleAutoRefresh() }" size="small">
+                  自动刷新
+                </GlassSwitch>
+                <button class="glass-btn tiny" :disabled="loadingScreenshot" @click="loadScreenshot">
+                  <RefreshOutline class="btn-icon-sm" />
+                </button>
+              </div>
+            </div>
+            <div class="card-body screenshot-body">
+              <div class="screenshot-container" v-if="screenshotData">
+                <img :src="`data:image/jpeg;base64,${screenshotData.data}`" alt="Screenshot" class="screenshot-img" />
+                <div class="screenshot-meta">
+                  {{ new Date(screenshotData.timestamp).toLocaleTimeString() }} ({{ screenshotData.width }}x{{ screenshotData.height }})
+                </div>
+              </div>
+              <div v-else class="empty-hint" @click="loadScreenshot">
+                {{ loadingScreenshot ? '截图中...' : '点击获取截图' }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Shell Terminal Card -->
+          <div class="glass-card" v-if="online">
+            <div class="card-header">
+              <h3>远程 Shell</h3>
+            </div>
+            <div class="card-body shell-body">
+              <textarea 
+                id="shell-output" 
+                class="shell-output" 
+                readonly 
+                v-model="shellOutput"
+              ></textarea>
+              <div class="shell-input-group">
+                <input 
+                  type="text" 
+                  class="glass-input shell-input" 
+                  v-model="shellCommand" 
+                  @keydown.enter="executeShell"
+                  @keydown.up.prevent="handleShellHistory('up')"
+                  @keydown.down.prevent="handleShellHistory('down')"
+                  placeholder="输入命令..."
+                  :disabled="executingShell"
+                />
+                <button class="glass-btn primary small" :disabled="executingShell" @click="executeShell">
+                  <PlayOutline class="btn-icon-sm" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1573,10 +1730,94 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   flex-direction: column;
 }
 
+
 .fade-slide-enter-active,
 .fade-slide-leave-active {
   transition: all 0.3s ease;
 }
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* Screenshot Card */
+.screenshot-body {
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0 0 16px 16px;
+  overflow: hidden;
+  position: relative;
+}
+
+.screenshot-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.screenshot-img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.screenshot-meta {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-top-left-radius: 8px;
+  font-family: monospace;
+}
+
+/* Shell Terminal Card */
+.shell-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.shell-output {
+  width: 100%;
+  height: 300px;
+  background: #1a1a1a;
+  color: #0f0;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  resize: vertical;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.shell-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.shell-input {
+  flex: 1;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 
 .fade-slide-enter-from {
   opacity: 0;

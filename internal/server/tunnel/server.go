@@ -1975,3 +1975,101 @@ func (s *Server) GetClientSystemStats(clientID string) (*protocol.SystemStatsRes
 
 	return &stats, nil
 }
+
+// GetClientScreenshot 获取客户端截图
+func (s *Server) GetClientScreenshot(clientID string, quality int) (*protocol.ScreenshotResponse, error) {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("client %s not online", clientID)
+	}
+
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+
+	// 设置超时
+	stream.SetDeadline(time.Now().Add(15 * time.Second))
+
+	// 发送请求
+	req := protocol.ScreenshotRequest{Quality: quality}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeScreenshotRequest, req)
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return nil, err
+	}
+
+	// 读取响应
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Type != protocol.MsgTypeScreenshotResponse {
+		return nil, fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+
+	var screenshot protocol.ScreenshotResponse
+	if err := resp.ParsePayload(&screenshot); err != nil {
+		return nil, err
+	}
+
+	if screenshot.Error != "" {
+		return nil, fmt.Errorf("screenshot failed: %s", screenshot.Error)
+	}
+
+	return &screenshot, nil
+}
+
+// ExecuteClientShell 执行客户端 Shell 命令
+func (s *Server) ExecuteClientShell(clientID, command string, timeout int) (*protocol.ShellExecuteResponse, error) {
+	s.mu.RLock()
+	cs, ok := s.clients[clientID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("client %s not online", clientID)
+	}
+
+	stream, err := cs.Session.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+
+	// 设置超时 (比命令超时长一点)
+	if timeout <= 0 {
+		timeout = 30
+	}
+	stream.SetDeadline(time.Now().Add(time.Duration(timeout+5) * time.Second))
+
+	// 发送请求
+	req := protocol.ShellExecuteRequest{
+		Command: command,
+		Timeout: timeout,
+	}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteRequest, req)
+	if err := protocol.WriteMessage(stream, msg); err != nil {
+		return nil, err
+	}
+
+	// 读取响应
+	resp, err := protocol.ReadMessage(stream)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Type != protocol.MsgTypeShellExecuteResponse {
+		return nil, fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+
+	var result protocol.ShellExecuteResponse
+	if err := resp.ParsePayload(&result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}

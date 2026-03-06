@@ -1,7 +1,9 @@
 package tunnel
 
 import (
+	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net"
@@ -286,6 +288,10 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handlePluginAPIRequest(stream, msg)
 	case protocol.MsgTypeSystemStatsRequest:
 		c.handleSystemStatsRequest(stream, msg)
+	case protocol.MsgTypeScreenshotRequest:
+		c.handleScreenshotRequest(stream, msg)
+	case protocol.MsgTypeShellExecuteRequest:
+		c.handleShellExecuteRequest(stream, msg)
 	}
 }
 
@@ -1278,5 +1284,106 @@ func (c *Client) handleSystemStatsRequest(stream net.Conn, msg *protocol.Message
 	}
 
 	respMsg, _ := protocol.NewMessage(protocol.MsgTypeSystemStatsResponse, resp)
+	protocol.WriteMessage(stream, respMsg)
+}
+
+// handleScreenshotRequest 处理截图请求
+func (c *Client) handleScreenshotRequest(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var req protocol.ScreenshotRequest
+	msg.ParsePayload(&req)
+
+	// 捕获截图
+	data, width, height, err := utils.CaptureScreenshot(req.Quality)
+	if err != nil {
+		c.logErrorf("Screenshot capture failed: %v", err)
+		resp := protocol.ScreenshotResponse{Error: err.Error()}
+		respMsg, _ := protocol.NewMessage(protocol.MsgTypeScreenshotResponse, resp)
+		protocol.WriteMessage(stream, respMsg)
+		return
+	}
+
+	// 编码为 Base64
+	base64Data := base64.StdEncoding.EncodeToString(data)
+
+	resp := protocol.ScreenshotResponse{
+		Data:      base64Data,
+		Width:     width,
+		Height:    height,
+		Timestamp: time.Now().UnixMilli(),
+	}
+
+	respMsg, _ := protocol.NewMessage(protocol.MsgTypeScreenshotResponse, resp)
+	protocol.WriteMessage(stream, respMsg)
+}
+
+// handleShellExecuteRequest 处理 Shell 执行请求
+func (c *Client) handleShellExecuteRequest(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+
+	var req protocol.ShellExecuteRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		resp := protocol.ShellExecuteResponse{Error: err.Error(), ExitCode: -1}
+		respMsg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteResponse, resp)
+		protocol.WriteMessage(stream, respMsg)
+		return
+	}
+
+	// 设置默认超时
+	timeout := req.Timeout
+	if timeout <= 0 {
+		timeout = 30
+	}
+
+	c.logf("Executing shell command: %s", req.Command)
+
+	// 根据操作系统选择 shell
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/C", req.Command)
+	} else {
+		cmd = exec.Command("sh", "-c", req.Command)
+	}
+
+	// 设置超时上下文
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	defer cancel()
+	cmd = exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
+
+	// 执行命令并获取输出
+	output, err := cmd.CombinedOutput()
+
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else if ctx.Err() == context.DeadlineExceeded {
+			resp := protocol.ShellExecuteResponse{
+				Output:   string(output),
+				ExitCode: -1,
+				Error:    "command timeout",
+			}
+			respMsg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteResponse, resp)
+			protocol.WriteMessage(stream, respMsg)
+			return
+		} else {
+			resp := protocol.ShellExecuteResponse{
+				Output:   string(output),
+				ExitCode: -1,
+				Error:    err.Error(),
+			}
+			respMsg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteResponse, resp)
+			protocol.WriteMessage(stream, respMsg)
+			return
+		}
+	}
+
+	resp := protocol.ShellExecuteResponse{
+		Output:   string(output),
+		ExitCode: exitCode,
+	}
+
+	respMsg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteResponse, resp)
 	protocol.WriteMessage(stream, respMsg)
 }
