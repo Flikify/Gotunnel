@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+
+	"github.com/gotunnel/pkg/relay"
 )
 
 const (
@@ -19,7 +21,8 @@ const (
 
 // SOCKS5Server SOCKS5 代理服务
 type SOCKS5Server struct {
-	dialer Dialer
+	dialer  Dialer
+	onStats func(in, out int64) // 流量统计回调
 }
 
 // Dialer 连接拨号器接口
@@ -28,8 +31,8 @@ type Dialer interface {
 }
 
 // NewSOCKS5Server 创建 SOCKS5 服务
-func NewSOCKS5Server(dialer Dialer) *SOCKS5Server {
-	return &SOCKS5Server{dialer: dialer}
+func NewSOCKS5Server(dialer Dialer, onStats func(in, out int64)) *SOCKS5Server {
+	return &SOCKS5Server{dialer: dialer, onStats: onStats}
 }
 
 // HandleConn 处理 SOCKS5 连接
@@ -60,9 +63,8 @@ func (s *SOCKS5Server) HandleConn(conn net.Conn) error {
 		return err
 	}
 
-	// 双向转发
-	go io.Copy(remote, conn)
-	io.Copy(conn, remote)
+	// 双向转发 (带流量统计)
+	relay.RelayWithStats(conn, remote, s.onStats)
 
 	return nil
 }

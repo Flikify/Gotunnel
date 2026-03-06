@@ -14,10 +14,10 @@ type Server struct {
 }
 
 // NewServer 创建代理服务器
-func NewServer(typ string, dialer Dialer) *Server {
+func NewServer(typ string, dialer Dialer, onStats func(in, out int64)) *Server {
 	return &Server{
-		socks5: NewSOCKS5Server(dialer),
-		http:   NewHTTPServer(dialer),
+		socks5: NewSOCKS5Server(dialer, onStats),
+		http:   NewHTTPServer(dialer, onStats),
 		typ:    typ,
 	}
 }
