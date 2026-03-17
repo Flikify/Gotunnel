@@ -26,19 +26,6 @@ export const disconnectClient = (id: string) => post(`/client/${id}/disconnect`)
 export const restartClient = (id: string) => post(`/client/${id}/restart`)
 
 // 更新管理
-      return get<T>(path)
-    case 'POST':
-      return post<T>(path, body)
-    case 'PUT':
-      return put<T>(path, body)
-    case 'DELETE':
-      return del<T>(path)
-    default:
-      return get<T>(path)
-  }
-}
-
-// 更新管理
 export interface UpdateInfo {
   available: boolean
   current: string
