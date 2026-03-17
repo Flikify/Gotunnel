@@ -7,7 +7,6 @@ import (
 	"github.com/gotunnel/internal/client/config"
 	"github.com/gotunnel/internal/client/tunnel"
 	"github.com/gotunnel/pkg/crypto"
-	"github.com/gotunnel/pkg/plugin"
 	"github.com/gotunnel/pkg/version"
 )
 
@@ -66,15 +65,6 @@ func main() {
 		client.TLSEnabled = true
 		client.TLSConfig = crypto.ClientTLSConfig()
 		log.Printf("[Client] TLS enabled")
-	}
-
-	// 初始化插件注册表（用于 JS 插件）
-	registry := plugin.NewRegistry()
-	client.SetPluginRegistry(registry)
-
-	// 初始化版本存储
-	if err := client.InitVersionStore(); err != nil {
-		log.Printf("[Client] Warning: failed to init version store: %v", err)
 	}
 
 	client.Run()

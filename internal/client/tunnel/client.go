@@ -11,13 +11,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/gotunnel/pkg/plugin"
-	"github.com/gotunnel/pkg/plugin/script"
-	"github.com/gotunnel/pkg/plugin/sign"
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/relay"
 	"github.com/gotunnel/pkg/update"
@@ -38,21 +34,17 @@ const (
 
 // Client 隧道客户端
 type Client struct {
-	ServerAddr     string
-	Token          string
-	ID             string
-	Name           string // 客户端名称（主机名）
-	TLSEnabled     bool
-	TLSConfig      *tls.Config
-	DataDir        string // 数据目录
-	session        *yamux.Session
-	rules          []protocol.ProxyRule
-	mu             sync.RWMutex
-	pluginRegistry *plugin.Registry
-	runningPlugins map[string]plugin.ClientPlugin
-	versionStore   *PluginVersionStore
-	pluginMu       sync.RWMutex
-	logger         *Logger // 日志收集器
+	ServerAddr string
+	Token      string
+	ID         string
+	Name       string // 客户端名称（主机名）
+	TLSEnabled bool
+	TLSConfig  *tls.Config
+	DataDir    string // 数据目录
+	session    *yamux.Session
+	rules      []protocol.ProxyRule
+	mu         sync.RWMutex
+	logger     *Logger // 日志收集器
 }
 
 // NewClient 创建客户端
@@ -93,30 +85,20 @@ func NewClient(serverAddr, token, id string) *Client {
 	}
 
 	return &Client{
-		ServerAddr:     serverAddr,
-		Token:          token,
-		ID:             id,
-		Name:           hostname,
-		DataDir:        dataDir,
-		runningPlugins: make(map[string]plugin.ClientPlugin),
-		logger:         logger,
+		ServerAddr: serverAddr,
+		Token:      token,
+		ID:         id,
+		Name:       hostname,
+		DataDir:    dataDir,
+		logger:     logger,
 	}
 }
 
 // InitVersionStore 初始化版本存储
 func (c *Client) InitVersionStore() error {
-	store, err := NewPluginVersionStore(c.DataDir)
-	if err != nil {
-		return err
-	}
-	c.versionStore = store
 	return nil
 }
 
-// SetPluginRegistry 设置插件注册表
-func (c *Client) SetPluginRegistry(registry *plugin.Registry) {
-	c.pluginRegistry = registry
-}
 
 // logf 安全地记录日志（同时输出到标准日志和日志收集器）
 func (c *Client) logf(format string, args ...interface{}) {
@@ -261,31 +243,14 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handleProxyConnect(stream, msg)
 	case protocol.MsgTypeUDPData:
 		c.handleUDPData(stream, msg)
-	case protocol.MsgTypePluginConfig:
-		defer stream.Close()
-		c.handlePluginConfig(msg)
-	case protocol.MsgTypeClientPluginStart:
-		c.handleClientPluginStart(stream, msg)
-	case protocol.MsgTypeClientPluginStop:
-		c.handleClientPluginStop(stream, msg)
-	case protocol.MsgTypeClientPluginConn:
-		c.handleClientPluginConn(stream, msg)
-	case protocol.MsgTypeJSPluginInstall:
-		c.handleJSPluginInstall(stream, msg)
 	case protocol.MsgTypeClientRestart:
 		c.handleClientRestart(stream, msg)
-	case protocol.MsgTypePluginConfigUpdate:
-		c.handlePluginConfigUpdate(stream, msg)
 	case protocol.MsgTypeUpdateDownload:
 		c.handleUpdateDownload(stream, msg)
 	case protocol.MsgTypeLogRequest:
 		go c.handleLogRequest(stream, msg)
 	case protocol.MsgTypeLogStop:
 		c.handleLogStop(stream, msg)
-	case protocol.MsgTypePluginStatusQuery:
-		c.handlePluginStatusQuery(stream, msg)
-	case protocol.MsgTypePluginAPIRequest:
-		c.handlePluginAPIRequest(stream, msg)
 	case protocol.MsgTypeSystemStatsRequest:
 		c.handleSystemStatsRequest(stream, msg)
 	case protocol.MsgTypeScreenshotRequest:
@@ -451,312 +416,14 @@ func (c *Client) findRuleByPort(port int) *protocol.ProxyRule {
 	return nil
 }
 
-// handlePluginConfig 处理插件配置同步
-func (c *Client) handlePluginConfig(msg *protocol.Message) {
-	var cfg protocol.PluginConfigSync
-	if err := msg.ParsePayload(&cfg); err != nil {
-		c.logErrorf("Parse plugin config error: %v", err)
-		return
-	}
 
-	c.logf("Received config for plugin: %s", cfg.PluginName)
 
-	// 应用配置到插件
-	if c.pluginRegistry != nil {
-		handler, err := c.pluginRegistry.GetClient(cfg.PluginName)
-		if err != nil {
-			c.logWarnf("Plugin %s not found: %v", cfg.PluginName, err)
-			return
-		}
-		if err := handler.Init(cfg.Config); err != nil {
-			c.logErrorf("Plugin %s init error: %v", cfg.PluginName, err)
-			return
-		}
-		c.logf("Plugin %s config applied", cfg.PluginName)
-	}
-}
 
-// handleClientPluginStart 处理客户端插件启动请求
-func (c *Client) handleClientPluginStart(stream net.Conn, msg *protocol.Message) {
-	defer stream.Close()
 
-	var req protocol.ClientPluginStartRequest
-	if err := msg.ParsePayload(&req); err != nil {
-		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", err.Error())
-		return
-	}
 
-	c.logf("Starting plugin %s for rule %s", req.PluginName, req.RuleName)
 
-	// 获取插件
-	if c.pluginRegistry == nil {
-		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", "plugin registry not set")
-		return
-	}
 
-	handler, err := c.pluginRegistry.GetClient(req.PluginName)
-	if err != nil {
-		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", err.Error())
-		return
-	}
 
-	// 初始化并启动
-	if err := handler.Init(req.Config); err != nil {
-		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", err.Error())
-		return
-	}
-
-	localAddr, err := handler.Start()
-	if err != nil {
-		c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", err.Error())
-		return
-	}
-
-	// 保存运行中的插件
-	key := req.PluginName + ":" + req.RuleName
-	c.pluginMu.Lock()
-	c.runningPlugins[key] = handler
-	c.pluginMu.Unlock()
-
-	c.logf("Plugin %s started at %s", req.PluginName, localAddr)
-	c.sendPluginStatus(stream, req.PluginName, req.RuleName, true, localAddr, "")
-}
-
-// sendPluginStatus 发送插件状态响应
-func (c *Client) sendPluginStatus(stream net.Conn, pluginName, ruleName string, running bool, localAddr, errMsg string) {
-	resp := protocol.ClientPluginStatusResponse{
-		PluginName: pluginName,
-		RuleName:   ruleName,
-		Running:    running,
-		LocalAddr:  localAddr,
-		Error:      errMsg,
-	}
-	msg, _ := protocol.NewMessage(protocol.MsgTypeClientPluginStatus, resp)
-	protocol.WriteMessage(stream, msg)
-}
-
-// handleClientPluginConn 处理客户端插件连接
-func (c *Client) handleClientPluginConn(stream net.Conn, msg *protocol.Message) {
-	var req protocol.ClientPluginConnRequest
-	if err := msg.ParsePayload(&req); err != nil {
-		stream.Close()
-		return
-	}
-
-	c.pluginMu.RLock()
-	var handler plugin.ClientPlugin
-	var ok bool
-
-	// 优先使用 PluginID 查找
-	if req.PluginID != "" {
-		handler, ok = c.runningPlugins[req.PluginID]
-	}
-
-	// 如果没找到，回退到 pluginName:ruleName
-	if !ok {
-		key := req.PluginName + ":" + req.RuleName
-		handler, ok = c.runningPlugins[key]
-	}
-	c.pluginMu.RUnlock()
-
-	if !ok {
-		c.logWarnf("Plugin %s (ID: %s) not running", req.PluginName, req.PluginID)
-		stream.Close()
-		return
-	}
-
-	// 让插件处理连接
-	handler.HandleConn(stream)
-}
-
-// handleJSPluginInstall 处理 JS 插件安装请求
-func (c *Client) handleJSPluginInstall(stream net.Conn, msg *protocol.Message) {
-	defer stream.Close()
-
-	var req protocol.JSPluginInstallRequest
-	if err := msg.ParsePayload(&req); err != nil {
-		c.sendJSPluginResult(stream, "", false, err.Error())
-		return
-	}
-
-	c.logf("Installing JS plugin: %s (ID: %s)", req.PluginName, req.PluginID)
-
-	// 使用 PluginID 作为 key（如果有），否则回退到 pluginName:ruleName
-	key := req.PluginID
-	if key == "" {
-		key = req.PluginName + ":" + req.RuleName
-	}
-
-	// 如果插件已经在运行，先停止它
-	c.pluginMu.Lock()
-	if existingHandler, ok := c.runningPlugins[key]; ok {
-		c.logf("Stopping existing plugin %s before reinstall", key)
-		if err := existingHandler.Stop(); err != nil {
-			c.logErrorf("Stop existing plugin error: %v", err)
-		}
-		delete(c.runningPlugins, key)
-	}
-	c.pluginMu.Unlock()
-
-	// 验证官方签名
-	if err := c.verifyJSPluginSignature(req.PluginName, req.Source, req.Signature); err != nil {
-		c.logErrorf("JS plugin %s signature verification failed: %v", req.PluginName, err)
-		c.sendJSPluginResult(stream, req.PluginName, false, "signature verification failed: "+err.Error())
-		return
-	}
-	c.logf("JS plugin %s signature verified", req.PluginName)
-
-	// 创建 JS 插件
-	jsPlugin, err := script.NewJSPlugin(req.PluginName, req.Source)
-	if err != nil {
-		c.sendJSPluginResult(stream, req.PluginName, false, err.Error())
-		return
-	}
-
-	// 注册到 registry
-	if c.pluginRegistry != nil {
-		c.pluginRegistry.RegisterClient(jsPlugin)
-	}
-
-	c.logf("JS plugin %s installed", req.PluginName)
-
-	// 保存版本信息（防止降级攻击）
-	if c.versionStore != nil {
-		signed, _ := sign.DecodeSignedPlugin(req.Signature)
-		if signed != nil {
-			c.versionStore.SetVersion(req.PluginName, signed.Payload.Version)
-		}
-	}
-
-	// 先启动插件，再发送安装结果
-	// 这样服务端收到结果后启动监听器时，客户端插件已经准备好了
-	if req.AutoStart {
-		c.startJSPlugin(jsPlugin, req)
-	}
-
-	c.sendJSPluginResult(stream, req.PluginName, true, "")
-}
-
-// sendJSPluginResult 发送 JS 插件安装结果
-func (c *Client) sendJSPluginResult(stream net.Conn, name string, success bool, errMsg string) {
-	result := protocol.JSPluginInstallResult{
-		PluginName: name,
-		Success:    success,
-		Error:      errMsg,
-	}
-	msg, _ := protocol.NewMessage(protocol.MsgTypeJSPluginResult, result)
-	protocol.WriteMessage(stream, msg)
-}
-
-// startJSPlugin 启动 JS 插件
-func (c *Client) startJSPlugin(handler plugin.ClientPlugin, req protocol.JSPluginInstallRequest) {
-	if err := handler.Init(req.Config); err != nil {
-		c.logErrorf("JS plugin %s init error: %v", req.PluginName, err)
-		return
-	}
-
-	localAddr, err := handler.Start()
-	if err != nil {
-		c.logErrorf("JS plugin %s start error: %v", req.PluginName, err)
-		return
-	}
-
-	// 使用 PluginID 作为 key（如果有），否则回退到 pluginName:ruleName
-	key := req.PluginID
-	if key == "" {
-		key = req.PluginName + ":" + req.RuleName
-	}
-	c.pluginMu.Lock()
-	c.runningPlugins[key] = handler
-	c.pluginMu.Unlock()
-
-	c.logf("JS plugin %s (ID: %s) started at %s", req.PluginName, req.PluginID, localAddr)
-}
-
-// verifyJSPluginSignature 验证 JS 插件签名
-func (c *Client) verifyJSPluginSignature(pluginName, source, signature string) error {
-	if signature == "" {
-		return fmt.Errorf("missing signature")
-	}
-
-	// 解码签名
-	signed, err := sign.DecodeSignedPlugin(signature)
-	if err != nil {
-		return fmt.Errorf("decode signature: %w", err)
-	}
-
-	// 根据 KeyID 获取对应公钥
-	pubKey, err := sign.GetPublicKeyByID(signed.Payload.KeyID)
-	if err != nil {
-		return fmt.Errorf("get public key: %w", err)
-	}
-
-	// 验证插件名称匹配
-	if signed.Payload.Name != pluginName {
-		return fmt.Errorf("plugin name mismatch: expected %s, got %s",
-			pluginName, signed.Payload.Name)
-	}
-
-	// 验证签名和源码哈希
-	if err := sign.VerifyPlugin(pubKey, signed, source); err != nil {
-		return err
-	}
-
-	// 检查版本降级攻击
-	if c.versionStore != nil {
-		currentVer := c.versionStore.GetVersion(pluginName)
-		if currentVer != "" {
-			cmp := sign.CompareVersions(signed.Payload.Version, currentVer)
-			if cmp < 0 {
-				return fmt.Errorf("version downgrade rejected: %s < %s",
-					signed.Payload.Version, currentVer)
-			}
-		}
-	}
-
-	return nil
-}
-
-// handleClientPluginStop 处理客户端插件停止请求
-func (c *Client) handleClientPluginStop(stream net.Conn, msg *protocol.Message) {
-	defer stream.Close()
-
-	var req protocol.ClientPluginStopRequest
-	if err := msg.ParsePayload(&req); err != nil {
-		c.sendPluginStatus(stream, req.PluginName, req.RuleName, true, "", err.Error())
-		return
-	}
-
-	c.pluginMu.Lock()
-	var handler plugin.ClientPlugin
-	var key string
-	var ok bool
-
-	// 优先使用 PluginID 查找
-	if req.PluginID != "" {
-		handler, ok = c.runningPlugins[req.PluginID]
-		if ok {
-			key = req.PluginID
-		}
-	}
-
-	// 如果没找到，回退到 pluginName:ruleName
-	if !ok {
-		key = req.PluginName + ":" + req.RuleName
-		handler, ok = c.runningPlugins[key]
-	}
-
-	if ok {
-		if err := handler.Stop(); err != nil {
-			c.logErrorf("Plugin %s stop error: %v", key, err)
-		}
-		delete(c.runningPlugins, key)
-	}
-	c.pluginMu.Unlock()
-
-	c.logf("Plugin %s stopped", key)
-	c.sendPluginStatus(stream, req.PluginName, req.RuleName, false, "", "")
-}
 
 // handleClientRestart 处理客户端重启请求
 func (c *Client) handleClientRestart(stream net.Conn, msg *protocol.Message) {
@@ -776,99 +443,13 @@ func (c *Client) handleClientRestart(stream net.Conn, msg *protocol.Message) {
 	protocol.WriteMessage(stream, respMsg)
 
 	// 停止所有运行中的插件
-	c.pluginMu.Lock()
-	for key, handler := range c.runningPlugins {
-		c.logf("Stopping plugin %s for restart", key)
-		handler.Stop()
-	}
-	c.runningPlugins = make(map[string]plugin.ClientPlugin)
-	c.pluginMu.Unlock()
-
 	// 关闭会话（会触发重连）
 	if c.session != nil {
 		c.session.Close()
 	}
 }
 
-// handlePluginConfigUpdate 处理插件配置更新请求
-func (c *Client) handlePluginConfigUpdate(stream net.Conn, msg *protocol.Message) {
-	defer stream.Close()
 
-	var req protocol.PluginConfigUpdateRequest
-	if err := msg.ParsePayload(&req); err != nil {
-		c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, false, err.Error())
-		return
-	}
-
-	c.pluginMu.RLock()
-	var handler plugin.ClientPlugin
-	var key string
-	var ok bool
-
-	// 优先使用 PluginID 查找
-	if req.PluginID != "" {
-		handler, ok = c.runningPlugins[req.PluginID]
-		if ok {
-			key = req.PluginID
-		}
-	}
-
-	// 如果没找到，回退到 pluginName:ruleName
-	if !ok {
-		key = req.PluginName + ":" + req.RuleName
-		handler, ok = c.runningPlugins[key]
-	}
-	c.pluginMu.RUnlock()
-
-	c.logf("Config update for plugin %s", key)
-
-	if !ok {
-		c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, false, "plugin not running")
-		return
-	}
-
-	if req.Restart {
-		// 停止并重启插件
-		c.pluginMu.Lock()
-		if err := handler.Stop(); err != nil {
-			c.logErrorf("Plugin %s stop error: %v", key, err)
-		}
-		delete(c.runningPlugins, key)
-		c.pluginMu.Unlock()
-
-		// 重新初始化和启动
-		if err := handler.Init(req.Config); err != nil {
-			c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, false, err.Error())
-			return
-		}
-
-		localAddr, err := handler.Start()
-		if err != nil {
-			c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, false, err.Error())
-			return
-		}
-
-		c.pluginMu.Lock()
-		c.runningPlugins[key] = handler
-		c.pluginMu.Unlock()
-
-		c.logf("Plugin %s restarted at %s with new config", key, localAddr)
-	}
-
-	c.sendPluginConfigUpdateResult(stream, req.PluginName, req.RuleName, true, "")
-}
-
-// sendPluginConfigUpdateResult 发送插件配置更新结果
-func (c *Client) sendPluginConfigUpdateResult(stream net.Conn, pluginName, ruleName string, success bool, errMsg string) {
-	result := protocol.PluginConfigUpdateResponse{
-		PluginName: pluginName,
-		RuleName:   ruleName,
-		Success:    success,
-		Error:      errMsg,
-	}
-	msg, _ := protocol.NewMessage(protocol.MsgTypePluginConfigUpdate, result)
-	protocol.WriteMessage(stream, msg)
-}
 
 // handleUpdateDownload 处理更新下载请求
 func (c *Client) handleUpdateDownload(stream net.Conn, msg *protocol.Message) {
@@ -957,9 +538,6 @@ func (c *Client) performSelfUpdate(downloadURL string) error {
 		c.logf("Will install to fallback path: %s", targetPath)
 	}
 
-	// 停止所有插件
-	c.stopAllPlugins()
-
 	if fallbackDir == "" {
 		// 原地替换：备份 → 复制 → 清理
 		backupPath := currentPath + ".bak"
@@ -1030,16 +608,6 @@ func (c *Client) checkUpdatePermissions(execPath string) error {
 	return nil
 }
 
-// stopAllPlugins 停止所有运行中的插件
-func (c *Client) stopAllPlugins() {
-	c.pluginMu.Lock()
-	for key, handler := range c.runningPlugins {
-		c.logf("Stopping plugin %s for update", key)
-		handler.Stop()
-	}
-	c.runningPlugins = make(map[string]plugin.ClientPlugin)
-	c.pluginMu.Unlock()
-}
 
 // performWindowsClientUpdate Windows 平台更新
 func performWindowsClientUpdate(newFile, currentPath, serverAddr, token, id string) error {
@@ -1092,33 +660,6 @@ func restartClientProcess(path, serverAddr, token, id string) {
 	os.Exit(0)
 }
 
-// handlePluginStatusQuery 处理插件状态查询
-func (c *Client) handlePluginStatusQuery(stream net.Conn, msg *protocol.Message) {
-	defer stream.Close()
-
-	c.pluginMu.RLock()
-	plugins := make([]protocol.PluginStatusEntry, 0, len(c.runningPlugins))
-	for key, handler := range c.runningPlugins {
-		// 从插件的 Metadata 获取真正的插件名称
-		pluginName := handler.Metadata().Name
-		// 如果 Metadata 没有名称，回退到从 key 解析
-		if pluginName == "" {
-			parts := strings.SplitN(key, ":", 2)
-			pluginName = parts[0]
-		}
-		plugins = append(plugins, protocol.PluginStatusEntry{
-			PluginName: pluginName,
-			Running:    true,
-		})
-	}
-	c.pluginMu.RUnlock()
-
-	resp := protocol.PluginStatusQueryResponse{
-		Plugins: plugins,
-	}
-	respMsg, _ := protocol.NewMessage(protocol.MsgTypePluginStatusQueryResp, resp)
-	protocol.WriteMessage(stream, respMsg)
-}
 
 // handleLogRequest 处理日志请求
 func (c *Client) handleLogRequest(stream net.Conn, msg *protocol.Message) {
@@ -1196,72 +737,7 @@ func (c *Client) handleLogStop(stream net.Conn, msg *protocol.Message) {
 	c.logger.Unsubscribe(req.SessionID)
 }
 
-// handlePluginAPIRequest 处理插件 API 请求
-func (c *Client) handlePluginAPIRequest(stream net.Conn, msg *protocol.Message) {
-	defer stream.Close()
 
-	var req protocol.PluginAPIRequest
-	if err := msg.ParsePayload(&req); err != nil {
-		c.sendPluginAPIResponse(stream, 400, nil, "", "invalid request: "+err.Error())
-		return
-	}
-
-	c.logf("Plugin API request: %s %s for plugin %s (ID: %s)", req.Method, req.Path, req.PluginName, req.PluginID)
-
-	// 查找运行中的插件
-	c.pluginMu.RLock()
-	var handler plugin.ClientPlugin
-
-	// 优先使用 PluginID 查找
-	if req.PluginID != "" {
-		handler = c.runningPlugins[req.PluginID]
-	}
-
-	// 如果没找到，尝试通过 PluginName 匹配（向后兼容）
-	if handler == nil && req.PluginName != "" {
-		for key, p := range c.runningPlugins {
-			// key 可能是 PluginID 或 "pluginName:ruleName" 格式
-			if strings.HasPrefix(key, req.PluginName+":") {
-				handler = p
-				break
-			}
-		}
-	}
-	c.pluginMu.RUnlock()
-
-	if handler == nil {
-		c.sendPluginAPIResponse(stream, 404, nil, "", "plugin not running: "+req.PluginName)
-		return
-	}
-
-	// 类型断言为 JSPlugin
-	jsPlugin, ok := handler.(*script.JSPlugin)
-	if !ok {
-		c.sendPluginAPIResponse(stream, 500, nil, "", "plugin does not support API routing")
-		return
-	}
-
-	// 调用插件的 API 处理函数
-	status, headers, body, err := jsPlugin.HandleAPIRequest(req.Method, req.Path, req.Query, req.Headers, req.Body)
-	if err != nil {
-		c.sendPluginAPIResponse(stream, 500, nil, "", err.Error())
-		return
-	}
-
-	c.sendPluginAPIResponse(stream, status, headers, body, "")
-}
-
-// sendPluginAPIResponse 发送插件 API 响应
-func (c *Client) sendPluginAPIResponse(stream net.Conn, status int, headers map[string]string, body, errMsg string) {
-	resp := protocol.PluginAPIResponse{
-		Status:  status,
-		Headers: headers,
-		Body:    body,
-		Error:   errMsg,
-	}
-	msg, _ := protocol.NewMessage(protocol.MsgTypePluginAPIResponse, resp)
-	protocol.WriteMessage(stream, msg)
-}
 
 // handleSystemStatsRequest 处理系统状态请求
 func (c *Client) handleSystemStatsRequest(stream net.Conn, msg *protocol.Message) {

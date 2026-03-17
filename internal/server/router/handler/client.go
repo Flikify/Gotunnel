@@ -6,7 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/internal/server/router/dto"
-	"github.com/gotunnel/pkg/protocol"
 )
 
 // ClientHandler 客户端处理器
@@ -117,34 +116,6 @@ func (h *ClientHandler) Get(c *gin.Context) {
 
 	online, lastPing, remoteAddr, clientName, clientOS, clientArch, clientVersion := h.app.GetServer().GetClientStatus(clientID)
 
-	// 复制插件列表
-	plugins := make([]db.ClientPlugin, len(client.Plugins))
-	copy(plugins, client.Plugins)
-
-	// 如果客户端在线，获取实时插件运行状态
-	if online {
-		if statusList, err := h.app.GetServer().GetClientPluginStatus(clientID); err == nil {
-			// 创建运行中插件的映射
-			runningPlugins := make(map[string]bool)
-			for _, s := range statusList {
-				runningPlugins[s.PluginName] = s.Running
-			}
-			// 更新插件状态
-			for i := range plugins {
-				if running, ok := runningPlugins[plugins[i].Name]; ok {
-					plugins[i].Running = running
-				} else {
-					plugins[i].Running = false
-				}
-			}
-		}
-	} else {
-		// 客户端离线时，所有插件都标记为未运行
-		for i := range plugins {
-			plugins[i].Running = false
-		}
-	}
-
 	// 如果客户端在线且有名称，优先使用在线名称
 	nickname := client.Nickname
 	if online && clientName != "" && nickname == "" {
@@ -155,7 +126,6 @@ func (h *ClientHandler) Get(c *gin.Context) {
 		ID:         client.ID,
 		Nickname:   nickname,
 		Rules:      client.Rules,
-		Plugins:    plugins,
 		Online:     online,
 		LastPing:   lastPing,
 		RemoteAddr: remoteAddr,
@@ -196,9 +166,6 @@ func (h *ClientHandler) Update(c *gin.Context) {
 
 	client.Nickname = req.Nickname
 	client.Rules = req.Rules
-	if req.Plugins != nil {
-		client.Plugins = req.Plugins
-	}
 
 	if err := h.app.GetClientStore().UpdateClient(client); err != nil {
 		InternalError(c, err.Error())
@@ -301,159 +268,12 @@ func (h *ClientHandler) Restart(c *gin.Context) {
 	SuccessWithMessage(c, gin.H{"status": "ok"}, "client restart initiated")
 }
 
-// InstallPlugins 安装插件到客户端
-// @Summary 安装插件
-// @Description 将指定插件安装到客户端
-// @Tags 客户端
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param id path string true "客户端ID"
-// @Param request body dto.InstallPluginsRequest true "插件列表"
-// @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Router /api/client/{id}/install-plugins [post]
-func (h *ClientHandler) InstallPlugins(c *gin.Context) {
-	clientID := c.Param("id")
 
-	if !h.app.GetServer().IsClientOnline(clientID) {
-		ClientNotOnline(c)
-		return
-	}
-
-	var req dto.InstallPluginsRequest
-	if !BindJSON(c, &req) {
-		return
-	}
-
-	if err := h.app.GetServer().InstallPluginsToClient(clientID, req.Plugins); err != nil {
-		InternalError(c, err.Error())
-		return
-	}
-
-	Success(c, gin.H{"status": "ok"})
-}
-
-// PluginAction 客户端插件操作
-// @Summary 插件操作
-// @Description 对客户端插件执行操作(start/stop/restart/config/delete)
-// @Tags 客户端
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param id path string true "客户端ID"
-// @Param pluginID path string true "插件实例ID"
-// @Param action path string true "操作类型" Enums(start, stop, restart, config, delete)
-// @Param request body dto.ClientPluginActionRequest false "操作参数"
-// @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Router /api/client/{id}/plugin/{pluginID}/{action} [post]
-func (h *ClientHandler) PluginAction(c *gin.Context) {
-	clientID := c.Param("id")
-	pluginID := c.Param("pluginID")
-	action := c.Param("action")
 
-	var req dto.ClientPluginActionRequest
-	c.ShouldBindJSON(&req) // 忽略错误，使用默认值
-
-	// 通过 pluginID 查找插件信息
-	client, err := h.app.GetClientStore().GetClient(clientID)
-	if err != nil {
-		NotFound(c, "client not found")
-		return
-	}
-
-	var pluginName string
-	for _, p := range client.Plugins {
-		if p.ID == pluginID {
-			pluginName = p.Name
-			break
-		}
-	}
-	if pluginName == "" {
-		NotFound(c, "plugin not found")
-		return
-	}
-
-	if req.RuleName == "" {
-		req.RuleName = pluginName
-	}
-
-	switch action {
-	case "start":
-		err = h.app.GetServer().StartClientPlugin(clientID, pluginID, pluginName, req.RuleName)
-	case "stop":
-		err = h.app.GetServer().StopClientPlugin(clientID, pluginID, pluginName, req.RuleName)
-	case "restart":
-		err = h.app.GetServer().RestartClientPlugin(clientID, pluginID, pluginName, req.RuleName)
-	case "config":
-		if req.Config == nil {
-			BadRequest(c, "config required")
-			return
-		}
-		err = h.app.GetServer().UpdateClientPluginConfig(clientID, pluginID, pluginName, req.RuleName, req.Config, req.Restart)
-	case "delete":
-		err = h.deleteClientPlugin(clientID, pluginID)
-	default:
-		BadRequest(c, "unknown action: "+action)
-		return
-	}
-
-	if err != nil {
-		InternalError(c, err.Error())
-		return
-	}
-
-	Success(c, gin.H{
-		"status":    "ok",
-		"action":    action,
-		"plugin_id": pluginID,
-		"plugin":    pluginName,
-	})
-}
-
-func (h *ClientHandler) deleteClientPlugin(clientID, pluginID string) error {
-	client, err := h.app.GetClientStore().GetClient(clientID)
-	if err != nil {
-		return fmt.Errorf("client not found")
-	}
-
-	var newPlugins []db.ClientPlugin
-	var pluginName string
-	var pluginPort int
-	found := false
-	for _, p := range client.Plugins {
-		if p.ID == pluginID {
-			found = true
-			pluginName = p.Name
-			pluginPort = p.RemotePort
-			continue
-		}
-		newPlugins = append(newPlugins, p)
-	}
-
-	if !found {
-		return fmt.Errorf("plugin %s not found", pluginID)
-	}
-
-	// 删除插件管理的代理规则
-	var newRules []protocol.ProxyRule
-	for _, r := range client.Rules {
-		if r.PluginManaged && r.Name == pluginName {
-			continue // 跳过此插件的规则
-		}
-		newRules = append(newRules, r)
-	}
-
-	// 停止端口监听器
-	if pluginPort > 0 {
-		h.app.GetServer().StopPluginRule(clientID, pluginPort)
-	}
-
-	client.Plugins = newPlugins
-	client.Rules = newRules
-	return h.app.GetClientStore().UpdateClient(client)
-}
 
 // GetSystemStats 获取客户端系统状态
 func (h *ClientHandler) GetSystemStats(c *gin.Context) {

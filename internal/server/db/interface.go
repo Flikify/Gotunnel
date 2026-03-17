@@ -2,52 +2,11 @@ package db
 
 import "github.com/gotunnel/pkg/protocol"
 
-// ConfigField 配置字段定义
-type ConfigField struct {
-	Key         string   `json:"key"`
-	Label       string   `json:"label"`
-	Type        string   `json:"type"`
-	Default     string   `json:"default,omitempty"`
-	Required    bool     `json:"required,omitempty"`
-	Options     []string `json:"options,omitempty"`
-	Description string   `json:"description,omitempty"`
-}
-
-// ClientPlugin 客户端已安装的插件
-type ClientPlugin struct {
-	ID           string            `json:"id"`                      // 插件实例唯一 ID
-	Name         string            `json:"name"`
-	Version      string            `json:"version"`
-	Enabled      bool              `json:"enabled"`
-	Running      bool              `json:"running"`                 // 运行状态
-	Config       map[string]string `json:"config,omitempty"`        // 插件配置
-	RemotePort   int               `json:"remote_port,omitempty"`   // 远程监听端口
-	ConfigSchema []ConfigField     `json:"config_schema,omitempty"` // 配置模式
-	AuthEnabled  bool              `json:"auth_enabled,omitempty"`  // 是否启用认证
-	AuthUsername string            `json:"auth_username,omitempty"` // 认证用户名
-	AuthPassword string            `json:"auth_password,omitempty"` // 认证密码
-}
-
 // Client 客户端数据
 type Client struct {
 	ID       string               `json:"id"`
 	Nickname string               `json:"nickname,omitempty"`
 	Rules    []protocol.ProxyRule `json:"rules"`
-	Plugins  []ClientPlugin       `json:"plugins,omitempty"` // 已安装的插件
-}
-
-// JSPlugin JS 插件数据
-type JSPlugin struct {
-	Name        string            `json:"name"`
-	Source      string            `json:"source"`
-	Signature   string            `json:"signature"` // 官方签名 (Base64)
-	Description string            `json:"description"`
-	Author      string            `json:"author"`
-	Version     string            `json:"version,omitempty"`
-	AutoPush    []string          `json:"auto_push"`
-	Config      map[string]string `json:"config"`
-	AutoStart   bool              `json:"auto_start"`
-	Enabled     bool              `json:"enabled"`
 }
 
 // ClientStore 客户端存储接口
@@ -62,20 +21,9 @@ type ClientStore interface {
 	Close() error
 }
 
-// JSPluginStore JS 插件存储接口
-type JSPluginStore interface {
-	GetAllJSPlugins() ([]JSPlugin, error)
-	GetJSPlugin(name string) (*JSPlugin, error)
-	SaveJSPlugin(p *JSPlugin) error
-	DeleteJSPlugin(name string) error
-	SetJSPluginEnabled(name string, enabled bool) error
-	UpdateJSPluginConfig(name string, config map[string]string) error
-}
-
 // Store 统一存储接口
 type Store interface {
 	ClientStore
-	JSPluginStore
 	TrafficStore
 	Close() error
 }
@@ -93,4 +41,20 @@ type TrafficStore interface {
 	GetTotalTraffic() (inbound, outbound int64, err error)
 	Get24HourTraffic() (inbound, outbound int64, err error)
 	GetHourlyTraffic(hours int) ([]TrafficRecord, error)
+}
+
+// InstallToken 安装token
+type InstallToken struct {
+	Token     string `json:"token"`
+	ClientID  string `json:"client_id"`
+	CreatedAt int64  `json:"created_at"`
+	Used      bool   `json:"used"`
+}
+
+// InstallTokenStore 安装token存储接口
+type InstallTokenStore interface {
+	CreateInstallToken(token *InstallToken) error
+	GetInstallToken(token string) (*InstallToken, error)
+	MarkTokenUsed(token string) error
+	DeleteExpiredTokens(expireTime int64) error
 }

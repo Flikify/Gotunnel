@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { getClients } from '../api'
-import type { ClientStatus } from '../types'
+import { getClients, generateInstallCommand } from '../api'
+import type { ClientStatus, InstallCommandResponse } from '../types'
 
 const router = useRouter()
 const clients = ref<ClientStatus[]>([])
 const loading = ref(true)
+const showInstallModal = ref(false)
+const installData = ref<InstallCommandResponse | null>(null)
+const installClientId = ref('')
+const generatingInstall = ref(false)
 
 const loadClients = async () => {
   loading.value = true
@@ -24,6 +28,29 @@ const onlineClients = computed(() => clients.value.filter(c => c.online).length)
 
 const viewClient = (id: string) => {
   router.push(`/client/${id}`)
+}
+
+const openInstallModal = async () => {
+  installClientId.value = `client-${Date.now()}`
+  generatingInstall.value = true
+  try {
+    const { data } = await generateInstallCommand(installClientId.value)
+    installData.value = data
+    showInstallModal.value = true
+  } catch (e) {
+    console.error('Failed to generate install command', e)
+  } finally {
+    generatingInstall.value = false
+  }
+}
+
+const copyCommand = (cmd: string) => {
+  navigator.clipboard.writeText(cmd)
+}
+
+const closeInstallModal = () => {
+  showInstallModal.value = false
+  installData.value = null
 }
 
 onMounted(loadClients)
@@ -65,7 +92,12 @@ onMounted(loadClients)
       <div class="glass-card">
         <div class="card-header">
           <h3>客户端列表</h3>
-          <button class="glass-btn small" @click="loadClients">刷新</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="glass-btn small" @click="openInstallModal" :disabled="generatingInstall">
+              {{ generatingInstall ? '生成中...' : '安装命令' }}
+            </button>
+            <button class="glass-btn small" @click="loadClients">刷新</button>
+          </div>
         </div>
         <div class="card-body">
           <div v-if="loading" class="loading-state">加载中...</div>
@@ -98,6 +130,42 @@ onMounted(loadClients)
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Install Command Modal -->
+    <div v-if="showInstallModal" class="modal-overlay" @click="closeInstallModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>客户端安装命令</h3>
+          <button class="close-btn" @click="closeInstallModal">×</button>
+        </div>
+        <div class="modal-body" v-if="installData">
+          <p class="install-hint">选择您的操作系统，复制命令并在目标机器上执行：</p>
+          <div class="install-section">
+            <h4>Linux</h4>
+            <div class="command-box">
+              <code>{{ installData.commands.linux }}</code>
+              <button class="copy-btn" @click="copyCommand(installData.commands.linux)">复制</button>
+            </div>
+          </div>
+          <div class="install-section">
+            <h4>macOS</h4>
+            <div class="command-box">
+              <code>{{ installData.commands.macos }}</code>
+              <button class="copy-btn" @click="copyCommand(installData.commands.macos)">复制</button>
+            </div>
+          </div>
+          <div class="install-section">
+            <h4>Windows</h4>
+            <div class="command-box">
+              <code>{{ installData.commands.windows }}</code>
+              <button class="copy-btn" @click="copyCommand(installData.commands.windows)">复制</button>
+            </div>
+          </div>
+          <p class="token-info">客户端ID: <strong>{{ installClientId }}</strong></p>
+          <p class="token-warning">⚠️ 此命令包含一次性token，使用后需重新生成</p>
         </div>
       </div>
     </div>
@@ -427,4 +495,117 @@ onMounted(loadClients)
     transform: scale(1.1);
   }
 }
+
+/* Install Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  max-width: 800px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  line-height: 1;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.install-hint {
+  margin-bottom: 20px;
+  color: var(--color-text-secondary);
+}
+
+.install-section {
+  margin-bottom: 20px;
+}
+
+.install-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+.command-box {
+  display: flex;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+}
+
+.command-box code {
+  flex: 1;
+  font-family: monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--color-text-primary);
+}
+
+.copy-btn {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.copy-btn:hover {
+  background: var(--glass-bg-hover);
+}
+
+.token-info {
+  margin-top: 20px;
+  padding: 12px;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.token-warning {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #f59e0b;
+}
+
 </style>

@@ -40,8 +40,7 @@ func (s *SQLiteStore) init() error {
 		CREATE TABLE IF NOT EXISTS clients (
 			id TEXT PRIMARY KEY,
 			nickname TEXT NOT NULL DEFAULT '',
-			rules TEXT NOT NULL DEFAULT '[]',
-			plugins TEXT NOT NULL DEFAULT '[]'
+			rules TEXT NOT NULL DEFAULT '[]'
 		)
 	`)
 	if err != nil {
@@ -50,36 +49,6 @@ func (s *SQLiteStore) init() error {
 
 	// 迁移：添加 nickname 列
 	s.db.Exec(`ALTER TABLE clients ADD COLUMN nickname TEXT NOT NULL DEFAULT ''`)
-	// 迁移：添加 plugins 列
-	s.db.Exec(`ALTER TABLE clients ADD COLUMN plugins TEXT NOT NULL DEFAULT '[]'`)
-
-	// 创建 JS 插件表
-	_, err = s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS js_plugins (
-			name TEXT PRIMARY KEY,
-			source TEXT NOT NULL,
-			signature TEXT NOT NULL DEFAULT '',
-			description TEXT,
-			author TEXT,
-			version TEXT DEFAULT '',
-			auto_push TEXT NOT NULL DEFAULT '[]',
-			config TEXT NOT NULL DEFAULT '{}',
-			auto_start INTEGER DEFAULT 1,
-			enabled INTEGER DEFAULT 1,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		)
-	`)
-	if err != nil {
-		return err
-	}
-
-	// 迁移：添加 signature 列
-	s.db.Exec(`ALTER TABLE js_plugins ADD COLUMN signature TEXT NOT NULL DEFAULT ''`)
-	// 迁移：添加 version 列
-	s.db.Exec(`ALTER TABLE js_plugins ADD COLUMN version TEXT DEFAULT ''`)
-	// 迁移：添加 updated_at 列
-	s.db.Exec(`ALTER TABLE js_plugins ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`)
 
 	// 创建流量统计表
 	_, err = s.db.Exec(`
@@ -108,6 +77,19 @@ func (s *SQLiteStore) init() error {
 	// 初始化总流量记录
 	s.db.Exec(`INSERT OR IGNORE INTO traffic_total (id, inbound, outbound) VALUES (1, 0, 0)`)
 
+	// 创建安装token表
+	_, err = s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS install_tokens (
+			token TEXT PRIMARY KEY,
+			client_id TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			used INTEGER NOT NULL DEFAULT 0
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -121,7 +103,7 @@ func (s *SQLiteStore) GetAllClients() ([]Client, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT id, nickname, rules, plugins FROM clients`)
+	rows, err := s.db.Query(`SELECT id, nickname, rules FROM clients`)
 	if err != nil {
 		return nil, err
 	}
@@ -130,15 +112,12 @@ func (s *SQLiteStore) GetAllClients() ([]Client, error) {
 	var clients []Client
 	for rows.Next() {
 		var c Client
-		var rulesJSON, pluginsJSON string
-		if err := rows.Scan(&c.ID, &c.Nickname, &rulesJSON, &pluginsJSON); err != nil {
+		var rulesJSON string
+		if err := rows.Scan(&c.ID, &c.Nickname, &rulesJSON); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(rulesJSON), &c.Rules); err != nil {
 			c.Rules = []protocol.ProxyRule{}
-		}
-		if err := json.Unmarshal([]byte(pluginsJSON), &c.Plugins); err != nil {
-			c.Plugins = []ClientPlugin{}
 		}
 		clients = append(clients, c)
 	}
@@ -151,16 +130,13 @@ func (s *SQLiteStore) GetClient(id string) (*Client, error) {
 	defer s.mu.RUnlock()
 
 	var c Client
-	var rulesJSON, pluginsJSON string
-	err := s.db.QueryRow(`SELECT id, nickname, rules, plugins FROM clients WHERE id = ?`, id).Scan(&c.ID, &c.Nickname, &rulesJSON, &pluginsJSON)
+	var rulesJSON string
+	err := s.db.QueryRow(`SELECT id, nickname, rules FROM clients WHERE id = ?`, id).Scan(&c.ID, &c.Nickname, &rulesJSON)
 	if err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(rulesJSON), &c.Rules); err != nil {
 		c.Rules = []protocol.ProxyRule{}
-	}
-	if err := json.Unmarshal([]byte(pluginsJSON), &c.Plugins); err != nil {
-		c.Plugins = []ClientPlugin{}
 	}
 	return &c, nil
 }
@@ -174,12 +150,8 @@ func (s *SQLiteStore) CreateClient(c *Client) error {
 	if err != nil {
 		return err
 	}
-	pluginsJSON, err := json.Marshal(c.Plugins)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.Exec(`INSERT INTO clients (id, nickname, rules, plugins) VALUES (?, ?, ?, ?)`,
-		c.ID, c.Nickname, string(rulesJSON), string(pluginsJSON))
+	_, err = s.db.Exec(`INSERT INTO clients (id, nickname, rules) VALUES (?, ?, ?)`,
+		c.ID, c.Nickname, string(rulesJSON))
 	return err
 }
 
@@ -192,12 +164,8 @@ func (s *SQLiteStore) UpdateClient(c *Client) error {
 	if err != nil {
 		return err
 	}
-	pluginsJSON, err := json.Marshal(c.Plugins)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.Exec(`UPDATE clients SET nickname = ?, rules = ?, plugins = ? WHERE id = ?`,
-		c.Nickname, string(rulesJSON), string(pluginsJSON), c.ID)
+	_, err = s.db.Exec(`UPDATE clients SET nickname = ?, rules = ? WHERE id = ?`,
+		c.Nickname, string(rulesJSON), c.ID)
 	return err
 }
 
@@ -227,121 +195,6 @@ func (s *SQLiteStore) GetClientRules(id string) ([]protocol.ProxyRule, error) {
 		return nil, err
 	}
 	return c.Rules, nil
-}
-
-// ========== JS 插件存储方法 ==========
-
-// GetAllJSPlugins 获取所有 JS 插件
-func (s *SQLiteStore) GetAllJSPlugins() ([]JSPlugin, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	rows, err := s.db.Query(`
-		SELECT name, source, signature, description, author, version, auto_push, config, auto_start, enabled
-		FROM js_plugins
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var plugins []JSPlugin
-	for rows.Next() {
-		var p JSPlugin
-		var autoPushJSON, configJSON string
-		var version sql.NullString
-		var autoStart, enabled int
-		err := rows.Scan(&p.Name, &p.Source, &p.Signature, &p.Description, &p.Author,
-			&version, &autoPushJSON, &configJSON, &autoStart, &enabled)
-		if err != nil {
-			return nil, err
-		}
-		p.Version = version.String
-		json.Unmarshal([]byte(autoPushJSON), &p.AutoPush)
-		json.Unmarshal([]byte(configJSON), &p.Config)
-		p.AutoStart = autoStart == 1
-		p.Enabled = enabled == 1
-		plugins = append(plugins, p)
-	}
-	return plugins, nil
-}
-
-// GetJSPlugin 获取单个 JS 插件
-func (s *SQLiteStore) GetJSPlugin(name string) (*JSPlugin, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var p JSPlugin
-	var autoPushJSON, configJSON string
-	var version sql.NullString
-	var autoStart, enabled int
-	err := s.db.QueryRow(`
-		SELECT name, source, signature, description, author, version, auto_push, config, auto_start, enabled
-		FROM js_plugins WHERE name = ?
-	`, name).Scan(&p.Name, &p.Source, &p.Signature, &p.Description, &p.Author,
-		&version, &autoPushJSON, &configJSON, &autoStart, &enabled)
-	if err != nil {
-		return nil, err
-	}
-	p.Version = version.String
-	json.Unmarshal([]byte(autoPushJSON), &p.AutoPush)
-	json.Unmarshal([]byte(configJSON), &p.Config)
-	p.AutoStart = autoStart == 1
-	p.Enabled = enabled == 1
-	return &p, nil
-}
-
-// SaveJSPlugin 保存 JS 插件
-func (s *SQLiteStore) SaveJSPlugin(p *JSPlugin) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	autoPushJSON, _ := json.Marshal(p.AutoPush)
-	configJSON, _ := json.Marshal(p.Config)
-	autoStart, enabled := 0, 0
-	if p.AutoStart {
-		autoStart = 1
-	}
-	if p.Enabled {
-		enabled = 1
-	}
-
-	_, err := s.db.Exec(`
-		INSERT OR REPLACE INTO js_plugins
-		(name, source, signature, description, author, version, auto_push, config, auto_start, enabled, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, p.Name, p.Source, p.Signature, p.Description, p.Author, p.Version,
-		string(autoPushJSON), string(configJSON), autoStart, enabled)
-	return err
-}
-
-// DeleteJSPlugin 删除 JS 插件
-func (s *SQLiteStore) DeleteJSPlugin(name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.db.Exec(`DELETE FROM js_plugins WHERE name = ?`, name)
-	return err
-}
-
-// SetJSPluginEnabled 设置 JS 插件启用状态
-func (s *SQLiteStore) SetJSPluginEnabled(name string, enabled bool) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	val := 0
-	if enabled {
-		val = 1
-	}
-	_, err := s.db.Exec(`UPDATE js_plugins SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`, val, name)
-	return err
-}
-
-// UpdateJSPluginConfig 更新 JS 插件配置
-func (s *SQLiteStore) UpdateJSPluginConfig(name string, config map[string]string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	configJSON, _ := json.Marshal(config)
-	_, err := s.db.Exec(`UPDATE js_plugins SET config = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`, string(configJSON), name)
-	return err
 }
 
 // ========== 流量统计方法 ==========

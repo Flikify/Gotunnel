@@ -13,6 +13,7 @@ import (
 const (
 	socks5Version = 0x05
 	noAuth        = 0x00
+	userPassAuth  = 0x02
 	cmdConnect    = 0x01
 	atypIPv4      = 0x01
 	atypDomain    = 0x03
@@ -21,8 +22,10 @@ const (
 
 // SOCKS5Server SOCKS5 代理服务
 type SOCKS5Server struct {
-	dialer  Dialer
-	onStats func(in, out int64) // 流量统计回调
+	dialer   Dialer
+	onStats  func(in, out int64) // 流量统计回调
+	username string
+	password string
 }
 
 // Dialer 连接拨号器接口
@@ -31,8 +34,8 @@ type Dialer interface {
 }
 
 // NewSOCKS5Server 创建 SOCKS5 服务
-func NewSOCKS5Server(dialer Dialer, onStats func(in, out int64)) *SOCKS5Server {
-	return &SOCKS5Server{dialer: dialer, onStats: onStats}
+func NewSOCKS5Server(dialer Dialer, onStats func(in, out int64), username, password string) *SOCKS5Server {
+	return &SOCKS5Server{dialer: dialer, onStats: onStats, username: username, password: password}
 }
 
 // HandleConn 处理 SOCKS5 连接
@@ -85,9 +88,52 @@ func (s *SOCKS5Server) handshake(conn net.Conn) error {
 		return err
 	}
 
-	// 响应：使用无认证
+	// 如果配置了用户名密码，要求认证
+	if s.username != "" && s.password != "" {
+		_, err := conn.Write([]byte{socks5Version, userPassAuth})
+		if err != nil {
+			return err
+		}
+		return s.authenticate(conn)
+	}
+
+	// 无认证
 	_, err := conn.Write([]byte{socks5Version, noAuth})
 	return err
+}
+
+// authenticate 处理用户名密码认证
+func (s *SOCKS5Server) authenticate(conn net.Conn) error {
+	buf := make([]byte, 2)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		return err
+	}
+	if buf[0] != 0x01 {
+		return errors.New("unsupported auth version")
+	}
+
+	ulen := int(buf[1])
+	username := make([]byte, ulen)
+	if _, err := io.ReadFull(conn, username); err != nil {
+		return err
+	}
+
+	plen := make([]byte, 1)
+	if _, err := io.ReadFull(conn, plen); err != nil {
+		return err
+	}
+	password := make([]byte, plen[0])
+	if _, err := io.ReadFull(conn, password); err != nil {
+		return err
+	}
+
+	if string(username) == s.username && string(password) == s.password {
+		conn.Write([]byte{0x01, 0x00}) // 认证成功
+		return nil
+	}
+
+	conn.Write([]byte{0x01, 0x01}) // 认证失败
+	return errors.New("authentication failed")
 }
 
 // readRequest 读取请求

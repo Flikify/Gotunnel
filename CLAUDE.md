@@ -61,13 +61,7 @@ pkg/
   ├── auth/          # JWT authentication
   ├── utils/         # Port availability checking
   ├── version/       # Version info and update checking (Gitea API)
-  ├── update/        # Shared update logic (download, extract tar.gz/zip)
-  └── plugin/        # Plugin system core
-      ├── types.go       # Plugin interfaces
-      ├── registry.go    # Plugin registry
-      ├── script/        # JS plugin runtime (goja)
-      ├── sign/          # Plugin signature verification
-      └── store/         # Plugin persistence (SQLite)
+  └── update/        # Shared update logic (download, extract tar.gz/zip)
 web/                 # Vue 3 + TypeScript frontend (Vite + naive-ui)
 scripts/             # Build scripts (build.sh, build.ps1)
 ```
@@ -75,22 +69,15 @@ scripts/             # Build scripts (build.sh, build.ps1)
 ### Key Interfaces
 
 - `ClientStore` (internal/server/db/): Database abstraction for client rules storage
-- `JSPluginStore` (internal/server/db/): JS plugin persistence
 - `ServerInterface` (internal/server/router/handler/): API handler interface
-- `ClientPlugin` (pkg/plugin/): Plugin interface for client-side plugins
 
 ### Proxy Types
 
-**内置类型** (直接在 tunnel 中处理):
 1. **TCP** (default): Direct port forwarding (remote_port → local_ip:local_port)
 2. **UDP**: UDP port forwarding
 3. **HTTP**: HTTP proxy through client network
 4. **HTTPS**: HTTPS proxy through client network
 5. **SOCKS5**: SOCKS5 proxy through client network
-
-**JS 插件类型** (通过 goja 运行时):
-- Custom application plugins (file-server, api-server, etc.)
-- Runs on client side with sandbox restrictions
 
 ### Data Flow
 
@@ -101,44 +88,6 @@ External User → Server Port → Yamux Stream → Client → Local Service
 - Server: YAML config + SQLite database for client rules and JS plugins
 - Client: Command-line flags only (server address, token, client ID)
 - Default ports: 7000 (tunnel), 7500 (web console)
-
-## Plugin System
-
-GoTunnel supports a JavaScript-based plugin system using the goja runtime.
-
-### Plugin Architecture
-
-- **内置协议**: tcp, udp, http, https, socks5 直接在 tunnel 代码中处理
-- **JS Plugins**: 自定义应用插件通过 goja 运行时在客户端执行
-- **Plugin Store**: 从官方商店浏览和安装插件
-- **Signature Verification**: 插件需要签名验证才能运行
-
-### JS Plugin Lifecycle
-
-```javascript
-function metadata() {
-    return {
-        name: "plugin-name",
-        version: "1.0.0",
-        type: "app",
-        description: "Plugin description",
-        author: "Author"
-    };
-}
-
-function start() { /* called on plugin start */ }
-function handleConn(conn) { /* handle each connection */ }
-function stop() { /* called on plugin stop */ }
-```
-
-### Plugin APIs
-
-- **Basic**: `log()`, `config()`
-- **Connection**: `conn.Read()`, `conn.Write()`, `conn.Close()`
-- **File System**: `fs.readFile()`, `fs.writeFile()`, `fs.readDir()`, `fs.stat()`, etc.
-- **HTTP**: `http.serve()`, `http.json()`, `http.sendFile()`
-
-See `PLUGINS.md` for detailed plugin development documentation.
 
 ## API Documentation
 

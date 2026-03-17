@@ -1,7 +1,6 @@
 package dto
 
 import (
-	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/pkg/protocol"
 )
 
@@ -17,7 +16,6 @@ type CreateClientRequest struct {
 type UpdateClientRequest struct {
 	Nickname string               `json:"nickname" binding:"max=128" example:"My Client"`
 	Rules    []protocol.ProxyRule `json:"rules"`
-	Plugins  []db.ClientPlugin    `json:"plugins"`
 }
 
 // ClientResponse 客户端详情响应
@@ -26,7 +24,6 @@ type ClientResponse struct {
 	ID         string               `json:"id" example:"client-001"`
 	Nickname   string               `json:"nickname,omitempty" example:"My Client"`
 	Rules      []protocol.ProxyRule `json:"rules"`
-	Plugins    []db.ClientPlugin    `json:"plugins,omitempty"`
 	Online     bool                 `json:"online" example:"true"`
 	LastPing   string               `json:"last_ping,omitempty" example:"2025-01-02T10:30:00Z"`
 	RemoteAddr string               `json:"remote_addr,omitempty" example:"192.168.1.100:54321"`
@@ -46,18 +43,4 @@ type ClientListItem struct {
 	RuleCount  int    `json:"rule_count" example:"3"`
 	OS         string `json:"os,omitempty" example:"linux"`
 	Arch       string `json:"arch,omitempty" example:"amd64"`
-}
-
-// InstallPluginsRequest 安装插件到客户端请求
-// @Description 安装插件到指定客户端
-type InstallPluginsRequest struct {
-	Plugins []string `json:"plugins" binding:"required,min=1,dive,required" example:"socks5,http-proxy"`
-}
-
-// ClientPluginActionRequest 客户端插件操作请求
-// @Description 对客户端插件执行操作
-type ClientPluginActionRequest struct {
-	RuleName string            `json:"rule_name"`
-	Config   map[string]string `json:"config,omitempty"`
-	Restart  bool              `json:"restart"`
 }

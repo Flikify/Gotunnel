@@ -13,33 +13,16 @@ type ServerConfig struct {
 	Server ServerSettings `yaml:"server"`
 }
 
-// PluginStoreSettings 插件仓库设置
-type PluginStoreSettings struct {
-	URL string `yaml:"url"` // 插件仓库 URL，为空则使用默认值
-}
-
-// 默认插件仓库 URL
-const DefaultPluginStoreURL = "https://git.92coco.cn/flik/GoTunnel-Plugins/raw/branch/main/store.json"
-
-// GetPluginStoreURL 获取插件仓库 URL
-func (s *PluginStoreSettings) GetPluginStoreURL() string {
-	if s.URL != "" {
-		return s.URL
-	}
-	return DefaultPluginStoreURL
-}
-
 // ServerSettings 服务端设置
 type ServerSettings struct {
-	BindAddr         string              `yaml:"bind_addr"`
-	BindPort         int                 `yaml:"bind_port"`
-	Token            string              `yaml:"token"`
-	HeartbeatSec     int                 `yaml:"heartbeat_sec"`
-	HeartbeatTimeout int                 `yaml:"heartbeat_timeout"`
-	DBPath           string              `yaml:"db_path"`
-	TLSDisabled      bool                `yaml:"tls_disabled"`
-	Web              WebSettings         `yaml:"web"`
-	PluginStore      PluginStoreSettings `yaml:"plugin_store"`
+	BindAddr         string      `yaml:"bind_addr"`
+	BindPort         int         `yaml:"bind_port"`
+	Token            string      `yaml:"token"`
+	HeartbeatSec     int         `yaml:"heartbeat_sec"`
+	HeartbeatTimeout int         `yaml:"heartbeat_timeout"`
+	DBPath           string      `yaml:"db_path"`
+	TLSDisabled      bool        `yaml:"tls_disabled"`
+	Web              WebSettings `yaml:"web"`
 }
 
 // WebSettings Web控制台设置

@@ -67,8 +67,6 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		api.POST("/client/:id/push", clientHandler.PushConfig)
 		api.POST("/client/:id/disconnect", clientHandler.Disconnect)
 		api.POST("/client/:id/restart", clientHandler.Restart)
-		api.POST("/client/:id/install-plugins", clientHandler.InstallPlugins)
-		api.POST("/client/:id/plugin/:pluginID/:action", clientHandler.PluginAction)
 		api.GET("/client/:id/system-stats", clientHandler.GetSystemStats)
 		api.GET("/client/:id/screenshot", clientHandler.GetScreenshot)
 		api.POST("/client/:id/shell", clientHandler.ExecuteShell)
@@ -78,29 +76,6 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		api.GET("/config", configHandler.Get)
 		api.PUT("/config", configHandler.Update)
 		api.POST("/config/reload", configHandler.Reload)
-
-		// 插件管理
-		pluginHandler := handler.NewPluginHandler(app)
-		api.GET("/plugins", pluginHandler.List)
-		api.POST("/plugin/:name/enable", pluginHandler.Enable)
-		api.POST("/plugin/:name/disable", pluginHandler.Disable)
-		api.GET("/rule-schemas", pluginHandler.GetRuleSchemas)
-		api.GET("/client-plugin/:clientID/:pluginName/config", pluginHandler.GetClientConfig)
-		api.PUT("/client-plugin/:clientID/:pluginName/config", pluginHandler.UpdateClientConfig)
-
-		// JS 插件管理
-		jsPluginHandler := handler.NewJSPluginHandler(app)
-		api.GET("/js-plugins", jsPluginHandler.List)
-		api.POST("/js-plugins", jsPluginHandler.Create)
-		api.GET("/js-plugin/:name", jsPluginHandler.Get)
-		api.PUT("/js-plugin/:name", jsPluginHandler.Update)
-		api.DELETE("/js-plugin/:name", jsPluginHandler.Delete)
-		api.POST("/js-plugin/:name/push/:clientID", jsPluginHandler.PushToClient)
-
-		// 插件商店
-		storeHandler := handler.NewStoreHandler(app)
-		api.GET("/store/plugins", storeHandler.ListPlugins)
-		api.POST("/store/install", storeHandler.Install)
 
 		// 更新管理
 		updateHandler := handler.NewUpdateHandler(app)
@@ -118,9 +93,9 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		api.GET("/traffic/stats", trafficHandler.GetStats)
 		api.GET("/traffic/hourly", trafficHandler.GetHourly)
 
-		// 插件 API 代理 (通过 Web API 访问客户端插件)
-		pluginAPIHandler := handler.NewPluginAPIHandler(app)
-		api.Any("/client/:id/plugin-api/:pluginID/*route", pluginAPIHandler.ProxyRequest)
+		// 安装命令生成
+		installHandler := handler.NewInstallHandler(app)
+		api.POST("/install/generate", installHandler.GenerateInstallCommand)
 	}
 }
 
@@ -200,10 +175,6 @@ func isStaticAsset(path string) bool {
 
 // Re-export types from handler package for backward compatibility
 type (
-	ServerInterface        = handler.ServerInterface
-	AppInterface           = handler.AppInterface
-	ConfigField            = handler.ConfigField
-	RuleSchema             = handler.RuleSchema
-	PluginInfo             = handler.PluginInfo
-	JSPluginInstallRequest = handler.JSPluginInstallRequest
+	ServerInterface = handler.ServerInterface
+	AppInterface    = handler.AppInterface
 )

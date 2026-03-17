@@ -16,23 +16,21 @@ var staticFiles embed.FS
 
 // WebServer Web控制台服务
 type WebServer struct {
-	ClientStore   db.ClientStore
-	Server        router.ServerInterface
-	Config        *config.ServerConfig
-	ConfigPath    string
-	JSPluginStore db.JSPluginStore
-	TrafficStore  db.TrafficStore
+	ClientStore  db.ClientStore
+	Server       router.ServerInterface
+	Config       *config.ServerConfig
+	ConfigPath   string
+	TrafficStore db.TrafficStore
 }
 
 // NewWebServer 创建Web服务
 func NewWebServer(cs db.ClientStore, srv router.ServerInterface, cfg *config.ServerConfig, cfgPath string, store db.Store) *WebServer {
 	return &WebServer{
-		ClientStore:   cs,
-		Server:        srv,
-		Config:        cfg,
-		ConfigPath:    cfgPath,
-		JSPluginStore: store,
-		TrafficStore:  store,
+		ClientStore:  cs,
+		Server:       srv,
+		Config:       cfg,
+		ConfigPath:   cfgPath,
+		TrafficStore: store,
 	}
 }
 
@@ -105,11 +103,6 @@ func (w *WebServer) GetConfigPath() string {
 // SaveConfig 保存配置
 func (w *WebServer) SaveConfig() error {
 	return config.SaveServerConfig(w.ConfigPath, w.Config)
-}
-
-// GetJSPluginStore 获取 JS 插件存储
-func (w *WebServer) GetJSPluginStore() db.JSPluginStore {
-	return w.JSPluginStore
 }
 
 // GetTrafficStore 获取流量存储

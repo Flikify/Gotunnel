@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/gotunnel/internal/server/db"
-	"github.com/gotunnel/internal/server/router"
-	"github.com/gotunnel/pkg/plugin"
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/proxy"
 	"github.com/gotunnel/pkg/relay"
@@ -49,36 +47,23 @@ func generateClientID() string {
 
 // Server 隧道服务端
 type Server struct {
-	clientStore    db.ClientStore
-	jsPluginStore  db.JSPluginStore // JS 插件存储
-	trafficStore   db.TrafficStore  // 流量存储
-	bindAddr       string
-	bindPort       int
-	token          string
-	heartbeat      int
-	hbTimeout      int
-	portManager    *utils.PortManager
-	clients        map[string]*ClientSession
-	mu             sync.RWMutex
-	tlsConfig      *tls.Config
-	pluginRegistry *plugin.Registry
-	jsPlugins      []JSPluginEntry    // 配置的 JS 插件
-	connSem        chan struct{}      // 连接数信号量
-	activeConns    int64              // 当前活跃连接数
-	listener       net.Listener       // 主监听器
-	shutdown       chan struct{}      // 关闭信号
-	wg             sync.WaitGroup     // 等待所有连接关闭
-	logSessions    *LogSessionManager // 日志会话管理器
-}
-
-// JSPluginEntry JS 插件条目
-type JSPluginEntry struct {
-	Name      string
-	Source    string
-	Signature string
-	AutoPush  []string
-	Config    map[string]string
-	AutoStart bool
+	clientStore  db.ClientStore
+	trafficStore db.TrafficStore // 流量存储
+	bindAddr     string
+	bindPort     int
+	token        string
+	heartbeat    int
+	hbTimeout    int
+	portManager  *utils.PortManager
+	clients      map[string]*ClientSession
+	mu           sync.RWMutex
+	tlsConfig    *tls.Config
+	connSem      chan struct{}      // 连接数信号量
+	activeConns  int64              // 当前活跃连接数
+	listener     net.Listener       // 主监听器
+	shutdown     chan struct{}      // 关闭信号
+	wg           sync.WaitGroup     // 等待所有连接关闭
+	logSessions  *LogSessionManager // 日志会话管理器
 }
 
 // ClientSession 客户端会话
@@ -152,25 +137,9 @@ func (s *Server) Shutdown(timeout time.Duration) error {
 	}
 }
 
-// SetPluginRegistry 设置插件注册表
-func (s *Server) SetPluginRegistry(registry *plugin.Registry) {
-	s.pluginRegistry = registry
-}
-
-// SetJSPluginStore 设置 JS 插件存储
-func (s *Server) SetJSPluginStore(store db.JSPluginStore) {
-	s.jsPluginStore = store
-}
-
 // SetTrafficStore 设置流量存储
 func (s *Server) SetTrafficStore(store db.TrafficStore) {
 	s.trafficStore = store
-}
-
-// LoadJSPlugins 加载 JS 插件配置
-func (s *Server) LoadJSPlugins(plugins []JSPluginEntry) {
-	s.jsPlugins = plugins
-	log.Printf("[Server] Loaded %d JS plugin configs", len(plugins))
 }
 
 // Run 启动服务端
@@ -257,7 +226,32 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	if authReq.Token != s.token {
+	// 验证token：支持常规token和一次性安装token
+	validToken := authReq.Token == s.token
+	var isInstallToken bool
+
+	if !validToken {
+		// 尝试验证安装token
+		if tokenStore, ok := s.clientStore.(db.InstallTokenStore); ok {
+			if installToken, err := tokenStore.GetInstallToken(authReq.Token); err == nil {
+				if !installToken.Used && time.Now().Unix()-installToken.CreatedAt < 3600 {
+					// token有效且未过期
+					validToken = true
+					isInstallToken = true
+					// 验证客户端ID匹配
+					if authReq.ClientID != "" && authReq.ClientID != installToken.ClientID {
+						security.LogInvalidClientID(clientIP, authReq.ClientID)
+						s.sendAuthResponse(conn, false, "client id mismatch", "")
+						return
+					}
+					// 使用token中的客户端ID
+					authReq.ClientID = installToken.ClientID
+				}
+			}
+		}
+	}
+
+	if !validToken {
 		security.LogInvalidToken(clientIP)
 		s.sendAuthResponse(conn, false, "invalid token", "")
 		return
@@ -297,6 +291,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 	rules, _ := s.clientStore.GetClientRules(clientID)
 	if rules == nil {
 		rules = []protocol.ProxyRule{}
+	}
+
+	// 如果使用安装token，标记为已使用
+	if isInstallToken {
+		if tokenStore, ok := s.clientStore.(db.InstallTokenStore); ok {
+			tokenStore.MarkTokenUsed(authReq.Token)
+		}
 	}
 
 	conn.SetReadDeadline(time.Time{})
@@ -340,15 +341,15 @@ func (s *Server) setupClientSession(conn net.Conn, clientID, clientName, clientO
 	s.registerClient(cs)
 	defer s.unregisterClient(cs)
 
-	if err := s.sendProxyConfig(session, rules); err != nil {
+	// 启动代理监听器（会更新 rules 的 PortStatus）
+	s.startProxyListeners(cs)
+
+	// 发送配置到客户端（包含端口状态）
+	if err := s.sendProxyConfig(session, cs.Rules); err != nil {
 		log.Printf("[Server] Send config error: %v", err)
 		return
 	}
 
-	// 自动推送 JS 插件
-	s.autoPushJSPlugins(cs)
-
-	s.startProxyListeners(cs)
 	go s.heartbeatLoop(cs)
 
 	<-session.CloseChan()
@@ -442,7 +443,8 @@ func (s *Server) stopProxyListeners(cs *ClientSession) {
 
 // startProxyListeners 启动代理监听
 func (s *Server) startProxyListeners(cs *ClientSession) {
-	for _, rule := range cs.Rules {
+	for i := range cs.Rules {
+		rule := &cs.Rules[i]
 		if !rule.IsEnabled() {
 			continue
 		}
@@ -458,15 +460,10 @@ func (s *Server) startProxyListeners(cs *ClientSession) {
 			continue
 		}
 
-		// 检查是否为客户端插件
-		if s.isClientPlugin(ruleType) {
-			s.startClientPluginListener(cs, rule)
-			continue
-		}
-
 		// TCP 类型
 		if err := s.portManager.Reserve(rule.RemotePort, cs.ID); err != nil {
 			log.Printf("[Server] Port %d error: %v", rule.RemotePort, err)
+			rule.PortStatus = "failed: " + err.Error()
 			continue
 		}
 
@@ -474,8 +471,11 @@ func (s *Server) startProxyListeners(cs *ClientSession) {
 		if err != nil {
 			log.Printf("[Server] Listen %d error: %v", rule.RemotePort, err)
 			s.portManager.Release(rule.RemotePort)
+			rule.PortStatus = "failed: " + err.Error()
 			continue
 		}
+
+		rule.PortStatus = "listening"
 
 		cs.mu.Lock()
 		cs.Listeners[rule.RemotePort] = ln
@@ -484,17 +484,17 @@ func (s *Server) startProxyListeners(cs *ClientSession) {
 		switch ruleType {
 		case "socks5":
 			log.Printf("[Server] SOCKS5 proxy %s on :%d", rule.Name, rule.RemotePort)
-			go s.acceptProxyServerConns(cs, ln, rule)
+			go s.acceptProxyServerConns(cs, ln, *rule)
 		case "http", "https":
 			log.Printf("[Server] HTTP proxy %s on :%d", rule.Name, rule.RemotePort)
-			go s.acceptProxyServerConns(cs, ln, rule)
+			go s.acceptProxyServerConns(cs, ln, *rule)
 		case "websocket":
 			log.Printf("[Server] Websocket proxy %s on :%d", rule.Name, rule.RemotePort)
-			go s.acceptWebsocketConns(cs, ln, rule)
+			go s.acceptWebsocketConns(cs, ln, *rule)
 		default:
 			log.Printf("[Server] TCP proxy %s: :%d -> %s:%d",
 				rule.Name, rule.RemotePort, rule.LocalIP, rule.LocalPort)
-			go s.acceptProxyConns(cs, ln, rule)
+			go s.acceptProxyConns(cs, ln, *rule)
 		}
 	}
 }
@@ -514,8 +514,14 @@ func (s *Server) acceptProxyConns(cs *ClientSession, ln net.Listener, rule proto
 func (s *Server) acceptProxyServerConns(cs *ClientSession, ln net.Listener, rule protocol.ProxyRule) {
 	dialer := proxy.NewTunnelDialer(cs.Session)
 
-	// 使用内置 proxy 实现 (带流量统计)
-	proxyServer := proxy.NewServer(rule.Type, dialer, s.recordTraffic)
+	// 使用内置 proxy 实现 (带流量统计和认证)
+	username := ""
+	password := ""
+	if rule.AuthEnabled {
+		username = rule.AuthUsername
+		password = rule.AuthPassword
+	}
+	proxyServer := proxy.NewServer(rule.Type, dialer, s.recordTraffic, username, password)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -623,49 +629,6 @@ func (s *Server) IsClientOnline(clientID string) bool {
 	return ok
 }
 
-// GetClientPluginStatus 获取客户端插件运行状态
-func (s *Server) GetClientPluginStatus(clientID string) ([]protocol.PluginStatusEntry, error) {
-	s.mu.RLock()
-	cs, ok := s.clients[clientID]
-	s.mu.RUnlock()
-
-	if !ok {
-		return nil, fmt.Errorf("client %s not online", clientID)
-	}
-
-	stream, err := cs.Session.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer stream.Close()
-
-	// 发送查询请求
-	msg, err := protocol.NewMessage(protocol.MsgTypePluginStatusQuery, nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := protocol.WriteMessage(stream, msg); err != nil {
-		return nil, err
-	}
-
-	// 读取响应
-	resp, err := protocol.ReadMessage(stream)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.Type != protocol.MsgTypePluginStatusQueryResp {
-		return nil, fmt.Errorf("unexpected response type: %d", resp.Type)
-	}
-
-	var statusResp protocol.PluginStatusQueryResponse
-	if err := resp.ParsePayload(&statusResp); err != nil {
-		return nil, err
-	}
-
-	return statusResp.Plugins, nil
-}
-
 // GetAllClientStatus 获取所有客户端状态
 func (s *Server) GetAllClientStatus() map[string]struct {
 	Online     bool
@@ -760,8 +723,25 @@ func (s *Server) PushConfigToClient(clientID string) error {
 	// 启动新的监听器
 	s.startProxyListeners(cs)
 
+	// 检查是否有端口启动失败
+	var failedPorts []string
+	for _, rule := range cs.Rules {
+		if rule.IsEnabled() && strings.HasPrefix(rule.PortStatus, "failed:") {
+			failedPorts = append(failedPorts, fmt.Sprintf("port %d: %s", rule.RemotePort, strings.TrimPrefix(rule.PortStatus, "failed: ")))
+		}
+	}
+
 	// 发送配置到客户端
-	return s.sendProxyConfig(cs.Session, rules)
+	if err := s.sendProxyConfig(cs.Session, cs.Rules); err != nil {
+		return err
+	}
+
+	// 如果有端口失败，返回错误
+	if len(failedPorts) > 0 {
+		return fmt.Errorf("some ports failed to start: %s", strings.Join(failedPorts, "; "))
+	}
+
+	return nil
 }
 
 // DisconnectClient 断开客户端连接
@@ -777,127 +757,16 @@ func (s *Server) DisconnectClient(clientID string) error {
 	return cs.Session.Close()
 }
 
-// GetPluginList 获取插件列表
-func (s *Server) GetPluginList() []router.PluginInfo {
-	var result []router.PluginInfo
 
-	if s.pluginRegistry == nil {
-		return result
-	}
 
-	for _, info := range s.pluginRegistry.List() {
-		pi := router.PluginInfo{
-			Name:        info.Metadata.Name,
-			Version:     info.Metadata.Version,
-			Type:        string(info.Metadata.Type),
-			Description: info.Metadata.Description,
-			Source:      string(info.Metadata.Source),
-			Enabled:     info.Enabled,
-		}
 
-		// 转换 RuleSchema
-		if info.Metadata.RuleSchema != nil {
-			rs := &router.RuleSchema{
-				NeedsLocalAddr: info.Metadata.RuleSchema.NeedsLocalAddr,
-			}
-			for _, f := range info.Metadata.RuleSchema.ExtraFields {
-				rs.ExtraFields = append(rs.ExtraFields, router.ConfigField{
-					Key:         f.Key,
-					Label:       f.Label,
-					Type:        string(f.Type),
-					Default:     f.Default,
-					Required:    f.Required,
-					Options:     f.Options,
-					Description: f.Description,
-				})
-			}
-			pi.RuleSchema = rs
-		}
 
-		result = append(result, pi)
-	}
-	return result
-}
-
-// EnablePlugin 启用插件
-func (s *Server) EnablePlugin(name string) error {
-	if s.pluginRegistry == nil {
-		return fmt.Errorf("plugin registry not initialized")
-	}
-	return s.pluginRegistry.Enable(name)
-}
-
-// DisablePlugin 禁用插件
-func (s *Server) DisablePlugin(name string) error {
-	if s.pluginRegistry == nil {
-		return fmt.Errorf("plugin registry not initialized")
-	}
-	return s.pluginRegistry.Disable(name)
-}
-
-// InstallPluginsToClient 安装插件到客户端
-func (s *Server) InstallPluginsToClient(clientID string, plugins []string) error {
-	s.mu.RLock()
-	cs, ok := s.clients[clientID]
-	s.mu.RUnlock()
-
-	if !ok {
-		return fmt.Errorf("client %s not found", clientID)
-	}
-
-	// 发送安装请求到客户端
-	if err := s.sendInstallPlugins(cs.Session, plugins); err != nil {
-		return err
-	}
-
-	// 更新数据库中客户端的已安装插件列表
-	client, err := s.clientStore.GetClient(clientID)
-	if err != nil {
-		return fmt.Errorf("failed to get client: %w", err)
-	}
-
-	// 获取插件版本信息并添加到客户端插件列表
-	for _, pluginName := range plugins {
-		// 检查是否已安装
-		found := false
-		for _, cp := range client.Plugins {
-			if cp.Name == pluginName {
-				found = true
-				break
-			}
-		}
-		if !found {
-			client.Plugins = append(client.Plugins, db.ClientPlugin{
-				Name:    pluginName,
-				Version: "1.0.0",
-				Enabled: true,
-			})
-		}
-	}
-
-	return s.clientStore.UpdateClient(client)
-}
-
-// sendInstallPlugins 发送安装插件请求
-func (s *Server) sendInstallPlugins(session *yamux.Session, plugins []string) error {
-	stream, err := session.Open()
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-
-	req := protocol.InstallPluginsRequest{Plugins: plugins}
-	msg, err := protocol.NewMessage(protocol.MsgTypeInstallPlugins, req)
-	if err != nil {
-		return err
-	}
-	return protocol.WriteMessage(stream, msg)
-}
 
 // startUDPListener 启动 UDP 监听
-func (s *Server) startUDPListener(cs *ClientSession, rule protocol.ProxyRule) {
+func (s *Server) startUDPListener(cs *ClientSession, rule *protocol.ProxyRule) {
 	if err := s.portManager.Reserve(rule.RemotePort, cs.ID); err != nil {
 		log.Printf("[Server] UDP port %d error: %v", rule.RemotePort, err)
+		rule.PortStatus = "failed: " + err.Error()
 		return
 	}
 
@@ -905,6 +774,7 @@ func (s *Server) startUDPListener(cs *ClientSession, rule protocol.ProxyRule) {
 	if err != nil {
 		log.Printf("[Server] UDP resolve error: %v", err)
 		s.portManager.Release(rule.RemotePort)
+		rule.PortStatus = "failed: " + err.Error()
 		return
 	}
 
@@ -912,8 +782,11 @@ func (s *Server) startUDPListener(cs *ClientSession, rule protocol.ProxyRule) {
 	if err != nil {
 		log.Printf("[Server] UDP listen %d error: %v", rule.RemotePort, err)
 		s.portManager.Release(rule.RemotePort)
+		rule.PortStatus = "failed: " + err.Error()
 		return
 	}
+
+	rule.PortStatus = "listening"
 
 	cs.mu.Lock()
 	cs.UDPConns[rule.RemotePort] = conn
@@ -922,7 +795,7 @@ func (s *Server) startUDPListener(cs *ClientSession, rule protocol.ProxyRule) {
 	log.Printf("[Server] UDP proxy %s: :%d -> %s:%d",
 		rule.Name, rule.RemotePort, rule.LocalIP, rule.LocalPort)
 
-	go s.handleUDPConn(cs, conn, rule)
+	go s.handleUDPConn(cs, conn, *rule)
 }
 
 // handleUDPConn 处理 UDP 连接
@@ -983,260 +856,14 @@ func (s *Server) sendUDPPacket(cs *ClientSession, conn *net.UDPConn, clientAddr 
 	}
 }
 
-// GetPluginConfigSchema 获取插件配置模式
-func (s *Server) GetPluginConfigSchema(name string) ([]router.ConfigField, error) {
-	if s.pluginRegistry == nil {
-		return nil, fmt.Errorf("plugin registry not initialized")
-	}
 
-	handler, err := s.pluginRegistry.GetClient(name)
-	if err != nil {
-		return nil, fmt.Errorf("plugin %s not found", name)
-	}
 
-	metadata := handler.Metadata()
-	var result []router.ConfigField
-	for _, f := range metadata.ConfigSchema {
-		result = append(result, router.ConfigField{
-			Key:         f.Key,
-			Label:       f.Label,
-			Type:        string(f.Type),
-			Default:     f.Default,
-			Required:    f.Required,
-			Options:     f.Options,
-			Description: f.Description,
-		})
-	}
-	return result, nil
-}
 
-// SyncPluginConfigToClient 同步插件配置到客户端
-func (s *Server) SyncPluginConfigToClient(clientID string, pluginName string, config map[string]string) error {
-	s.mu.RLock()
-	cs, ok := s.clients[clientID]
-	s.mu.RUnlock()
 
-	if !ok {
-		return fmt.Errorf("client %s not online", clientID)
-	}
 
-	return s.sendPluginConfig(cs.Session, pluginName, config)
-}
 
-// sendPluginConfig 发送插件配置到客户端
-func (s *Server) sendPluginConfig(session *yamux.Session, pluginName string, config map[string]string) error {
-	stream, err := session.Open()
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
 
-	req := protocol.PluginConfigSync{
-		PluginName: pluginName,
-		Config:     config,
-	}
-	msg, err := protocol.NewMessage(protocol.MsgTypePluginConfig, req)
-	if err != nil {
-		return err
-	}
-	return protocol.WriteMessage(stream, msg)
-}
 
-// InstallJSPluginToClient 安装 JS 插件到客户端
-func (s *Server) InstallJSPluginToClient(clientID string, req router.JSPluginInstallRequest) error {
-	s.mu.RLock()
-	cs, ok := s.clients[clientID]
-	s.mu.RUnlock()
-
-	if !ok {
-		return fmt.Errorf("client %s not online", clientID)
-	}
-
-	stream, err := cs.Session.Open()
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-
-	installReq := protocol.JSPluginInstallRequest{
-		PluginID:   req.PluginID,
-		PluginName: req.PluginName,
-		Source:     req.Source,
-		Signature:  req.Signature,
-		RuleName:   req.RuleName,
-		RemotePort: req.RemotePort,
-		Config:     req.Config,
-		AutoStart:  req.AutoStart,
-	}
-
-	msg, err := protocol.NewMessage(protocol.MsgTypeJSPluginInstall, installReq)
-	if err != nil {
-		return err
-	}
-
-	if err := protocol.WriteMessage(stream, msg); err != nil {
-		return err
-	}
-
-	// 等待安装结果
-	resp, err := protocol.ReadMessage(stream)
-	if err != nil {
-		return err
-	}
-
-	var result protocol.JSPluginInstallResult
-	if err := resp.ParsePayload(&result); err != nil {
-		return err
-	}
-
-	if !result.Success {
-		return fmt.Errorf("install failed: %s", result.Error)
-	}
-
-	log.Printf("[Server] JS plugin %s installed on client %s", req.PluginName, clientID)
-	return nil
-}
-
-// isClientPlugin 检查是否为客户端插件
-func (s *Server) isClientPlugin(pluginType string) bool {
-	if s.pluginRegistry == nil {
-		return false
-	}
-	handler, err := s.pluginRegistry.GetClient(pluginType)
-	if err != nil {
-		return false
-	}
-	return handler != nil
-}
-
-// startClientPluginListener 启动客户端插件监听
-func (s *Server) startClientPluginListener(cs *ClientSession, rule protocol.ProxyRule) {
-	if err := s.portManager.Reserve(rule.RemotePort, cs.ID); err != nil {
-		log.Printf("[Server] Port %d error: %v", rule.RemotePort, err)
-		return
-	}
-
-	// 只有非 JS 插件才需要发送启动命令
-	// JS 插件已经通过 JSPluginInstall 安装并启动，PluginID 不为空表示是 JS 插件
-	if rule.PluginID == "" {
-		if err := s.sendClientPluginStart(cs.Session, rule); err != nil {
-			log.Printf("[Server] Failed to start client plugin %s: %v", rule.Type, err)
-			s.portManager.Release(rule.RemotePort)
-			return
-		}
-	}
-
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", rule.RemotePort))
-	if err != nil {
-		log.Printf("[Server] Listen %d error: %v", rule.RemotePort, err)
-		s.portManager.Release(rule.RemotePort)
-		return
-	}
-
-	cs.mu.Lock()
-	cs.Listeners[rule.RemotePort] = ln
-	cs.mu.Unlock()
-
-	log.Printf("[Server] Client plugin %s on :%d", rule.Type, rule.RemotePort)
-	go s.acceptClientPluginConns(cs, ln, rule)
-}
-
-// sendClientPluginStart 发送客户端插件启动命令
-func (s *Server) sendClientPluginStart(session *yamux.Session, rule protocol.ProxyRule) error {
-	stream, err := session.Open()
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-
-	req := protocol.ClientPluginStartRequest{
-		PluginName: rule.Type,
-		RuleName:   rule.Name,
-		RemotePort: rule.RemotePort,
-		Config:     rule.PluginConfig,
-	}
-	msg, err := protocol.NewMessage(protocol.MsgTypeClientPluginStart, req)
-	if err != nil {
-		return err
-	}
-	if err := protocol.WriteMessage(stream, msg); err != nil {
-		return err
-	}
-
-	// 等待响应
-	resp, err := protocol.ReadMessage(stream)
-	if err != nil {
-		return err
-	}
-	if resp.Type != protocol.MsgTypeClientPluginStatus {
-		return fmt.Errorf("unexpected response type: %d", resp.Type)
-	}
-
-	var status protocol.ClientPluginStatusResponse
-	if err := resp.ParsePayload(&status); err != nil {
-		return err
-	}
-	if !status.Running {
-		return fmt.Errorf("plugin failed: %s", status.Error)
-	}
-	return nil
-}
-
-// acceptClientPluginConns 接受客户端插件连接
-func (s *Server) acceptClientPluginConns(cs *ClientSession, ln net.Listener, rule protocol.ProxyRule) {
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		go s.handleClientPluginConn(cs, conn, rule)
-	}
-}
-
-// handleClientPluginConn 处理客户端插件连接
-func (s *Server) handleClientPluginConn(cs *ClientSession, conn net.Conn, rule protocol.ProxyRule) {
-	defer conn.Close()
-
-	log.Printf("[Server] handleClientPluginConn: plugin=%s, auth=%v", rule.Type, rule.AuthEnabled)
-
-	// 如果启用了 HTTP Basic Auth，先进行认证
-	var bufferedData []byte
-	if rule.AuthEnabled {
-		authenticated, data := s.checkHTTPBasicAuth(conn, rule.AuthUsername, rule.AuthPassword)
-		if !authenticated {
-			log.Printf("[Server] Auth failed for plugin %s", rule.Type)
-			return
-		}
-		bufferedData = data
-		log.Printf("[Server] Auth success, buffered %d bytes", len(bufferedData))
-	}
-
-	stream, err := cs.Session.Open()
-	if err != nil {
-		log.Printf("[Server] Open stream error: %v", err)
-		return
-	}
-	defer stream.Close()
-
-	req := protocol.ClientPluginConnRequest{
-		PluginID:   rule.PluginID,
-		PluginName: rule.Type,
-		RuleName:   rule.Name,
-	}
-	msg, _ := protocol.NewMessage(protocol.MsgTypeClientPluginConn, req)
-	if err := protocol.WriteMessage(stream, msg); err != nil {
-		return
-	}
-
-	// 如果有缓冲的数据（已读取的 HTTP 请求头），先发送给客户端
-	if len(bufferedData) > 0 {
-		if _, err := stream.Write(bufferedData); err != nil {
-			return
-		}
-	}
-
-	relay.RelayWithStats(conn, stream, s.recordTraffic)
-}
 
 // checkHTTPBasicAuth 检查 HTTP Basic Auth
 // 返回 (认证成功, 已读取的数据)
@@ -1306,116 +933,7 @@ func (s *Server) sendHTTPUnauthorized(conn net.Conn) {
 	conn.Write([]byte(response))
 }
 
-// autoPushJSPlugins 自动推送 JS 插件到客户端
-func (s *Server) autoPushJSPlugins(cs *ClientSession) {
-	// 记录已推送的插件，避免重复推送
-	pushedPlugins := make(map[string]bool)
 
-	// 1. 推送配置文件中的 JS 插件
-	for _, jp := range s.jsPlugins {
-		if !s.shouldPushToClient(jp.AutoPush, cs.ID) {
-			continue
-		}
-
-		log.Printf("[Server] Auto-pushing JS plugin %s to client %s", jp.Name, cs.ID)
-
-		req := router.JSPluginInstallRequest{
-			PluginName: jp.Name,
-			Source:     jp.Source,
-			Signature:  jp.Signature,
-			RuleName:   jp.Name,
-			Config:     jp.Config,
-			AutoStart:  jp.AutoStart,
-		}
-
-		if err := s.InstallJSPluginToClient(cs.ID, req); err != nil {
-			log.Printf("[Server] Failed to push JS plugin %s: %v", jp.Name, err)
-		} else {
-			pushedPlugins[jp.Name] = true
-		}
-	}
-
-	// 2. 推送客户端已安装的插件（从数据库）
-	s.pushClientInstalledPlugins(cs, pushedPlugins)
-}
-
-// pushClientInstalledPlugins 推送客户端已安装的插件
-func (s *Server) pushClientInstalledPlugins(cs *ClientSession, alreadyPushed map[string]bool) {
-	if s.jsPluginStore == nil {
-		return
-	}
-
-	// 获取客户端信息
-	client, err := s.clientStore.GetClient(cs.ID)
-	if err != nil {
-		return
-	}
-
-	// 遍历客户端已安装的插件
-	for _, cp := range client.Plugins {
-		if !cp.Enabled {
-			continue
-		}
-
-		// 跳过已推送的
-		if alreadyPushed[cp.Name] {
-			continue
-		}
-
-		// 从 JSPluginStore 获取插件完整信息
-		jsPlugin, err := s.jsPluginStore.GetJSPlugin(cp.Name)
-		if err != nil {
-			log.Printf("[Server] JS plugin %s not found in store: %v", cp.Name, err)
-			continue
-		}
-
-		log.Printf("[Server] Restoring installed plugin %s to client %s", cp.Name, cs.ID)
-
-		// 合并配置（客户端配置优先）
-		config := jsPlugin.Config
-		if config == nil {
-			config = make(map[string]string)
-		}
-		for k, v := range cp.Config {
-			config[k] = v
-		}
-
-		req := router.JSPluginInstallRequest{
-			PluginID:   cp.ID,
-			PluginName: cp.Name,
-			Source:     jsPlugin.Source,
-			Signature:  jsPlugin.Signature,
-			RuleName:   cp.Name,
-			Config:     config,
-			AutoStart:  jsPlugin.AutoStart,
-		}
-
-		if err := s.InstallJSPluginToClient(cs.ID, req); err != nil {
-			log.Printf("[Server] Failed to restore plugin %s: %v", cp.Name, err)
-		} else if cp.RemotePort > 0 {
-			// 检查端口是否已在监听（避免重复启动）
-			cs.mu.Lock()
-			_, exists := cs.Listeners[cp.RemotePort]
-			cs.mu.Unlock()
-			if exists {
-				continue
-			}
-
-			// 安装成功后启动服务端监听器
-			pluginRule := protocol.ProxyRule{
-				Name:         cp.Name,
-				Type:         cp.Name,
-				RemotePort:   cp.RemotePort,
-				Enabled:      boolPtr(true),
-				PluginID:     cp.ID,
-				AuthEnabled:  cp.AuthEnabled,
-				AuthUsername: cp.AuthUsername,
-				AuthPassword: cp.AuthPassword,
-			}
-			s.startClientPluginListener(cs, pluginRule)
-		}
-	}
-}
 
 // shouldPushToClient 检查是否应推送到指定客户端
 func (s *Server) shouldPushToClient(autoPush []string, clientID string) bool {
@@ -1462,117 +980,10 @@ func (s *Server) RestartClient(clientID string) error {
 	return nil
 }
 
-// StartClientPlugin 启动客户端插件
-func (s *Server) StartClientPlugin(clientID, pluginID, pluginName, ruleName string) error {
-	s.mu.RLock()
-	_, ok := s.clients[clientID]
-	s.mu.RUnlock()
 
-	if !ok {
-		return fmt.Errorf("client %s not found or not online", clientID)
-	}
 
-	// 重新发送安装请求来启动插件
-	return s.reinstallJSPlugin(clientID, pluginName, ruleName)
-}
 
-// StopClientPlugin 停止客户端插件
-func (s *Server) StopClientPlugin(clientID, pluginID, pluginName, ruleName string) error {
-	s.mu.RLock()
-	cs, ok := s.clients[clientID]
-	s.mu.RUnlock()
 
-	if !ok {
-		return fmt.Errorf("client %s not found or not online", clientID)
-	}
-
-	return s.sendClientPluginStop(cs.Session, pluginID, pluginName, ruleName)
-}
-
-// sendClientPluginStop 发送客户端插件停止命令
-func (s *Server) sendClientPluginStop(session *yamux.Session, pluginID, pluginName, ruleName string) error {
-	stream, err := session.Open()
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-
-	req := protocol.ClientPluginStopRequest{
-		PluginID:   pluginID,
-		PluginName: pluginName,
-		RuleName:   ruleName,
-	}
-	msg, err := protocol.NewMessage(protocol.MsgTypeClientPluginStop, req)
-	if err != nil {
-		return err
-	}
-	if err := protocol.WriteMessage(stream, msg); err != nil {
-		return err
-	}
-
-	// 等待响应
-	resp, err := protocol.ReadMessage(stream)
-	if err != nil {
-		return err
-	}
-	if resp.Type != protocol.MsgTypeClientPluginStatus {
-		return fmt.Errorf("unexpected response type: %d", resp.Type)
-	}
-
-	var status protocol.ClientPluginStatusResponse
-	if err := resp.ParsePayload(&status); err != nil {
-		return err
-	}
-	if status.Running {
-		return fmt.Errorf("plugin still running: %s", status.Error)
-	}
-	return nil
-}
-
-// StartPluginRule 为客户端插件启动服务端监听器
-func (s *Server) StartPluginRule(clientID string, rule protocol.ProxyRule) error {
-	s.mu.RLock()
-	cs, ok := s.clients[clientID]
-	s.mu.RUnlock()
-
-	if !ok {
-		return fmt.Errorf("client %s not found or not online", clientID)
-	}
-
-	// 检查端口是否已被占用
-	cs.mu.Lock()
-	_, exists := cs.Listeners[rule.RemotePort]
-	cs.mu.Unlock()
-	if exists {
-		// 端口已在监听，无需重复启动
-		return nil
-	}
-
-	// 启动插件监听器
-	s.startClientPluginListener(cs, rule)
-	return nil
-}
-
-// StopPluginRule 停止客户端插件的服务端监听器
-func (s *Server) StopPluginRule(clientID string, remotePort int) error {
-	s.mu.RLock()
-	cs, ok := s.clients[clientID]
-	s.mu.RUnlock()
-
-	if !ok {
-		return nil // 客户端不在线，无需停止
-	}
-
-	cs.mu.Lock()
-	if ln, exists := cs.Listeners[remotePort]; exists {
-		ln.Close()
-		delete(cs.Listeners, remotePort)
-	}
-	cs.mu.Unlock()
-
-	s.portManager.Release(remotePort)
-	return nil
-}
 
 // IsPortAvailable 检查端口是否可用
 func (s *Server) IsPortAvailable(port int, excludeClientID string) bool {
@@ -1597,204 +1008,10 @@ func (s *Server) IsPortAvailable(port int, excludeClientID string) bool {
 	return true
 }
 
-// ProxyPluginAPIRequest 代理插件 API 请求到客户端
-func (s *Server) ProxyPluginAPIRequest(clientID string, req protocol.PluginAPIRequest) (*protocol.PluginAPIResponse, error) {
-	s.mu.RLock()
-	cs, ok := s.clients[clientID]
-	s.mu.RUnlock()
 
-	if !ok {
-		return nil, fmt.Errorf("client %s not found or not online", clientID)
-	}
 
-	stream, err := cs.Session.Open()
-	if err != nil {
-		return nil, fmt.Errorf("open stream: %w", err)
-	}
-	defer stream.Close()
 
-	// 设置超时（30秒）
-	stream.SetDeadline(time.Now().Add(30 * time.Second))
 
-	// 发送 API 请求
-	msg, err := protocol.NewMessage(protocol.MsgTypePluginAPIRequest, req)
-	if err != nil {
-		return nil, err
-	}
-	if err := protocol.WriteMessage(stream, msg); err != nil {
-		return nil, err
-	}
-
-	// 读取响应
-	resp, err := protocol.ReadMessage(stream)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.Type != protocol.MsgTypePluginAPIResponse {
-		return nil, fmt.Errorf("unexpected response type: %d", resp.Type)
-	}
-
-	var apiResp protocol.PluginAPIResponse
-	if err := resp.ParsePayload(&apiResp); err != nil {
-		return nil, err
-	}
-
-	return &apiResp, nil
-}
-
-// RestartClientPlugin 重启客户端 JS 插件
-func (s *Server) RestartClientPlugin(clientID, pluginID, pluginName, ruleName string) error {
-	s.mu.RLock()
-	_, ok := s.clients[clientID]
-	s.mu.RUnlock()
-
-	if !ok {
-		return fmt.Errorf("client %s not found or not online", clientID)
-	}
-
-	// 重新发送完整的安装请求来重启 JS 插件
-	return s.reinstallJSPlugin(clientID, pluginName, ruleName)
-}
-
-// reinstallJSPlugin 重新安装 JS 插件（用于重启）
-func (s *Server) reinstallJSPlugin(clientID, pluginName, ruleName string) error {
-	// 从数据库获取插件信息
-	if s.jsPluginStore == nil {
-		return fmt.Errorf("JS plugin store not configured")
-	}
-
-	jsPlugin, err := s.jsPluginStore.GetJSPlugin(pluginName)
-	if err != nil {
-		return fmt.Errorf("plugin %s not found: %w", pluginName, err)
-	}
-
-	// 获取客户端的插件配置
-	client, err := s.clientStore.GetClient(clientID)
-	if err != nil {
-		return fmt.Errorf("client not found: %w", err)
-	}
-
-	// 合并配置并获取 PluginID
-	config := jsPlugin.Config
-	if config == nil {
-		config = make(map[string]string)
-	}
-	var pluginID string
-	for _, cp := range client.Plugins {
-		if cp.Name == pluginName {
-			pluginID = cp.ID
-			for k, v := range cp.Config {
-				config[k] = v
-			}
-			break
-		}
-	}
-
-	log.Printf("[Server] Reinstalling JS plugin %s (ID: %s) to client %s", pluginName, pluginID, clientID)
-
-	req := router.JSPluginInstallRequest{
-		PluginID:   pluginID,
-		PluginName: pluginName,
-		Source:     jsPlugin.Source,
-		Signature:  jsPlugin.Signature,
-		RuleName:   ruleName,
-		Config:     config,
-		AutoStart:  true, // 重启时总是自动启动
-	}
-
-	return s.InstallJSPluginToClient(clientID, req)
-}
-
-// sendJSPluginRestart 发送 JS 插件重启命令
-func (s *Server) sendJSPluginRestart(session *yamux.Session, pluginName, ruleName string) error {
-	stream, err := session.Open()
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-
-	// 使用 PluginConfigUpdate 消息触发重启
-	req := protocol.PluginConfigUpdateRequest{
-		PluginName: pluginName,
-		RuleName:   ruleName,
-		Config:     nil,
-		Restart:    true,
-	}
-	msg, err := protocol.NewMessage(protocol.MsgTypePluginConfigUpdate, req)
-	if err != nil {
-		return err
-	}
-	if err := protocol.WriteMessage(stream, msg); err != nil {
-		return err
-	}
-
-	// 等待响应
-	resp, err := protocol.ReadMessage(stream)
-	if err != nil {
-		return err
-	}
-
-	var result struct {
-		Success bool   `json:"success"`
-		Error   string `json:"error,omitempty"`
-	}
-	if err := resp.ParsePayload(&result); err != nil {
-		return err
-	}
-	if !result.Success {
-		return fmt.Errorf("restart failed: %s", result.Error)
-	}
-
-	log.Printf("[Server] JS plugin %s restarted on client", pluginName)
-	return nil
-}
-
-// UpdateClientPluginConfig 更新客户端插件配置
-func (s *Server) UpdateClientPluginConfig(clientID, pluginID, pluginName, ruleName string, config map[string]string, restart bool) error {
-	s.mu.RLock()
-	cs, ok := s.clients[clientID]
-	s.mu.RUnlock()
-
-	if !ok {
-		return fmt.Errorf("client %s not found or not online", clientID)
-	}
-
-	// 发送配置更新消息
-	stream, err := cs.Session.Open()
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-
-	req := protocol.PluginConfigUpdateRequest{
-		PluginID:   pluginID,
-		PluginName: pluginName,
-		RuleName:   ruleName,
-		Config:     config,
-		Restart:    restart,
-	}
-	msg, _ := protocol.NewMessage(protocol.MsgTypePluginConfigUpdate, req)
-	if err := protocol.WriteMessage(stream, msg); err != nil {
-		return err
-	}
-
-	// 等待响应
-	resp, err := protocol.ReadMessage(stream)
-	if err != nil {
-		return err
-	}
-
-	var result protocol.PluginConfigUpdateResponse
-	if err := resp.ParsePayload(&result); err != nil {
-		return err
-	}
-	if !result.Success {
-		return fmt.Errorf("config update failed: %s", result.Error)
-	}
-
-	return nil
-}
 
 // SendUpdateToClient 发送更新命令到客户端
 func (s *Server) SendUpdateToClient(clientID, downloadURL string) error {
