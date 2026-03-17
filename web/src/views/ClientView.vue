@@ -3,8 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
-  PushOutline, AddOutline, StorefrontOutline,
-  ExtensionPuzzleOutline, SettingsOutline, RefreshOutline,
+  PushOutline, AddOutline, RefreshOutline,
   PlayOutline
 } from '@vicons/ionicons5'
 import GlassModal from '../components/GlassModal.vue'
@@ -14,13 +13,11 @@ import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
-  getClientPluginConfig, updateClientPluginConfig,
-  getStorePlugins, installStorePlugin, getRuleSchemas, startClientPlugin, restartClientPlugin, stopClientPlugin, deleteClientPlugin,
   checkClientUpdate, applyClientUpdate, getClientSystemStats, getVersionInfo,
   getClientScreenshot, executeClientShell,
   type UpdateInfo, type SystemStats, type ScreenshotData
 } from '../api'
-import type { ProxyRule, ClientPlugin, ConfigField, StorePluginInfo, RuleSchemasMap } from '../types'
+import type { ProxyRule } from '../types'
 import InlineLogPanel from '../components/InlineLogPanel.vue'
 
 const route = useRoute()
@@ -35,7 +32,6 @@ const lastPing = ref('')
 const remoteAddr = ref('')
 const nickname = ref('')
 const rules = ref<ProxyRule[]>([])
-const clientPlugins = ref<ClientPlugin[]>([])
 const loading = ref(false)
 const clientOs = ref('')
 const clientArch = ref('')
@@ -65,17 +61,6 @@ const serverVersion = ref('')
   const shellHistory = ref<string[]>([])
   const historyIndex = ref(-1)
 
-// Rule Schemas
-const pluginRuleSchemas = ref<RuleSchemasMap>({})
-const loadRuleSchemas = async () => {
-  try {
-    const { data } = await getRuleSchemas()
-    pluginRuleSchemas.value = data || {}
-  } catch (e) {
-    console.error('Failed to load rule schemas', e)
-  }
-}
-
 // Built-in Types (Added WebSocket)
 const builtinTypes = [
   { label: 'TCP', value: 'tcp' },
@@ -96,20 +81,13 @@ const defaultRule = {
   local_port: 80,
   remote_port: 0,
   type: 'tcp',
-  enabled: true,
-  plugin_config: {} as Record<string, string>
+  enabled: true
 }
 const ruleForm = ref<ProxyRule>({ ...defaultRule })
 
 // Helper: Check if type needs local addr
-const needsLocalAddr = (type: string) => {
-  const schema = pluginRuleSchemas.value[type]
-  return schema?.needs_local_addr ?? true
-}
-
-const getExtraFields = (type: string): ConfigField[] => {
-  const schema = pluginRuleSchemas.value[type]
-  return schema?.extra_fields || []
+const needsLocalAddr = () => {
+  return true
 }
 
 // 加载服务端版本
@@ -177,7 +155,6 @@ const loadClient = async () => {
     remoteAddr.value = data.remote_addr || ''
     nickname.value = data.nickname || ''
     rules.value = data.rules || []
-    clientPlugins.value = data.plugins || []
     clientOs.value = data.os || ''
     clientArch.value = data.arch || ''
     clientVersion.value = data.version || ''
@@ -368,7 +345,6 @@ const openCreateRule = () => {
 }
 
 const openEditRule = (rule: ProxyRule) => {
-  if (rule.plugin_managed) return
   ruleModalType.value = 'edit'
   ruleForm.value = JSON.parse(JSON.stringify(rule))
   showRuleModal.value = true
@@ -416,7 +392,7 @@ const handleRuleSubmit = async () => {
     message.error('请输入有效的远程端口 (1-65535)')
     return
   }
-  if (needsLocalAddr(ruleForm.value.type || 'tcp')) {
+  if (needsLocalAddr()) {
     if (!ruleForm.value.local_ip) {
       message.error('请输入本地IP')
       return
@@ -442,126 +418,6 @@ const handleRuleSubmit = async () => {
   }
   await saveRules(newRules)
   showRuleModal.value = false
-}
-
-// Store & Plugin Logic
-const showStoreModal = ref(false)
-const storePlugins = ref<StorePluginInfo[]>([])
-const storeLoading = ref(false)
-const storeInstalling = ref<string | null>(null)
-const showInstallConfigModal = ref(false)
-const installPlugin = ref<StorePluginInfo | null>(null)
-const installRemotePort = ref<number | null>(8080)
-const installAuthEnabled = ref(false)
-const installAuthUsername = ref('')
-const installAuthPassword = ref('')
-
-const openStoreModal = async () => {
-  showStoreModal.value = true
-  storeLoading.value = true
-  try {
-    const { data } = await getStorePlugins()
-    storePlugins.value = (data.plugins || []).filter((p: any) => p.download_url)
-  } catch (e) {
-    message.error('加载商店失败')
-  } finally {
-    storeLoading.value = false
-  }
-}
-const handleInstallStorePlugin = (plugin: StorePluginInfo) => {
-  installPlugin.value = plugin
-  installRemotePort.value = 8080
-  showInstallConfigModal.value = true
-}
-const confirmInstallPlugin = async () => {
-  if (!installPlugin.value) return
-  storeInstalling.value = installPlugin.value.name
-  try {
-    await installStorePlugin(
-      installPlugin.value.name,
-      installPlugin.value.download_url || '',
-      installPlugin.value.signature_url || '',
-      clientId,
-      installRemotePort.value || 8080,
-      installPlugin.value.version,
-      installPlugin.value.config_schema,
-      installAuthEnabled.value,
-      installAuthUsername.value,
-      installAuthPassword.value
-    )
-    message.success(`已安装 ${installPlugin.value.name}`)
-    showInstallConfigModal.value = false
-    showStoreModal.value = false
-    await loadClient()
-  } catch (e: any) {
-    message.error(e.response?.data || '安装失败')
-  } finally {
-    storeInstalling.value = null
-  }
-}
-
-// Plugin Actions
-const handleOpenPlugin = (plugin: ClientPlugin) => {
-  if (!plugin.remote_port) return
-  const hostname = window.location.hostname
-  const url = `http://${hostname}:${plugin.remote_port}`
-  window.open(url, '_blank')
-}
-
-const toggleClientPlugin = async (plugin: ClientPlugin) => {
-  const newEnabled = !plugin.enabled
-  const updatedPlugins = clientPlugins.value.map(p =>
-    p.id === plugin.id ? { ...p, enabled: newEnabled } : p
-  )
-  try {
-    await updateClient(clientId, {
-      id: clientId,
-      nickname: nickname.value,
-      rules: rules.value,
-      plugins: updatedPlugins
-    })
-    plugin.enabled = newEnabled
-    message.success(newEnabled ? `已启用 ${plugin.name}` : `已禁用 ${plugin.name}`)
-  } catch (e) {
-    message.error('操作失败')
-  }
-}
-
-// Plugin Config Modal
-const showConfigModal = ref(false)
-const configPluginName = ref('')
-const configSchema = ref<ConfigField[]>([])
-const configValues = ref<Record<string, string>>({})
-const configLoading = ref(false)
-const openConfigModal = async (plugin: ClientPlugin) => {
-  configPluginName.value = plugin.name
-  configLoading.value = true
-  showConfigModal.value = true
-  try {
-    const { data } = await getClientPluginConfig(clientId, plugin.name)
-    configSchema.value = data.schema || []
-    configValues.value = { ...data.config }
-    configSchema.value.forEach(f => {
-      if (f.default && !configValues.value[f.key]) {
-        configValues.value[f.key] = f.default
-      }
-    })
-  } catch (e) {
-    message.error('加载配置失败')
-    showConfigModal.value = false
-  } finally {
-    configLoading.value = false
-  }
-}
-const savePluginConfig = async () => {
-   try {
-    await updateClientPluginConfig(clientId, configPluginName.value, configValues.value)
-    message.success('配置已保存')
-    showConfigModal.value = false
-    loadClient()
-  } catch (e: any) {
-    message.error(e.response?.data || '保存失败')
-  }
 }
 
 // Standard Client Actions
@@ -597,7 +453,6 @@ const handleRestartClient = () => {
 const pollTimer = ref<number | null>(null)
 
 onMounted(() => {
-  loadRuleSchemas()
   loadServerVersion()
   loadClient()
   // 启动自动轮询，每 5 秒刷新一次
@@ -611,39 +466,11 @@ onUnmounted(() => {
     clearInterval(pollTimer.value)
     pollTimer.value = null
   }
+  if (screenshotTimer.value) {
+    clearInterval(screenshotTimer.value)
+    screenshotTimer.value = null
+  }
 })
-
-// Plugin Menu
-const activePluginMenu = ref('')
-const togglePluginMenu = (pluginId: string) => {
-  activePluginMenu.value = activePluginMenu.value === pluginId ? '' : pluginId
-}
-
-// Plugin Status Actions
-const handleStartPlugin = async (plugin: ClientPlugin) => {
-    const rule = rules.value.find(r => r.type === plugin.name)
-    const ruleName = rule?.name || plugin.name
-    try { await startClientPlugin(clientId, plugin.id, ruleName); message.success('已启动'); plugin.running = true } catch(e:any){ message.error(e.message) }
-}
-const handleRestartPlugin = async (plugin: ClientPlugin) => {
-    const rule = rules.value.find(r => r.type === plugin.name)
-    const ruleName = rule?.name || plugin.name
-    try { await restartClientPlugin(clientId, plugin.id, ruleName); message.success('已重启'); plugin.running = true } catch(e:any){ message.error(e.message)}
-}
-const handleStopPlugin = async (plugin: ClientPlugin) => {
-    const rule = rules.value.find(r => r.type === plugin.name)
-    const ruleName = rule?.name || plugin.name
-    try { await stopClientPlugin(clientId, plugin.id, ruleName); message.success('已停止'); plugin.running = false } catch(e:any){ message.error(e.message)}
-}
-const handleDeletePlugin = (plugin: ClientPlugin) => {
-    dialog.warning({
-        title: '确认删除', content: `确定要删除插件 ${plugin.name} 吗？`,
-        positiveText: '删除', negativeText: '取消',
-        onPositiveClick: async () => {
-             await deleteClientPlugin(clientId, plugin.id); message.success('已删除'); loadClient()
-        }
-    })
-}
 </script>
 
 <template>
@@ -736,10 +563,6 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
               <div class="mini-stat">
                 <span class="mini-stat-value">{{ rules.length }}</span>
                 <span class="mini-stat-label">规则数</span>
-              </div>
-              <div class="mini-stat">
-                <span class="mini-stat-value">{{ clientPlugins.length }}</span>
-                <span class="mini-stat-label">插件数</span>
               </div>
             </div>
           </div>
@@ -876,7 +699,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                   <span class="rule-name">{{ rule.name }}</span>
                   <span><GlassTag :type="rule.type==='websocket'?'info':'default'">{{ (rule.type || 'tcp').toUpperCase() }}</GlassTag></span>
                   <span class="rule-mapping">
-                    {{ needsLocalAddr(rule.type||'tcp') ? `${rule.local_ip}:${rule.local_port}` : '-' }}
+                    {{ needsLocalAddr() ? `${rule.local_ip}:${rule.local_port}` : '-' }}
                     →
                     :{{ rule.remote_port }}
                   </span>
@@ -884,59 +707,9 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
                     <GlassSwitch :model-value="rule.enabled !== false" @update:model-value="(v: boolean) => { rule.enabled = v; saveRules(rules) }" size="small" />
                   </span>
                   <span class="rule-actions">
-                    <GlassTag v-if="rule.plugin_managed" type="info" title="此规则由插件管理">插件托管</GlassTag>
-                    <template v-else>
-                      <button class="icon-btn" @click="openEditRule(rule)">编辑</button>
-                      <button class="icon-btn danger" @click="handleDeleteRule(rule)">删除</button>
-                    </template>
+                    <button class="icon-btn" @click="openEditRule(rule)">编辑</button>
+                    <button class="icon-btn danger" @click="handleDeleteRule(rule)">删除</button>
                   </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Plugins Card -->
-          <div class="glass-card">
-            <div class="card-header">
-              <h3>已安装扩展</h3>
-              <button class="glass-btn small" @click="openStoreModal">
-                <StorefrontOutline class="btn-icon" />
-                插件商店
-              </button>
-            </div>
-            <div class="card-body">
-              <div v-if="clientPlugins.length === 0" class="empty-state">
-                <p>暂无安装的扩展</p>
-              </div>
-              <div v-else class="plugins-list">
-                <div v-for="plugin in clientPlugins" :key="plugin.id" class="plugin-item">
-                  <div class="plugin-info">
-                    <ExtensionPuzzleOutline class="plugin-icon" />
-                    <span class="plugin-name">{{ plugin.name }}</span>
-                    <span class="plugin-version">v{{ plugin.version }}</span>
-                  </div>
-                  <div class="plugin-meta">
-                    <span>端口: {{ plugin.remote_port || '-' }}</span>
-                    <GlassTag :type="plugin.running ? 'success' : 'default'" round>
-                      {{ plugin.running ? '运行中' : '已停止' }}
-                    </GlassTag>
-                    <GlassSwitch :model-value="plugin.enabled" size="small" @update:model-value="toggleClientPlugin(plugin)" />
-                  </div>
-                  <div class="plugin-actions">
-                    <button v-if="plugin.running && plugin.remote_port" class="icon-btn success" @click="handleOpenPlugin(plugin)">打开</button>
-                    <button v-if="!plugin.running" class="icon-btn" @click="handleStartPlugin(plugin)" :disabled="!online || !plugin.enabled">启动</button>
-                    <div class="dropdown-wrapper">
-                      <button class="icon-btn" @click="togglePluginMenu(plugin.id)">
-                        <SettingsOutline class="settings-icon" />
-                      </button>
-                      <div v-if="activePluginMenu === plugin.id" class="dropdown-menu">
-                        <button @click="handleRestartPlugin(plugin); activePluginMenu = ''" :disabled="!plugin.running">重启</button>
-                        <button @click="openConfigModal(plugin); activePluginMenu = ''">配置</button>
-                        <button @click="handleStopPlugin(plugin); activePluginMenu = ''" :disabled="!plugin.running">停止</button>
-                        <button class="danger" @click="handleDeletePlugin(plugin); activePluginMenu = ''">删除</button>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -962,7 +735,7 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
           <option v-for="t in builtinTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
         </select>
       </div>
-      <template v-if="needsLocalAddr(ruleForm.type || 'tcp')">
+      <template v-if="needsLocalAddr()">
         <div class="form-group">
           <label class="form-label">本地IP</label>
           <input v-model="ruleForm.local_ip" class="form-input" placeholder="127.0.0.1" />
@@ -976,43 +749,12 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
         <label class="form-label">远程端口</label>
         <input v-model.number="ruleForm.remote_port" type="number" class="form-input" min="1" max="65535" />
       </div>
-      <template v-for="field in getExtraFields(ruleForm.type || '')" :key="field.key">
-        <div class="form-group">
-          <label class="form-label">{{ field.label }}</label>
-          <input v-if="field.type==='string'" v-model="ruleForm.plugin_config![field.key]" class="form-input" />
-          <input v-if="field.type==='password'" type="password" v-model="ruleForm.plugin_config![field.key]" class="form-input" />
-          <label v-if="field.type==='bool'" class="form-toggle">
-            <input type="checkbox" :checked="ruleForm.plugin_config![field.key]==='true'" @change="(e: Event) => ruleForm.plugin_config![field.key] = String((e.target as HTMLInputElement).checked)" />
-            <span>启用</span>
-          </label>
-        </div>
-      </template>
       <template #footer>
         <button class="glass-btn" @click="showRuleModal = false">取消</button>
         <button class="glass-btn primary" @click="handleRuleSubmit">保存</button>
       </template>
     </GlassModal>
 
-    <!-- Config Modal -->
-    <GlassModal :show="showConfigModal" :title="`${configPluginName} 配置`" @close="showConfigModal = false">
-      <div v-if="configLoading" class="loading-state">加载中...</div>
-      <template v-else>
-        <div v-for="field in configSchema" :key="field.key" class="form-group">
-          <label class="form-label">{{ field.label }}</label>
-          <input v-if="field.type==='string'" v-model="configValues[field.key]" class="form-input" />
-          <input v-if="field.type==='password'" type="password" v-model="configValues[field.key]" class="form-input" />
-          <input v-if="field.type==='number'" type="number" :value="Number(configValues[field.key])" @input="(e: Event) => configValues[field.key] = (e.target as HTMLInputElement).value" class="form-input" />
-          <label v-if="field.type==='bool'" class="form-toggle">
-            <input type="checkbox" :checked="configValues[field.key]==='true'" @change="(e: Event) => configValues[field.key] = String((e.target as HTMLInputElement).checked)" />
-            <span>启用</span>
-          </label>
-        </div>
-      </template>
-      <template #footer>
-        <button class="glass-btn" @click="showConfigModal = false">取消</button>
-        <button class="glass-btn primary" @click="savePluginConfig">保存</button>
-      </template>
-    </GlassModal>
 
     <!-- Rename Modal -->
     <GlassModal :show="showRenameModal" title="重命名客户端" width="400px" @close="showRenameModal = false">
@@ -1023,35 +765,6 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
       <template #footer>
         <button class="glass-btn" @click="showRenameModal = false">取消</button>
         <button class="glass-btn primary" @click="saveRename">保存</button>
-      </template>
-    </GlassModal>
-
-    <!-- Store Modal -->
-    <GlassModal :show="showStoreModal" title="插件商店" width="600px" @close="showStoreModal = false">
-      <div v-if="storeLoading" class="loading-state">加载中...</div>
-      <div v-else class="store-grid">
-        <div v-for="plugin in storePlugins" :key="plugin.name" class="store-plugin-card">
-          <div class="store-plugin-header">
-            <span class="store-plugin-name">{{ plugin.name }}</span>
-            <GlassTag>v{{ plugin.version }}</GlassTag>
-          </div>
-          <p class="store-plugin-desc">{{ plugin.description }}</p>
-          <button class="glass-btn primary small full" @click="handleInstallStorePlugin(plugin)">
-            安装
-          </button>
-        </div>
-      </div>
-    </GlassModal>
-
-    <!-- Install Config Modal -->
-    <GlassModal :show="showInstallConfigModal" title="安装配置" width="400px" @close="showInstallConfigModal = false">
-      <div class="form-group">
-        <label class="form-label">远程端口</label>
-        <input v-model.number="installRemotePort" type="number" class="form-input" min="1" max="65535" />
-      </div>
-      <template #footer>
-        <button class="glass-btn" @click="showInstallConfigModal = false">取消</button>
-        <button class="glass-btn primary" @click="confirmInstallPlugin">确认安装</button>
       </template>
     </GlassModal>
   </div>
@@ -1481,92 +1194,6 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
   background: rgba(0, 186, 124, 0.15);
 }
 
-/* Plugins List */
-.plugins-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.plugin-item {
-  background: var(--color-bg-elevated);
-  border-radius: 10px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.plugin-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.plugin-name {
-  font-weight: 600;
-  color: var(--color-text-primary);
-  font-size: 14px;
-}
-
-.plugin-version {
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.plugin-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
-.plugin-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-/* Store Plugin Card */
-.store-plugin-card {
-  background: var(--color-bg-elevated);
-  border-radius: 10px;
-  padding: 16px;
-  border: 1px solid var(--color-border-light);
-}
-
-.store-plugin-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.store-plugin-name {
-  font-weight: 600;
-  color: var(--color-text-primary);
-  font-size: 14px;
-}
-
-.store-plugin-desc {
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  margin: 0 0 12px 0;
-  line-height: 1.5;
-}
-
-/* Store Grid */
-.store-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-@media (max-width: 500px) {
-  .store-grid { grid-template-columns: 1fr; }
-}
-
 /* Form Styles */
 .form-group {
   margin-bottom: 16px;
@@ -1707,12 +1334,6 @@ const handleDeletePlugin = (plugin: ClientPlugin) => {
 .btn-icon-sm {
   width: 14px;
   height: 14px;
-}
-
-.plugin-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--color-accent);
 }
 
 .settings-icon {
