@@ -67,11 +67,6 @@ export interface LogStreamOptions {
 // 安装命令响应
 export interface InstallCommandResponse {
   token: string
-  commands: {
-    linux: string
-    macos: string
-    windows: string
-  }
   expires_at: number
-  server_addr: string
+  tunnel_port: number
 }

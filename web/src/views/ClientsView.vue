@@ -17,6 +17,27 @@ const showInstallModal = ref(false)
 const installData = ref<InstallCommandResponse | null>(null)
 const generatingInstall = ref(false)
 const search = ref('')
+const installScriptUrl = 'https://raw.githubusercontent.com/gotunnel/gotunnel/main/scripts/install.sh'
+const installPs1Url = 'https://raw.githubusercontent.com/gotunnel/gotunnel/main/scripts/install.ps1'
+
+const quoteShellArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
+
+const resolveTunnelHost = () => window.location.hostname || 'localhost'
+
+const formatServerAddr = (host: string, port: number) => {
+  const normalizedHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
+  return `${normalizedHost}:${port}`
+}
+
+const buildInstallCommands = (data: InstallCommandResponse) => {
+  const serverAddr = formatServerAddr(resolveTunnelHost(), data.tunnel_port)
+
+  return {
+    linux: `bash <(curl -fsSL ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)}`,
+    macos: `bash <(curl -fsSL ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)}`,
+    windows: `powershell -c \"irm ${installPs1Url} | iex; Install-GoTunnel -Server '${serverAddr}' -Token '${data.token}'\"`,
+  }
+}
 
 const loadClients = async () => {
   loading.value = true
@@ -67,6 +88,7 @@ const filteredClients = computed(() => {
 
 const onlineClients = computed(() => clients.value.filter((client) => client.online).length)
 const offlineClients = computed(() => Math.max(clients.value.length - onlineClients.value, 0))
+const installCommands = computed(() => (installData.value ? buildInstallCommands(installData.value) : null))
 
 onMounted(loadClients)
 </script>
@@ -126,11 +148,11 @@ onMounted(loadClients)
     </SectionCard>
 
     <GlassModal :show="showInstallModal" title="安装命令" width="760px" @close="showInstallModal = false">
-      <div v-if="installData" class="install-grid">
+      <div v-if="installCommands" class="install-grid">
         <article v-for="item in [
-          { label: 'Linux', value: installData.commands.linux },
-          { label: 'macOS', value: installData.commands.macos },
-          { label: 'Windows', value: installData.commands.windows },
+          { label: 'Linux', value: installCommands.linux },
+          { label: 'macOS', value: installCommands.macos },
+          { label: 'Windows', value: installCommands.windows },
         ]" :key="item.label" class="install-card">
           <header>
             <strong>{{ item.label }}</strong>

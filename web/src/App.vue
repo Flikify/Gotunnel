@@ -189,7 +189,7 @@ onUnmounted(() => {
 
     <div class="app-main">
       <header class="app-topbar glass-card">
-        <div>
+        <div class="topbar-intro">
           <span class="topbar-label">Workspace</span>
           <h1>{{ navItems.find((item) => item.key === activeNav)?.label || '控制台' }}</h1>
         </div>
@@ -375,6 +375,34 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+  position: relative;
+  overflow: visible;
+  z-index: 30;
+  padding: 18px 22px;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, var(--color-accent-glow), transparent 38%),
+    linear-gradient(135deg, var(--glass-bg) 0%, var(--glass-bg-light) 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.app-topbar::after {
+  content: '';
+  position: absolute;
+  inset: auto 18px -18px auto;
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  background: var(--color-accent-glow);
+  opacity: 0.18;
+  filter: blur(28px);
+  pointer-events: none;
+}
+
+.topbar-intro {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
 }
 
 .app-topbar h1 {
@@ -387,6 +415,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
 }
 
 .topbar-icon-btn,
@@ -401,6 +432,15 @@ onUnmounted(() => {
   background: var(--glass-bg-light);
   color: var(--color-text-primary);
   cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.topbar-icon-btn:hover,
+.profile-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .topbar-icon-btn svg,
@@ -412,6 +452,7 @@ onUnmounted(() => {
 
 .menu-wrap {
   position: relative;
+  z-index: 4;
 }
 
 .floating-menu {
@@ -424,7 +465,9 @@ onUnmounted(() => {
   background: var(--glass-bg);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-lg);
-  z-index: 10;
+  backdrop-filter: var(--glass-blur-light);
+  -webkit-backdrop-filter: var(--glass-blur-light);
+  z-index: 50;
 }
 
 .floating-menu--right {
@@ -514,6 +557,7 @@ onUnmounted(() => {
   .app-topbar {
     flex-direction: column;
     align-items: flex-start;
+    overflow: visible;
   }
 
   .topbar-actions {
