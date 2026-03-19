@@ -1,0 +1,214 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish, e.g. v1.2.3'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: web
+        run: npm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/dist
+          retention-days: 1
+
+  build-assets:
+    name: Package ${{ matrix.component }} ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: frontend
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: server
+            goos: linux
+            goarch: amd64
+            archive_ext: tar.gz
+          - component: client
+            goos: linux
+            goarch: amd64
+            archive_ext: tar.gz
+          - component: server
+            goos: linux
+            goarch: arm64
+            archive_ext: tar.gz
+          - component: client
+            goos: linux
+            goarch: arm64
+            archive_ext: tar.gz
+          - component: server
+            goos: darwin
+            goarch: amd64
+            archive_ext: tar.gz
+          - component: client
+            goos: darwin
+            goarch: amd64
+            archive_ext: tar.gz
+          - component: server
+            goos: darwin
+            goarch: arm64
+            archive_ext: tar.gz
+          - component: client
+            goos: darwin
+            goarch: arm64
+            archive_ext: tar.gz
+          - component: server
+            goos: windows
+            goarch: amd64
+            archive_ext: zip
+          - component: client
+            goos: windows
+            goarch: amd64
+            archive_ext: zip
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: internal/server/app/dist
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Build binary
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+          VERSION: ${{ steps.meta.outputs.tag }}
+          GIT_COMMIT: ${{ steps.meta.outputs.commit }}
+          BUILD_TIME: ${{ steps.meta.outputs.build_time }}
+        run: |
+          mkdir -p dist/package
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then
+            EXT=".exe"
+          fi
+
+          OUTPUT_NAME="${{ matrix.component }}${EXT}"
+          LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.BuildTime=${BUILD_TIME}' -X 'main.GitCommit=${GIT_COMMIT}'"
+          go build -trimpath -ldflags "$LDFLAGS" -o "dist/package/${OUTPUT_NAME}" ./cmd/${{ matrix.component }}
+
+      - name: Create release archive
+        id: package
+        shell: bash
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          ARCHIVE="gotunnel-${{ matrix.component }}-${TAG}-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.archive_ext }}"
+          mkdir -p dist/out
+          if [ "${{ matrix.archive_ext }}" = "zip" ]; then
+            (cd dist/package && zip -r "../out/${ARCHIVE}" .)
+          else
+            tar -C dist/package -czf "dist/out/${ARCHIVE}" .
+          fi
+          echo "archive=dist/out/${ARCHIVE}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release asset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.component }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ steps.package.outputs.archive }}
+          retention-days: 1
+
+  publish:
+    name: Publish release
+    needs: build-assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packaged assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd release-artifacts
+          sha256sum * > SHA256SUMS.txt
+
+      - name: Create or update GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-artifacts/*
