@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { SaveOutline, ServerOutline, SettingsOutline } from '@vicons/ionicons5'
+import MetricCard from '../components/MetricCard.vue'
+import PageShell from '../components/PageShell.vue'
+import SectionCard from '../components/SectionCard.vue'
 import {
   getServerConfig,
   getVersionInfo,
@@ -12,13 +14,11 @@ import {
 import { useToast } from '../composables/useToast'
 
 const message = useToast()
-
 const versionInfo = ref<VersionInfo | null>(null)
-const loading = ref(true)
-
 const serverConfig = ref<ServerConfigResponse | null>(null)
-const configLoading = ref(false)
-const savingConfig = ref(false)
+const loadingVersion = ref(true)
+const loadingConfig = ref(true)
+const saving = ref(false)
 
 const configForm = ref({
   heartbeat_sec: 30,
@@ -28,18 +28,19 @@ const configForm = ref({
 })
 
 const loadVersionInfo = async () => {
+  loadingVersion.value = true
   try {
     const { data } = await getVersionInfo()
     versionInfo.value = data
   } catch (error) {
     console.error('Failed to load version info', error)
   } finally {
-    loading.value = false
+    loadingVersion.value = false
   }
 }
 
 const loadServerConfig = async () => {
-  configLoading.value = true
+  loadingConfig.value = true
   try {
     const { data } = await getServerConfig()
     serverConfig.value = data
@@ -51,15 +52,16 @@ const loadServerConfig = async () => {
     }
   } catch (error) {
     console.error('Failed to load server config', error)
+    message.error('服务器配置加载失败')
   } finally {
-    configLoading.value = false
+    loadingConfig.value = false
   }
 }
 
 const handleSaveConfig = async () => {
-  savingConfig.value = true
+  saving.value = true
   try {
-    const updateReq: UpdateServerConfigRequest = {
+    const payload: UpdateServerConfigRequest = {
       server: {
         heartbeat_sec: configForm.value.heartbeat_sec,
         heartbeat_timeout: configForm.value.heartbeat_timeout,
@@ -70,19 +72,19 @@ const handleSaveConfig = async () => {
     }
 
     if (configForm.value.web_password) {
-      updateReq.web = {
-        ...updateReq.web,
+      payload.web = {
+        ...payload.web,
         password: configForm.value.web_password,
       }
     }
 
-    await updateServerConfig(updateReq)
-    message.success('配置已保存，部分配置需要重启服务后生效')
+    await updateServerConfig(payload)
     configForm.value.web_password = ''
+    message.success('配置已保存，部分配置需要重启后生效')
   } catch (error: any) {
     message.error(error.response?.data || '保存配置失败')
   } finally {
-    savingConfig.value = false
+    saving.value = false
   }
 }
 
@@ -93,375 +95,122 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="settings-page">
-    <div class="particles">
-      <div class="particle particle-1"></div>
-      <div class="particle particle-2"></div>
-      <div class="particle particle-3"></div>
+  <PageShell title="系统设置" eyebrow="Settings" subtitle="统一整理运行版本与服务配置，减少样式重复并保留关键运维操作。">
+    <template #actions>
+      <button class="glass-btn" @click="loadVersionInfo">刷新版本</button>
+      <button class="glass-btn primary" :disabled="saving" @click="handleSaveConfig">{{ saving ? '保存中...' : '保存配置' }}</button>
+    </template>
+
+    <template #metrics>
+      <MetricCard label="当前版本" :value="versionInfo?.version || '—'" :hint="versionInfo?.git_commit?.slice(0, 8) || '未知提交'" />
+      <MetricCard label="Go 版本" :value="versionInfo?.go_version || '—'" hint="运行时版本" tone="info" />
+      <MetricCard label="运行平台" :value="versionInfo ? `${versionInfo.os}/${versionInfo.arch}` : '—'" hint="服务端当前平台" tone="success" />
+      <MetricCard label="Web 用户名" :value="configForm.web_username || '—'" hint="控制台登录账号" tone="warning" />
+    </template>
+
+    <div class="settings-grid">
+      <SectionCard title="版本信息" description="查看当前服务端构建信息，方便排查环境与升级状态。">
+        <div v-if="loadingVersion" class="empty-state">正在加载版本信息...</div>
+        <dl v-else-if="versionInfo" class="info-grid">
+          <div><dt>版本号</dt><dd>{{ versionInfo.version }}</dd></div>
+          <div><dt>Git 提交</dt><dd>{{ versionInfo.git_commit || 'N/A' }}</dd></div>
+          <div><dt>构建时间</dt><dd>{{ versionInfo.build_time || 'N/A' }}</dd></div>
+          <div><dt>Go 版本</dt><dd>{{ versionInfo.go_version }}</dd></div>
+          <div><dt>操作系统</dt><dd>{{ versionInfo.os }}</dd></div>
+          <div><dt>架构</dt><dd>{{ versionInfo.arch }}</dd></div>
+        </dl>
+        <div v-else class="empty-state">无法获取版本信息。</div>
+      </SectionCard>
+
+      <SectionCard title="服务配置" description="保留最常用的心跳与登录项配置，页面结构更精简。">
+        <div v-if="loadingConfig" class="empty-state">正在加载服务器配置...</div>
+        <form v-else class="config-form" @submit.prevent="handleSaveConfig">
+          <label class="form-group">
+            <span>心跳间隔（秒）</span>
+            <input v-model.number="configForm.heartbeat_sec" class="glass-input" min="1" max="300" type="number" />
+          </label>
+          <label class="form-group">
+            <span>心跳超时（秒）</span>
+            <input v-model.number="configForm.heartbeat_timeout" class="glass-input" min="1" max="600" type="number" />
+          </label>
+          <label class="form-group form-group--full">
+            <span>Web 用户名</span>
+            <input v-model="configForm.web_username" class="glass-input" type="text" placeholder="admin" />
+          </label>
+          <label class="form-group form-group--full">
+            <span>Web 密码</span>
+            <input v-model="configForm.web_password" class="glass-input" type="password" placeholder="留空则保持不变" />
+          </label>
+        </form>
+      </SectionCard>
     </div>
-
-    <div class="settings-content">
-      <div class="page-header">
-        <h1 class="page-title">系统设置</h1>
-        <p class="page-subtitle">管理服务端配置和系统更新</p>
-      </div>
-
-      <div class="glass-card">
-        <div class="card-header">
-          <h3>版本信息</h3>
-          <ServerOutline class="header-icon" />
-        </div>
-        <div class="card-body">
-          <div v-if="loading" class="loading-state">加载中...</div>
-          <div v-else-if="versionInfo" class="info-grid">
-            <div class="info-item">
-              <span class="info-label">版本号</span>
-              <span class="info-value">{{ versionInfo.version }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Git 提交</span>
-              <span class="info-value mono">{{ versionInfo.git_commit?.slice(0, 8) || 'N/A' }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">构建时间</span>
-              <span class="info-value">{{ versionInfo.build_time || 'N/A' }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Go 版本</span>
-              <span class="info-value">{{ versionInfo.go_version }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">操作系统</span>
-              <span class="info-value">{{ versionInfo.os }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">架构</span>
-              <span class="info-value">{{ versionInfo.arch }}</span>
-            </div>
-          </div>
-          <div v-else class="empty-state">无法加载版本信息</div>
-        </div>
-      </div>
-
-      <div class="glass-card">
-        <div class="card-header">
-          <h3>服务器配置</h3>
-          <SettingsOutline class="header-icon" />
-        </div>
-        <div class="card-body">
-          <div v-if="configLoading" class="loading-state">加载中...</div>
-          <div v-else-if="serverConfig" class="config-form">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">心跳间隔 (秒)</label>
-                <input
-                  v-model.number="configForm.heartbeat_sec"
-                  type="number"
-                  class="glass-input"
-                  min="1"
-                  max="300"
-                />
-              </div>
-              <div class="form-group">
-                <label class="form-label">心跳超时 (秒)</label>
-                <input
-                  v-model.number="configForm.heartbeat_timeout"
-                  type="number"
-                  class="glass-input"
-                  min="1"
-                  max="600"
-                />
-              </div>
-            </div>
-
-            <div class="form-divider"></div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Web 用户名</label>
-                <input
-                  v-model="configForm.web_username"
-                  type="text"
-                  class="glass-input"
-                  placeholder="admin"
-                />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Web 密码</label>
-                <input
-                  v-model="configForm.web_password"
-                  type="password"
-                  class="glass-input"
-                  placeholder="留空则不修改"
-                />
-              </div>
-            </div>
-
-            <div class="form-actions">
-              <button
-                class="glass-btn primary"
-                :disabled="savingConfig"
-                @click="handleSaveConfig"
-              >
-                <SaveOutline class="btn-icon" />
-                保存配置
-              </button>
-            </div>
-          </div>
-          <div v-else class="empty-state">无法加载配置信息</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.settings-page {
-  min-height: calc(100vh - 108px);
-  background: transparent;
-  position: relative;
-  overflow: hidden;
-  padding: 32px;
-}
-
-.particles {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.particle {
-  position: absolute;
-  border-radius: 50%;
-  opacity: 0.15;
-  filter: blur(60px);
-  animation: float 20s ease-in-out infinite;
-}
-
-.particle-1 {
-  width: 350px;
-  height: 350px;
-  background: var(--color-accent);
-  top: -80px;
-  right: -80px;
-}
-
-.particle-2 {
-  width: 280px;
-  height: 280px;
-  background: #8b5cf6;
-  bottom: -40px;
-  left: -40px;
-  animation-delay: -5s;
-}
-
-.particle-3 {
-  width: 220px;
-  height: 220px;
-  background: var(--color-success);
-  top: 40%;
-  left: 30%;
-  animation-delay: -10s;
-}
-
-@keyframes float {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(30px, -30px) scale(1.05); }
-  50% { transform: translate(-20px, 20px) scale(0.95); }
-  75% { transform: translate(-30px, -20px) scale(1.02); }
-}
-
-.settings-content {
-  position: relative;
-  z-index: 10;
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.page-header {
-  margin-bottom: 24px;
-}
-
-.page-title {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin: 0 0 8px 0;
-}
-
-.page-subtitle {
-  color: var(--color-text-secondary);
-  margin: 0;
-  font-size: 14px;
-}
-
-.glass-card {
-  background: var(--color-bg-tertiary);
-  border-radius: 12px;
-  border: 1px solid var(--color-border);
-  margin-bottom: 20px;
-}
-
-.card-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border-light);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.card-header h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.card-body {
-  padding: 20px;
+.settings-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-@media (max-width: 600px) {
-  .info-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.info-grid div,
+.form-group {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--glass-bg-light);
+  border: 1px solid var(--color-border-light);
 }
 
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.info-label {
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.info-value {
-  font-size: 14px;
-  color: var(--color-text-primary);
-  font-weight: 500;
-}
-
-.info-value.mono {
-  font-family: monospace;
-}
-
-.loading-state,
-.empty-state {
-  text-align: center;
-  padding: 32px;
-  color: var(--color-text-muted);
-}
-
-.glass-btn {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 8px 16px;
-  color: var(--color-text-primary);
+.info-grid dt,
+.form-group span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-text-secondary);
   font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
-.glass-btn:hover:not(:disabled) {
-  background: var(--color-border);
-}
-
-.glass-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.glass-btn.primary {
-  background: var(--color-accent);
-  border: none;
-}
-
-.glass-btn.primary:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-}
-
-.header-icon {
-  width: 20px;
-  height: 20px;
-  color: var(--color-text-muted);
-}
-
-.btn-icon {
-  width: 14px;
-  height: 14px;
+.info-grid dd {
+  color: var(--color-text-primary);
+  word-break: break-word;
 }
 
 .config-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-.form-label {
-  font-size: 13px;
+.form-group--full {
+  grid-column: 1 / -1;
+}
+
+.empty-state {
+  padding: 48px 20px;
+  text-align: center;
   color: var(--color-text-secondary);
-  font-weight: 500;
+  background: var(--glass-bg-light);
+  border: 1px dashed var(--color-border);
+  border-radius: 16px;
 }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-@media (max-width: 500px) {
-  .form-row {
+@media (max-width: 960px) {
+  .settings-grid,
+  .info-grid,
+  .config-form {
     grid-template-columns: 1fr;
   }
-}
-
-.form-divider {
-  height: 1px;
-  background: var(--color-border-light);
-  margin: 8px 0;
-}
-
-.form-actions {
-  margin-top: 8px;
-}
-
-.glass-input {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 10px 14px;
-  color: var(--color-text-primary);
-  font-size: 14px;
-  outline: none;
-  transition: all 0.15s;
-}
-
-.glass-input:focus {
-  border-color: var(--color-accent);
-}
-
-.glass-input::placeholder {
-  color: var(--color-text-muted);
 }
 </style>
