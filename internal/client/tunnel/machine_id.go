@@ -7,27 +7,38 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strings"
 )
 
-// getMachineID 获取机器唯一标识
-// 优先级：系统机器ID > MAC地址哈希
+// getMachineID builds a stable fingerprint from multiple host identifiers
+// and hashes the combined result into the client ID we expose externally.
 func getMachineID() string {
-	// 尝试获取系统机器 ID
-	if id := getSystemMachineID(); id != "" {
-		return hashID(id)
-	}
-
-	// 备选：使用主网卡 MAC 地址
-	if id := getMACAddress(); id != "" {
-		return hashID(id)
-	}
-
-	// 都失败则返回空，让服务端生成
-	return ""
+	return hashID(strings.Join(collectMachineIDParts(), "|"))
 }
 
-// getSystemMachineID 获取系统机器 ID
+func collectMachineIDParts() []string {
+	parts := []string{"os=" + runtime.GOOS, "arch=" + runtime.GOARCH}
+
+	if id := getSystemMachineID(); id != "" {
+		parts = append(parts, "system="+id)
+	}
+
+	if hostname, err := os.Hostname(); err == nil && hostname != "" {
+		parts = append(parts, "host="+hostname)
+	}
+
+	if macs := getMACAddresses(); len(macs) > 0 {
+		parts = append(parts, "macs="+strings.Join(macs, ","))
+	}
+
+	if names := getInterfaceNames(); len(names) > 0 {
+		parts = append(parts, "ifaces="+strings.Join(names, ","))
+	}
+
+	return parts
+}
+
 func getSystemMachineID() string {
 	switch runtime.GOOS {
 	case "linux":
@@ -41,20 +52,16 @@ func getSystemMachineID() string {
 	}
 }
 
-// getLinuxMachineID 获取 Linux 机器 ID
 func getLinuxMachineID() string {
-	// 优先读取 /etc/machine-id
 	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
 		return strings.TrimSpace(string(data))
 	}
-	// 备选 /var/lib/dbus/machine-id
 	if data, err := os.ReadFile("/var/lib/dbus/machine-id"); err == nil {
 		return strings.TrimSpace(string(data))
 	}
 	return ""
 }
 
-// getDarwinMachineID 获取 macOS 机器 ID (IOPlatformUUID)
 func getDarwinMachineID() string {
 	cmd := exec.Command("ioreg", "-rd1", "-c", "IOPlatformExpertDevice")
 	output, err := cmd.Output()
@@ -62,72 +69,84 @@ func getDarwinMachineID() string {
 		return ""
 	}
 
-	// 解析 IOPlatformUUID
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "IOPlatformUUID") {
-			parts := strings.Split(line, "=")
-			if len(parts) == 2 {
-				uuid := strings.TrimSpace(parts[1])
-				uuid = strings.Trim(uuid, "\"")
-				return uuid
-			}
+	for _, line := range strings.Split(string(output), "\n") {
+		if !strings.Contains(line, "IOPlatformUUID") {
+			continue
 		}
+
+		parts := strings.Split(line, "=")
+		if len(parts) != 2 {
+			continue
+		}
+
+		uuid := strings.TrimSpace(parts[1])
+		return strings.Trim(uuid, "\"")
 	}
+
 	return ""
 }
 
-// getWindowsMachineID 获取 Windows 机器 ID
 func getWindowsMachineID() string {
-	cmd := exec.Command("reg", "query",
-		`HKLM\SOFTWARE\Microsoft\Cryptography`,
-		"/v", "MachineGuid")
+	cmd := exec.Command("reg", "query", `HKLM\SOFTWARE\Microsoft\Cryptography`, "/v", "MachineGuid")
 	output, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
 
-	// 解析注册表输出
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "MachineGuid") {
-			fields := strings.Fields(line)
-			if len(fields) >= 3 {
-				return fields[len(fields)-1]
-			}
+	for _, line := range strings.Split(string(output), "\n") {
+		if !strings.Contains(line, "MachineGuid") {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) >= 3 {
+			return fields[len(fields)-1]
 		}
 	}
+
 	return ""
 }
 
-// getMACAddress 获取主网卡 MAC 地址
-func getMACAddress() string {
+func getMACAddresses() []string {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		return ""
+		return nil
 	}
 
+	macs := make([]string, 0, len(interfaces))
 	for _, iface := range interfaces {
-		// 跳过回环和无效接口
 		if iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		if iface.Flags&net.FlagUp == 0 {
 			continue
 		}
 		if len(iface.HardwareAddr) == 0 {
 			continue
 		}
-
-		// 返回第一个有效的 MAC 地址
-		return iface.HardwareAddr.String()
+		macs = append(macs, iface.HardwareAddr.String())
 	}
-	return ""
+
+	sort.Strings(macs)
+	return macs
 }
 
-// hashID 对 ID 进行哈希处理，生成固定长度的客户端 ID
+func getInterfaceNames() []string {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+
+	names := make([]string, 0, len(interfaces))
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		names = append(names, iface.Name)
+	}
+
+	sort.Strings(names)
+	return names
+}
+
 func hashID(id string) string {
 	hash := sha256.Sum256([]byte(id))
-	// 取前 16 个字符作为客户端 ID
 	return hex.EncodeToString(hash[:])[:16]
 }

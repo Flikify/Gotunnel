@@ -14,8 +14,7 @@ go build -o client ./cmd/client
 ./server -c server.yaml  # with config file
 
 # Run client
-./client -s <server>:7000 -t <token> -id <client-id>
-./client -s <server>:7000 -t <token> -id <client-id> -no-tls  # disable TLS
+./client -s <server>:7000 -t <token>
 
 # Web UI development (in web/ directory)
 cd web && npm install && npm run dev    # development server
@@ -86,7 +85,7 @@ External User → Server Port → Yamux Stream → Client → Local Service
 ### Configuration
 
 - Server: YAML config + SQLite database for client rules and JS plugins
-- Client: Command-line flags only (server address, token, client ID)
+- Client: Command-line flags only (server address, token)
 - Default ports: 7000 (tunnel), 7500 (web console)
 
 ## API Documentation

@@ -9,7 +9,6 @@ const clients = ref<ClientStatus[]>([])
 const loading = ref(true)
 const showInstallModal = ref(false)
 const installData = ref<InstallCommandResponse | null>(null)
-const installClientId = ref('')
 const generatingInstall = ref(false)
 
 const loadClients = async () => {
@@ -31,10 +30,9 @@ const viewClient = (id: string) => {
 }
 
 const openInstallModal = async () => {
-  installClientId.value = `client-${Date.now()}`
   generatingInstall.value = true
   try {
-    const { data } = await generateInstallCommand(installClientId.value)
+    const { data } = await generateInstallCommand()
     installData.value = data
     showInstallModal.value = true
   } catch (e) {
@@ -164,7 +162,7 @@ onMounted(loadClients)
               <button class="copy-btn" @click="copyCommand(installData.commands.windows)">复制</button>
             </div>
           </div>
-          <p class="token-info">客户端ID: <strong>{{ installClientId }}</strong></p>
+          <p class="token-info">客户端 ID 会在目标机器上根据多种设备标识自动计算。</p>
           <p class="token-warning">⚠️ 此命令包含一次性token，使用后需重新生成</p>
         </div>
       </div>

@@ -1,10 +1,8 @@
 package tunnel
 
 import (
-	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
@@ -36,13 +34,6 @@ var clientIDRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 // isValidClientID 验证客户端 ID 格式
 func isValidClientID(id string) bool {
 	return clientIDRegex.MatchString(id)
-}
-
-// generateClientID 生成随机客户端 ID
-func generateClientID() string {
-	bytes := make([]byte, 8)
-	rand.Read(bytes)
-	return hex.EncodeToString(bytes)
 }
 
 // Server 隧道服务端
@@ -239,13 +230,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 					validToken = true
 					isInstallToken = true
 					// 验证客户端ID匹配
-					if authReq.ClientID != "" && authReq.ClientID != installToken.ClientID {
-						security.LogInvalidClientID(clientIP, authReq.ClientID)
-						s.sendAuthResponse(conn, false, "client id mismatch", "")
-						return
-					}
 					// 使用token中的客户端ID
-					authReq.ClientID = installToken.ClientID
 				}
 			}
 		}
@@ -259,9 +244,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	// 处理客户端 ID
 	clientID := authReq.ClientID
-	if clientID == "" {
-		clientID = generateClientID()
-	} else if !isValidClientID(clientID) {
+	if clientID == "" || !isValidClientID(clientID) {
 		security.LogInvalidClientID(clientIP, clientID)
 		s.sendAuthResponse(conn, false, "invalid client id format", "")
 		return
@@ -757,11 +740,6 @@ func (s *Server) DisconnectClient(clientID string) error {
 	return cs.Session.Close()
 }
 
-
-
-
-
-
 // startUDPListener 启动 UDP 监听
 func (s *Server) startUDPListener(cs *ClientSession, rule *protocol.ProxyRule) {
 	if err := s.portManager.Reserve(rule.RemotePort, cs.ID); err != nil {
@@ -856,15 +834,6 @@ func (s *Server) sendUDPPacket(cs *ClientSession, conn *net.UDPConn, clientAddr 
 	}
 }
 
-
-
-
-
-
-
-
-
-
 // checkHTTPBasicAuth 检查 HTTP Basic Auth
 // 返回 (认证成功, 已读取的数据)
 func (s *Server) checkHTTPBasicAuth(conn net.Conn, username, password string) (bool, []byte) {
@@ -933,8 +902,6 @@ func (s *Server) sendHTTPUnauthorized(conn net.Conn) {
 	conn.Write([]byte(response))
 }
 
-
-
 // shouldPushToClient 检查是否应推送到指定客户端
 func (s *Server) shouldPushToClient(autoPush []string, clientID string) bool {
 	if len(autoPush) == 0 {
@@ -980,11 +947,6 @@ func (s *Server) RestartClient(clientID string) error {
 	return nil
 }
 
-
-
-
-
-
 // IsPortAvailable 检查端口是否可用
 func (s *Server) IsPortAvailable(port int, excludeClientID string) bool {
 	// 检查系统端口
@@ -1007,11 +969,6 @@ func (s *Server) IsPortAvailable(port int, excludeClientID string) bool {
 	}
 	return true
 }
-
-
-
-
-
 
 // SendUpdateToClient 发送更新命令到客户端
 func (s *Server) SendUpdateToClient(clientID, downloadURL string) error {

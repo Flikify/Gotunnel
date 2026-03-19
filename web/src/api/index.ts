@@ -182,5 +182,5 @@ export const getServerConfig = () => get<ServerConfigResponse>('/config')
 export const updateServerConfig = (config: UpdateServerConfigRequest) => put('/config', config)
 
 // 安装命令生成
-export const generateInstallCommand = (clientId: string) =>
-  post<InstallCommandResponse>('/install/generate', { client_id: clientId })
+export const generateInstallCommand = () =>
+  post<InstallCommandResponse>('/install/generate')

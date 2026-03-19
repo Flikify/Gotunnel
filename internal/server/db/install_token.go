@@ -5,8 +5,8 @@ func (s *SQLiteStore) CreateInstallToken(token *InstallToken) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.Exec(`INSERT INTO install_tokens (token, client_id, created_at, used) VALUES (?, ?, ?, ?)`,
-		token.Token, token.ClientID, token.CreatedAt, 0)
+	_, err := s.db.Exec(`INSERT INTO install_tokens (token, client_id, created_at, used) VALUES (?, '', ?, ?)`,
+		token.Token, token.CreatedAt, 0)
 	return err
 }
 
@@ -17,8 +17,8 @@ func (s *SQLiteStore) GetInstallToken(token string) (*InstallToken, error) {
 
 	var t InstallToken
 	var used int
-	err := s.db.QueryRow(`SELECT token, client_id, created_at, used FROM install_tokens WHERE token = ?`, token).
-		Scan(&t.Token, &t.ClientID, &t.CreatedAt, &used)
+	err := s.db.QueryRow(`SELECT token, created_at, used FROM install_tokens WHERE token = ?`, token).
+		Scan(&t.Token, &t.CreatedAt, &used)
 	if err != nil {
 		return nil, err
 	}

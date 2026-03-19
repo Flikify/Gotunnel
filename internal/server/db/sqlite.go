@@ -81,7 +81,7 @@ func (s *SQLiteStore) init() error {
 	_, err = s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS install_tokens (
 			token TEXT PRIMARY KEY,
-			client_id TEXT NOT NULL,
+			client_id TEXT NOT NULL DEFAULT '',
 			created_at INTEGER NOT NULL,
 			used INTEGER NOT NULL DEFAULT 0
 		)

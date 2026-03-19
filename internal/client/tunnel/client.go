@@ -48,7 +48,7 @@ type Client struct {
 }
 
 // NewClient 创建客户端
-func NewClient(serverAddr, token, id string) *Client {
+func NewClient(serverAddr, token string) *Client {
 	// 默认数据目录：优先使用用户主目录，失败时回退到当前工作目录
 	var dataDir string
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
@@ -71,9 +71,7 @@ func NewClient(serverAddr, token, id string) *Client {
 	}
 
 	// ID 优先级：命令行参数 > 机器ID
-	if id == "" {
-		id = getMachineID()
-	}
+	id := getMachineID()
 
 	// 获取主机名作为客户端名称
 	hostname, _ := os.Hostname()
@@ -98,7 +96,6 @@ func NewClient(serverAddr, token, id string) *Client {
 func (c *Client) InitVersionStore() error {
 	return nil
 }
-
 
 // logf 安全地记录日志（同时输出到标准日志和日志收集器）
 func (c *Client) logf(format string, args ...interface{}) {
@@ -190,8 +187,8 @@ func (c *Client) connect() error {
 
 	// 如果服务端分配了新 ID，则更新
 	if authResp.ClientID != "" && authResp.ClientID != c.ID {
-		c.ID = authResp.ClientID
-		c.logf("ID updated to: %s", c.ID)
+		conn.Close()
+		return fmt.Errorf("server returned unexpected client id: %s", authResp.ClientID)
 	}
 
 	c.logf("Authenticated as %s", c.ID)
@@ -416,15 +413,6 @@ func (c *Client) findRuleByPort(port int) *protocol.ProxyRule {
 	return nil
 }
 
-
-
-
-
-
-
-
-
-
 // handleClientRestart 处理客户端重启请求
 func (c *Client) handleClientRestart(stream net.Conn, msg *protocol.Message) {
 	defer stream.Close()
@@ -448,8 +436,6 @@ func (c *Client) handleClientRestart(stream net.Conn, msg *protocol.Message) {
 		c.session.Close()
 	}
 }
-
-
 
 // handleUpdateDownload 处理更新下载请求
 func (c *Client) handleUpdateDownload(stream net.Conn, msg *protocol.Message) {
@@ -528,7 +514,7 @@ func (c *Client) performSelfUpdate(downloadURL string) error {
 
 	// Windows 需要特殊处理
 	if runtime.GOOS == "windows" {
-		return performWindowsClientUpdate(binaryPath, currentPath, c.ServerAddr, c.Token, c.ID)
+		return performWindowsClientUpdate(binaryPath, currentPath, c.ServerAddr, c.Token)
 	}
 
 	// 确定目标路径
@@ -579,7 +565,7 @@ func (c *Client) performSelfUpdate(downloadURL string) error {
 	c.logf("Update completed successfully, restarting...")
 
 	// 重启进程（从新路径启动）
-	restartClientProcess(targetPath, c.ServerAddr, c.Token, c.ID)
+	restartClientProcess(targetPath, c.ServerAddr, c.Token)
 	return nil
 }
 
@@ -608,15 +594,10 @@ func (c *Client) checkUpdatePermissions(execPath string) error {
 	return nil
 }
 
-
 // performWindowsClientUpdate Windows 平台更新
-func performWindowsClientUpdate(newFile, currentPath, serverAddr, token, id string) error {
+func performWindowsClientUpdate(newFile, currentPath, serverAddr, token string) error {
 	// 创建批处理脚本
 	args := fmt.Sprintf(`-s "%s" -t "%s"`, serverAddr, token)
-	if id != "" {
-		args += fmt.Sprintf(` -id "%s"`, id)
-	}
-
 	batchScript := fmt.Sprintf(`@echo off
 :: Check for admin rights, request UAC elevation if needed
 net session >nul 2>&1
@@ -647,11 +628,8 @@ del "%%~f0"
 }
 
 // restartClientProcess 重启客户端进程
-func restartClientProcess(path, serverAddr, token, id string) {
+func restartClientProcess(path, serverAddr, token string) {
 	args := []string{"-s", serverAddr, "-t", token}
-	if id != "" {
-		args = append(args, "-id", id)
-	}
 
 	cmd := exec.Command(path, args...)
 	cmd.Stdout = os.Stdout
@@ -659,7 +637,6 @@ func restartClientProcess(path, serverAddr, token, id string) {
 	cmd.Start()
 	os.Exit(0)
 }
-
 
 // handleLogRequest 处理日志请求
 func (c *Client) handleLogRequest(stream net.Conn, msg *protocol.Message) {
@@ -736,8 +713,6 @@ func (c *Client) handleLogStop(stream net.Conn, msg *protocol.Message) {
 
 	c.logger.Unsubscribe(req.SessionID)
 }
-
-
 
 // handleSystemStatsRequest 处理系统状态请求
 func (c *Client) handleSystemStatsRequest(stream net.Conn, msg *protocol.Message) {

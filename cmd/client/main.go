@@ -23,8 +23,6 @@ func init() {
 func main() {
 	server := flag.String("s", "", "server address (ip:port)")
 	token := flag.String("t", "", "auth token")
-	id := flag.String("id", "", "client id (optional, auto-assigned if empty)")
-	noTLS := flag.Bool("no-tls", false, "disable TLS")
 	configPath := flag.String("c", "", "config file path")
 	flag.Parse()
 
@@ -47,18 +45,12 @@ func main() {
 	if *token != "" {
 		cfg.Token = *token
 	}
-	if *id != "" {
-		cfg.ID = *id
-	}
-	if *noTLS {
-		cfg.NoTLS = *noTLS
-	}
 
 	if cfg.Server == "" || cfg.Token == "" {
-		log.Fatal("Usage: client [-c config.yaml] | [-s <server:port> -t <token> [-id <client_id>] [-no-tls]]")
+		log.Fatal("Usage: client [-c config.yaml] | [-s <server:port> -t <token>]")
 	}
 
-	client := tunnel.NewClient(cfg.Server, cfg.Token, cfg.ID)
+	client := tunnel.NewClient(cfg.Server, cfg.Token)
 
 	// TLS 默认启用，默认跳过证书验证（类似 frp）
 	if !cfg.NoTLS {

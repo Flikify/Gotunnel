@@ -10,7 +10,6 @@ import (
 type ClientConfig struct {
 	Server string `yaml:"server"` // 服务器地址
 	Token  string `yaml:"token"`  // 认证 Token
-	ID     string `yaml:"id"`     // 客户端 ID
 	NoTLS  bool   `yaml:"no_tls"` // 禁用 TLS
 }
 

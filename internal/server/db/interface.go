@@ -46,7 +46,6 @@ type TrafficStore interface {
 // InstallToken 安装token
 type InstallToken struct {
 	Token     string `json:"token"`
-	ClientID  string `json:"client_id"`
 	CreatedAt int64  `json:"created_at"`
 	Used      bool   `json:"used"`
 }
