@@ -162,20 +162,14 @@ export interface WebConfigInfo {
   password: string
 }
 
-export interface PluginStoreConfigInfo {
-  url: string
-}
-
 export interface ServerConfigResponse {
   server: ServerConfigInfo
   web: WebConfigInfo
-  plugin_store: PluginStoreConfigInfo
 }
 
 export interface UpdateServerConfigRequest {
   server?: Partial<ServerConfigInfo>
   web?: Partial<WebConfigInfo>
-  plugin_store?: Partial<PluginStoreConfigInfo>
 }
 
 export const getServerConfig = () => get<ServerConfigResponse>('/config')

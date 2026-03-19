@@ -1,15 +1,12 @@
 package dto
 
-// UpdateServerConfigRequest 更新服务器配置请求
-// @Description 更新服务器配置
+// UpdateServerConfigRequest is the config update payload.
 type UpdateServerConfigRequest struct {
-	Server      *ServerConfigPart      `json:"server"`
-	Web         *WebConfigPart         `json:"web"`
-	PluginStore *PluginStoreConfigPart `json:"plugin_store"`
+	Server *ServerConfigPart `json:"server"`
+	Web    *WebConfigPart    `json:"web"`
 }
 
-// ServerConfigPart 服务器配置部分
-// @Description 隧道服务器配置
+// ServerConfigPart is the server config subset.
 type ServerConfigPart struct {
 	BindAddr         string `json:"bind_addr" binding:"omitempty"`
 	BindPort         int    `json:"bind_port" binding:"omitempty,min=1,max=65535"`
@@ -18,8 +15,7 @@ type ServerConfigPart struct {
 	HeartbeatTimeout int    `json:"heartbeat_timeout" binding:"omitempty,min=1,max=600"`
 }
 
-// WebConfigPart Web 配置部分
-// @Description Web 控制台配置
+// WebConfigPart is the web console config subset.
 type WebConfigPart struct {
 	Enabled  bool   `json:"enabled"`
 	BindPort int    `json:"bind_port" binding:"omitempty,min=1,max=65535"`
@@ -27,37 +23,25 @@ type WebConfigPart struct {
 	Password string `json:"password" binding:"omitempty,min=6,max=64"`
 }
 
-// ServerConfigResponse 服务器配置响应
-// @Description 服务器配置信息
+// ServerConfigResponse is the config response payload.
 type ServerConfigResponse struct {
-	Server      ServerConfigInfo      `json:"server"`
-	Web         WebConfigInfo         `json:"web"`
-	PluginStore PluginStoreConfigInfo `json:"plugin_store"`
+	Server ServerConfigInfo `json:"server"`
+	Web    WebConfigInfo    `json:"web"`
 }
 
-// ServerConfigInfo 服务器配置信息
+// ServerConfigInfo describes the server config.
 type ServerConfigInfo struct {
 	BindAddr         string `json:"bind_addr"`
 	BindPort         int    `json:"bind_port"`
-	Token            string `json:"token"` // 脱敏后的 token
+	Token            string `json:"token"`
 	HeartbeatSec     int    `json:"heartbeat_sec"`
 	HeartbeatTimeout int    `json:"heartbeat_timeout"`
 }
 
-// WebConfigInfo Web 配置信息
+// WebConfigInfo describes the web console config.
 type WebConfigInfo struct {
 	Enabled  bool   `json:"enabled"`
 	BindPort int    `json:"bind_port"`
 	Username string `json:"username"`
-	Password string `json:"password"` // 显示为 ****
-}
-
-// PluginStoreConfigPart 插件商店配置部分
-type PluginStoreConfigPart struct {
-	URL string `json:"url"`
-}
-
-// PluginStoreConfigInfo 插件商店配置信息
-type PluginStoreConfigInfo struct {
-	URL string `json:"url"`
+	Password string `json:"password"`
 }

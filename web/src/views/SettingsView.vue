@@ -1,37 +1,38 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ServerOutline, SettingsOutline, SaveOutline } from '@vicons/ionicons5'
-import { useToast } from '../composables/useToast'
+import { onMounted, ref } from 'vue'
+import { SaveOutline, ServerOutline, SettingsOutline } from '@vicons/ionicons5'
 import {
-  getVersionInfo, getServerConfig, updateServerConfig,
-  type VersionInfo, type ServerConfigResponse
+  getServerConfig,
+  getVersionInfo,
+  updateServerConfig,
+  type ServerConfigResponse,
+  type UpdateServerConfigRequest,
+  type VersionInfo,
 } from '../api'
+import { useToast } from '../composables/useToast'
 
 const message = useToast()
 
 const versionInfo = ref<VersionInfo | null>(null)
 const loading = ref(true)
 
-// 服务器配置
 const serverConfig = ref<ServerConfigResponse | null>(null)
 const configLoading = ref(false)
 const savingConfig = ref(false)
 
-// 配置表单
 const configForm = ref({
   heartbeat_sec: 30,
   heartbeat_timeout: 90,
   web_username: '',
   web_password: '',
-  plugin_store_url: ''
 })
 
 const loadVersionInfo = async () => {
   try {
     const { data } = await getVersionInfo()
     versionInfo.value = data
-  } catch (e) {
-    console.error('Failed to load version info', e)
+  } catch (error) {
+    console.error('Failed to load version info', error)
   } finally {
     loading.value = false
   }
@@ -42,16 +43,14 @@ const loadServerConfig = async () => {
   try {
     const { data } = await getServerConfig()
     serverConfig.value = data
-    // 填充表单
     configForm.value = {
       heartbeat_sec: data.server.heartbeat_sec,
       heartbeat_timeout: data.server.heartbeat_timeout,
       web_username: data.web.username,
       web_password: '',
-      plugin_store_url: data.plugin_store.url
     }
-  } catch (e) {
-    console.error('Failed to load server config', e)
+  } catch (error) {
+    console.error('Failed to load server config', error)
   } finally {
     configLoading.value = false
   }
@@ -60,27 +59,28 @@ const loadServerConfig = async () => {
 const handleSaveConfig = async () => {
   savingConfig.value = true
   try {
-    const updateReq: any = {
+    const updateReq: UpdateServerConfigRequest = {
       server: {
         heartbeat_sec: configForm.value.heartbeat_sec,
-        heartbeat_timeout: configForm.value.heartbeat_timeout
+        heartbeat_timeout: configForm.value.heartbeat_timeout,
       },
       web: {
-        username: configForm.value.web_username
+        username: configForm.value.web_username,
       },
-      plugin_store: {
-        url: configForm.value.plugin_store_url
+    }
+
+    if (configForm.value.web_password) {
+      updateReq.web = {
+        ...updateReq.web,
+        password: configForm.value.web_password,
       }
     }
-    // 只有填写了密码才更新
-    if (configForm.value.web_password) {
-      updateReq.web.password = configForm.value.web_password
-    }
+
     await updateServerConfig(updateReq)
     message.success('配置已保存，部分配置需要重启服务后生效')
     configForm.value.web_password = ''
-  } catch (e: any) {
-    message.error(e.response?.data || '保存配置失败')
+  } catch (error: any) {
+    message.error(error.response?.data || '保存配置失败')
   } finally {
     savingConfig.value = false
   }
@@ -94,7 +94,6 @@ onMounted(() => {
 
 <template>
   <div class="settings-page">
-    <!-- Particles -->
     <div class="particles">
       <div class="particle particle-1"></div>
       <div class="particle particle-2"></div>
@@ -102,13 +101,11 @@ onMounted(() => {
     </div>
 
     <div class="settings-content">
-      <!-- Header -->
       <div class="page-header">
         <h1 class="page-title">系统设置</h1>
         <p class="page-subtitle">管理服务端配置和系统更新</p>
       </div>
 
-      <!-- Version Info Card -->
       <div class="glass-card">
         <div class="card-header">
           <h3>版本信息</h3>
@@ -146,7 +143,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Server Config Card -->
       <div class="glass-card">
         <div class="card-header">
           <h3>服务器配置</h3>
@@ -201,19 +197,6 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="form-divider"></div>
-
-            <div class="form-group">
-              <label class="form-label">插件商店地址</label>
-              <input
-                v-model="configForm.plugin_store_url"
-                type="text"
-                class="glass-input"
-                placeholder="https://git.92coco.cn/flik/GoTunnel-Plugins/raw/branch/main/store.json"
-              />
-              <span class="form-hint">插件商店的 API 地址，留空使用默认地址</span>
-            </div>
-
             <div class="form-actions">
               <button
                 class="glass-btn primary"
@@ -241,7 +224,6 @@ onMounted(() => {
   padding: 32px;
 }
 
-/* Hide particles */
 .particles {
   position: absolute;
   inset: 0;
@@ -315,7 +297,6 @@ onMounted(() => {
   font-size: 14px;
 }
 
-/* Glass Card */
 .glass-card {
   background: var(--color-bg-tertiary);
   border-radius: 12px;
@@ -342,7 +323,6 @@ onMounted(() => {
   padding: 20px;
 }
 
-/* Info Grid */
 .info-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -350,7 +330,9 @@ onMounted(() => {
 }
 
 @media (max-width: 600px) {
-  .info-grid { grid-template-columns: repeat(2, 1fr); }
+  .info-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .info-item {
@@ -374,65 +356,13 @@ onMounted(() => {
   font-family: monospace;
 }
 
-/* States */
-.loading-state, .empty-state {
+.loading-state,
+.empty-state {
   text-align: center;
   padding: 32px;
   color: var(--color-text-muted);
 }
 
-/* Update Alert */
-.update-alert {
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  font-size: 13px;
-}
-
-.update-alert.success {
-  background: rgba(0, 186, 124, 0.15);
-  border: 1px solid rgba(0, 186, 124, 0.3);
-  color: var(--color-success);
-}
-
-.update-alert.info {
-  background: rgba(29, 155, 240, 0.15);
-  border: 1px solid rgba(29, 155, 240, 0.3);
-  color: var(--color-info);
-}
-
-/* Download Info */
-.download-info {
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  margin-bottom: 12px;
-}
-
-/* Release Note */
-.release-note {
-  margin-bottom: 16px;
-}
-
-.note-label {
-  display: block;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  margin-bottom: 6px;
-}
-
-.release-note pre {
-  margin: 0;
-  white-space: pre-wrap;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  background: var(--color-bg-elevated);
-  padding: 12px;
-  border-radius: 8px;
-  max-height: 150px;
-  overflow-y: auto;
-}
-
-/* Glass Button */
 .glass-btn {
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
@@ -456,11 +386,6 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-.glass-btn.small {
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
 .glass-btn.primary {
   background: var(--color-accent);
   border: none;
@@ -470,7 +395,6 @@ onMounted(() => {
   background: var(--color-accent-hover);
 }
 
-/* Icon styles */
 .header-icon {
   width: 20px;
   height: 20px;
@@ -482,7 +406,6 @@ onMounted(() => {
   height: 14px;
 }
 
-/* Config Form */
 .config-form {
   display: flex;
   flex-direction: column;
@@ -499,11 +422,6 @@ onMounted(() => {
   font-size: 13px;
   color: var(--color-text-secondary);
   font-weight: 500;
-}
-
-.form-hint {
-  font-size: 11px;
-  color: var(--color-text-muted);
 }
 
 .form-row {
@@ -528,7 +446,6 @@ onMounted(() => {
   margin-top: 8px;
 }
 
-/* Glass Input */
 .glass-input {
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
