@@ -11,7 +11,7 @@ BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M:%S')"
 GIT_COMMIT="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 USE_UPX="${USE_UPX:-true}"
 
-DESKTOP_PLATFORMS="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64"
+DESKTOP_PLATFORMS="linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

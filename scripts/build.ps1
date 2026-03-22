@@ -27,6 +27,7 @@ try {
 
 $DesktopPlatforms = @(
     @{ OS = "windows"; Arch = "amd64" },
+    @{ OS = "windows"; Arch = "arm64" },
     @{ OS = "linux"; Arch = "amd64" },
     @{ OS = "linux"; Arch = "arm64" },
     @{ OS = "darwin"; Arch = "amd64" },
@@ -264,6 +265,7 @@ Options:
 
 Target platforms:
   - windows/amd64
+  - windows/arm64
   - linux/amd64
   - linux/arm64
   - darwin/amd64
