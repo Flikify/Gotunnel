@@ -3,17 +3,14 @@ package com.gotunnel.android
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.gotunnel.android.bridge.TunnelStatus
-import com.gotunnel.android.config.AppConfig
 import com.gotunnel.android.config.ConfigStore
+import com.gotunnel.android.config.LogStore
 import com.gotunnel.android.config.ServiceStateStore
 import com.gotunnel.android.databinding.ActivityMainBinding
 import com.gotunnel.android.service.TunnelService
@@ -24,6 +21,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var configStore: ConfigStore
     private lateinit var stateStore: ServiceStateStore
+    private lateinit var logStore: LogStore
+
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!granted) {
@@ -33,7 +32,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         requestNotificationPermissionIfNeeded()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -41,21 +39,20 @@ class MainActivity : AppCompatActivity() {
 
         configStore = ConfigStore(this)
         stateStore = ServiceStateStore(this)
+        logStore = LogStore(this)
 
-        populateForm(configStore.load())
-        renderState()
-
-        binding.saveButton.setOnClickListener {
-            val config = readForm()
-            configStore.save(config)
-            renderState()
-            Toast.makeText(this, R.string.config_saved, Toast.LENGTH_SHORT).show()
+        binding.topToolbar.setNavigationOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
         binding.startButton.setOnClickListener {
-            val config = readForm()
-            configStore.save(config)
-            renderState()
+            val config = configStore.load()
+            if (config.serverAddress.isBlank() || config.token.isBlank()) {
+                Toast.makeText(this, R.string.config_missing, Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, SettingsActivity::class.java))
+                return@setOnClickListener
+            }
+
             ContextCompat.startForegroundService(
                 this,
                 TunnelService.createStartIntent(this, "manual-start"),
@@ -70,36 +67,15 @@ class MainActivity : AppCompatActivity() {
             )
             Toast.makeText(this, R.string.service_stop_requested, Toast.LENGTH_SHORT).show()
         }
-
-        binding.batteryButton.setOnClickListener {
-            openBatteryOptimizationSettings()
-        }
     }
 
     override fun onResume() {
         super.onResume()
-        renderState()
+        renderScreen()
     }
 
-    private fun populateForm(config: AppConfig) {
-        binding.serverAddressInput.setText(config.serverAddress)
-        binding.tokenInput.setText(config.token)
-        binding.autoStartSwitch.isChecked = config.autoStart
-        binding.autoReconnectSwitch.isChecked = config.autoReconnect
-        binding.useTlsSwitch.isChecked = config.useTls
-    }
-
-    private fun readForm(): AppConfig {
-        return AppConfig(
-            serverAddress = binding.serverAddressInput.text?.toString().orEmpty().trim(),
-            token = binding.tokenInput.text?.toString().orEmpty().trim(),
-            autoStart = binding.autoStartSwitch.isChecked,
-            autoReconnect = binding.autoReconnectSwitch.isChecked,
-            useTls = binding.useTlsSwitch.isChecked,
-        )
-    }
-
-    private fun renderState() {
+    private fun renderScreen() {
+        val config = configStore.load()
         val state = stateStore.load()
         val timestamp = if (state.updatedAt > 0L) {
             DateFormat.getDateTimeInstance().format(Date(state.updatedAt))
@@ -107,21 +83,37 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.state_never_updated)
         }
 
-        binding.stateValue.text = getString(
-            R.string.state_format,
-            state.status.name,
-            state.detail.ifBlank { getString(R.string.state_no_detail) },
-        )
-        binding.stateMeta.text = getString(R.string.state_meta_format, timestamp)
+        binding.statusValue.text = getStatusLabel(state.status)
+        binding.statusDetail.text = state.detail.ifBlank { getString(R.string.state_no_detail) }
+        binding.statusMeta.text = getString(R.string.state_meta_format, timestamp)
+        binding.stateHint.text = getStateHint(state.status)
+        binding.serverSummary.text = if (config.serverAddress.isBlank()) {
+            getString(R.string.status_server_unconfigured)
+        } else {
+            getString(R.string.status_server_configured, config.serverAddress)
+        }
+        binding.logValue.text = logStore.render()
+    }
 
-        val hint = when (state.status) {
+    private fun getStatusLabel(status: TunnelStatus): String {
+        return when (status) {
+            TunnelStatus.RUNNING -> getString(R.string.status_running)
+            TunnelStatus.STARTING -> getString(R.string.status_starting)
+            TunnelStatus.RECONNECTING -> getString(R.string.status_reconnecting)
+            TunnelStatus.ERROR -> getString(R.string.status_error)
+            TunnelStatus.STOPPED -> getString(R.string.status_stopped)
+        }
+    }
+
+    private fun getStateHint(status: TunnelStatus): String {
+        val messageId = when (status) {
             TunnelStatus.RUNNING -> R.string.state_hint_running
             TunnelStatus.STARTING -> R.string.state_hint_starting
             TunnelStatus.RECONNECTING -> R.string.state_hint_reconnecting
             TunnelStatus.ERROR -> R.string.state_hint_error
             TunnelStatus.STOPPED -> R.string.state_hint_stopped
         }
-        binding.stateHint.text = getString(hint)
+        return getString(messageId)
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -136,18 +128,5 @@ class MainActivity : AppCompatActivity() {
         if (!granted) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-    }
-
-    private fun openBatteryOptimizationSettings() {
-        val powerManager = getSystemService(PowerManager::class.java)
-        if (powerManager != null && powerManager.isIgnoringBatteryOptimizations(packageName)) {
-            Toast.makeText(this, R.string.battery_optimization_already_disabled, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-            data = Uri.parse("package:$packageName")
-        }
-        startActivity(intent)
     }
 }

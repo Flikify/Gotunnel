@@ -5,5 +5,4 @@ data class AppConfig(
     val token: String = "",
     val autoStart: Boolean = true,
     val autoReconnect: Boolean = true,
-    val useTls: Boolean = true,
 )

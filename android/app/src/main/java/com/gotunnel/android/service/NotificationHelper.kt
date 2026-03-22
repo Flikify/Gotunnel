@@ -75,7 +75,7 @@ object NotificationHelper {
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_gotunnel_notification)
-            .setContentTitle(context.getString(R.string.notification_title, status.name))
+            .setContentTitle(context.getString(R.string.notification_title, statusLabel(context, status)))
             .setContentText(baseText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(baseText))
             .setOngoing(status != TunnelStatus.STOPPED)
@@ -84,6 +84,16 @@ object NotificationHelper {
             .addAction(android.R.drawable.ic_popup_sync, context.getString(R.string.notification_action_restart), restartIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.notification_action_stop), stopIntent)
             .build()
+    }
+
+    private fun statusLabel(context: Context, status: TunnelStatus): String {
+        return when (status) {
+            TunnelStatus.RUNNING -> context.getString(R.string.status_running)
+            TunnelStatus.STARTING -> context.getString(R.string.status_starting)
+            TunnelStatus.RECONNECTING -> context.getString(R.string.status_reconnecting)
+            TunnelStatus.ERROR -> context.getString(R.string.status_error)
+            TunnelStatus.STOPPED -> context.getString(R.string.status_stopped)
+        }
     }
 
     private fun pendingIntentFlags(): Int {

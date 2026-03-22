@@ -11,7 +11,6 @@ class ConfigStore(context: Context) {
             token = prefs.getString(KEY_TOKEN, "") ?: "",
             autoStart = prefs.getBoolean(KEY_AUTO_START, true),
             autoReconnect = prefs.getBoolean(KEY_AUTO_RECONNECT, true),
-            useTls = prefs.getBoolean(KEY_USE_TLS, true),
         )
     }
 
@@ -21,7 +20,7 @@ class ConfigStore(context: Context) {
             .putString(KEY_TOKEN, config.token)
             .putBoolean(KEY_AUTO_START, config.autoStart)
             .putBoolean(KEY_AUTO_RECONNECT, config.autoReconnect)
-            .putBoolean(KEY_USE_TLS, config.useTls)
+            .remove(KEY_USE_TLS)
             .apply()
     }
 

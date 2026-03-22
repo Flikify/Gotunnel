@@ -10,6 +10,7 @@ import com.gotunnel.android.bridge.TunnelController
 import com.gotunnel.android.bridge.TunnelStatus
 import com.gotunnel.android.config.AppConfig
 import com.gotunnel.android.config.ConfigStore
+import com.gotunnel.android.config.LogStore
 import com.gotunnel.android.config.ServiceStateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,7 @@ class TunnelService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var configStore: ConfigStore
     private lateinit var stateStore: ServiceStateStore
+    private lateinit var logStore: LogStore
     private lateinit var controller: TunnelController
     private lateinit var networkMonitor: NetworkMonitor
     private var currentConfig: AppConfig = AppConfig()
@@ -29,16 +31,18 @@ class TunnelService : Service() {
         super.onCreate()
         configStore = ConfigStore(this)
         stateStore = ServiceStateStore(this)
+        logStore = LogStore(this)
         controller = GoTunnelBridge.create(applicationContext)
         controller.setListener(object : TunnelController.Listener {
             override fun onStatusChanged(status: TunnelStatus, detail: String) {
                 stateStore.save(status, detail)
+                logStore.append("status: ${status.name} ${detail.ifBlank { "" }}".trim())
                 updateNotification(status, detail)
             }
 
             override fun onLog(message: String) {
                 val current = stateStore.load()
-                stateStore.save(current.status, message)
+                logStore.append(message)
                 updateNotification(current.status, message)
             }
         })
@@ -57,6 +61,7 @@ class TunnelService : Service() {
             onLost = {
                 val detail = getString(com.gotunnel.android.R.string.network_lost)
                 stateStore.save(TunnelStatus.RECONNECTING, detail)
+                logStore.append(detail)
                 updateNotification(TunnelStatus.RECONNECTING, detail)
             },
         )
@@ -98,12 +103,7 @@ class TunnelService : Service() {
         NotificationHelper.ensureChannel(this)
         startForeground(
             NotificationHelper.NOTIFICATION_ID,
-            NotificationHelper.build(
-                this,
-                state.status,
-                state.detail,
-                config,
-            ),
+            NotificationHelper.build(this, state.status, state.detail, config),
         )
     }
 
@@ -111,11 +111,13 @@ class TunnelService : Service() {
         currentConfig = configStore.load()
         controller.updateConfig(currentConfig)
         stateStore.save(TunnelStatus.STARTING, reason)
+        logStore.append("start requested: $reason")
         updateNotification(TunnelStatus.STARTING, reason)
 
         if (!isConfigReady(currentConfig)) {
             val detail = getString(com.gotunnel.android.R.string.config_missing)
             stateStore.save(TunnelStatus.STOPPED, detail)
+            logStore.append(detail)
             updateNotification(TunnelStatus.STOPPED, detail)
             return
         }
@@ -130,6 +132,7 @@ class TunnelService : Service() {
         networkMonitorPrimed = false
         controller.stop(reason)
         stateStore.save(TunnelStatus.STOPPED, reason)
+        logStore.append("stop requested: $reason")
         updateNotification(TunnelStatus.STOPPED, reason)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
