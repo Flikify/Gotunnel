@@ -1,16 +1,13 @@
 # GoTunnel Makefile
 
-.PHONY: all build-frontend sync-frontend build-server build-client clean help
+.PHONY: all build-frontend sync-frontend sync-only build-server build-client build-all-platforms build-current-platform build-android clean help
 
-# 默认目标
-all: build-frontend sync-frontend build-server build-client
+all: build-frontend sync-frontend build-current-platform
 
-# 构建前端
 build-frontend:
 	@echo "Building frontend..."
 	cd web && npm ci && npm run build
 
-# 同步前端到 embed 目录
 sync-frontend:
 	@echo "Syncing frontend to embed directory..."
 ifeq ($(OS),Windows_NT)
@@ -21,7 +18,6 @@ else
 	cp -r web/dist internal/server/app/dist
 endif
 
-# 仅同步（不重新构建前端）
 sync-only:
 	@echo "Syncing existing frontend build..."
 ifeq ($(OS),Windows_NT)
@@ -32,33 +28,38 @@ else
 	cp -r web/dist internal/server/app/dist
 endif
 
-# 构建服务端（当前平台）
 build-server:
-	@echo "Building server..."
-	go build -ldflags="-s -w" -o gotunnel-server ./cmd/server
+	@echo "Building server for current platform..."
+	go build -buildvcs=false -trimpath -ldflags="-s -w" -o gotunnel-server ./cmd/server
 
-# 构建客户端（当前平台）
 build-client:
-	@echo "Building client..."
-	go build -ldflags="-s -w" -o gotunnel-client ./cmd/client
+	@echo "Building client for current platform..."
+	go build -buildvcs=false -trimpath -ldflags="-s -w" -o gotunnel-client ./cmd/client
 
-# 构建 Linux ARM64 服务端
-build-server-linux-arm64: sync-only
-	@echo "Building server for Linux ARM64..."
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o gotunnel-server-linux-arm64 ./cmd/server
+build-current-platform:
+	@echo "Building current platform binaries..."
+ifeq ($(OS),Windows_NT)
+	powershell -ExecutionPolicy Bypass -File scripts/build.ps1 current
+else
+	./scripts/build.sh current
+endif
 
-# 构建 Linux AMD64 服务端
-build-server-linux-amd64: sync-only
-	@echo "Building server for Linux AMD64..."
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o gotunnel-server-linux-amd64 ./cmd/server
+build-all-platforms:
+	@echo "Building all desktop platform binaries..."
+ifeq ($(OS),Windows_NT)
+	powershell -ExecutionPolicy Bypass -File scripts/build.ps1 all -NoUPX
+else
+	./scripts/build.sh all
+endif
 
-# 完整构建（包含前端）
-full-build: build-frontend sync-frontend build-server build-client
+build-android:
+	@echo "Android build placeholder..."
+ifeq ($(OS),Windows_NT)
+	powershell -ExecutionPolicy Bypass -File scripts/build.ps1 android
+else
+	./scripts/build.sh android
+endif
 
-# 开发模式：快速构建（假设前端已构建）
-dev-build: sync-only build-server
-
-# 清理构建产物
 clean:
 	@echo "Cleaning..."
 ifeq ($(OS),Windows_NT)
@@ -68,21 +69,21 @@ ifeq ($(OS),Windows_NT)
 	if exist gotunnel-client.exe del gotunnel-client.exe
 	if exist gotunnel-server-* del gotunnel-server-*
 	if exist gotunnel-client-* del gotunnel-client-*
+	if exist build rmdir /s /q build
 else
 	rm -f gotunnel-server gotunnel-client gotunnel-server-* gotunnel-client-*
+	rm -rf build
 endif
 
-# 帮助
 help:
 	@echo "Available targets:"
-	@echo "  all                    - Build frontend, sync, and build binaries"
+	@echo "  all                    - Build frontend, sync, and current platform binaries"
 	@echo "  build-frontend         - Build frontend (npm)"
 	@echo "  sync-frontend          - Sync web/dist to internal/server/app/dist"
 	@echo "  sync-only              - Sync without rebuilding frontend"
 	@echo "  build-server           - Build server for current platform"
 	@echo "  build-client           - Build client for current platform"
-	@echo "  build-server-linux-arm64 - Cross-compile server for Linux ARM64"
-	@echo "  build-server-linux-amd64 - Cross-compile server for Linux AMD64"
-	@echo "  full-build             - Complete build with frontend"
-	@echo "  dev-build              - Quick build (assumes frontend exists)"
+	@echo "  build-current-platform - Build server/client into build/<os>_<arch>/"
+	@echo "  build-all-platforms    - Build Windows/Linux/macOS server/client binaries"
+	@echo "  build-android          - Android build placeholder"
 	@echo "  clean                  - Remove build artifacts"

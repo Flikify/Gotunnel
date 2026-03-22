@@ -17,12 +17,12 @@ const showInstallModal = ref(false)
 const installData = ref<InstallCommandResponse | null>(null)
 const generatingInstall = ref(false)
 const search = ref('')
-const installScriptUrl = 'https://raw.githubusercontent.com/gotunnel/gotunnel/main/scripts/install.sh'
-const installPs1Url = 'https://raw.githubusercontent.com/gotunnel/gotunnel/main/scripts/install.ps1'
 
 const quoteShellArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
+const quotePowerShellSingle = (value: string) => value.replace(/'/g, "''")
 
 const resolveTunnelHost = () => window.location.hostname || 'localhost'
+const resolveWebBaseUrl = () => window.location.origin || 'http://localhost:7500'
 
 const formatServerAddr = (host: string, port: number) => {
   const normalizedHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
@@ -30,12 +30,18 @@ const formatServerAddr = (host: string, port: number) => {
 }
 
 const buildInstallCommands = (data: InstallCommandResponse) => {
+  const webBaseUrl = resolveWebBaseUrl()
   const serverAddr = formatServerAddr(resolveTunnelHost(), data.tunnel_port)
+  const installScriptUrl = `${webBaseUrl}/install.sh`
+  const installPs1Url = `${webBaseUrl}/install.ps1`
+  const psServerAddr = quotePowerShellSingle(serverAddr)
+  const psToken = quotePowerShellSingle(data.token)
+  const psBaseUrl = quotePowerShellSingle(webBaseUrl)
 
   return {
-    linux: `bash <(curl -fsSL ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)}`,
-    macos: `bash <(curl -fsSL ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)}`,
-    windows: `powershell -c \"irm ${installPs1Url} | iex; Install-GoTunnel -Server '${serverAddr}' -Token '${data.token}'\"`,
+    linux: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)} -b ${quoteShellArg(webBaseUrl)}`,
+    macos: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)} -b ${quoteShellArg(webBaseUrl)}`,
+    windows: `powershell -c \"irm ${installPs1Url} -Headers @{ 'X-GoTunnel-Install-Token' = '${psToken}' } | iex; Install-GoTunnel -Server '${psServerAddr}' -Token '${psToken}' -BaseUrl '${psBaseUrl}'\"`,
   }
 }
 

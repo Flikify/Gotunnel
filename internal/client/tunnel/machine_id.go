@@ -14,11 +14,15 @@ import (
 // getMachineID builds a stable fingerprint from multiple host identifiers
 // and hashes the combined result into the client ID we expose externally.
 func getMachineID() string {
-	return hashID(strings.Join(collectMachineIDParts(), "|"))
+	parts := collectMachineIDParts()
+	if len(parts) == 0 {
+		return ""
+	}
+	return hashID(strings.Join(parts, "|"))
 }
 
 func collectMachineIDParts() []string {
-	parts := []string{"os=" + runtime.GOOS, "arch=" + runtime.GOARCH}
+	parts := make([]string, 0, 6)
 
 	if id := getSystemMachineID(); id != "" {
 		parts = append(parts, "system="+id)
@@ -36,6 +40,11 @@ func collectMachineIDParts() []string {
 		parts = append(parts, "ifaces="+strings.Join(names, ","))
 	}
 
+	if len(parts) == 0 {
+		return nil
+	}
+
+	parts = append(parts, "os="+runtime.GOOS, "arch="+runtime.GOARCH)
 	return parts
 }
 
@@ -47,6 +56,8 @@ func getSystemMachineID() string {
 		return getDarwinMachineID()
 	case "windows":
 		return getWindowsMachineID()
+	case "android":
+		return ""
 	default:
 		return ""
 	}

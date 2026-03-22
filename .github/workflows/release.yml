@@ -50,6 +50,60 @@ jobs:
           path: web/dist
           retention-days: 1
 
+  android-apk:
+    name: Package Android release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build release APK
+        working-directory: android
+        run: gradle --no-daemon assembleRelease
+
+      - name: Package Android release asset
+        id: package
+        shell: bash
+        run: |
+          mkdir -p dist/out
+          ARCHIVE="gotunnel-android-${{ steps.meta.outputs.tag }}-release-unsigned.apk"
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk "dist/out/${ARCHIVE}"
+          echo "archive=dist/out/${ARCHIVE}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Android release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android-apk
+          path: ${{ steps.package.outputs.archive }}
+          retention-days: 1
+
   build-assets:
     name: Package ${{ matrix.component }} ${{ matrix.goos }}/${{ matrix.goarch }}
     needs: frontend
@@ -176,7 +230,9 @@ jobs:
 
   publish:
     name: Publish release
-    needs: build-assets
+    needs:
+      - build-assets
+      - android-apk
     runs-on: ubuntu-latest
     steps:
       - name: Download packaged assets

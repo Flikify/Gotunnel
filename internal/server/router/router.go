@@ -48,6 +48,11 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 	engine.POST("/api/auth/login", authHandler.Login)
 	engine.GET("/api/auth/check", authHandler.Check)
 
+	installHandler := handler.NewInstallHandler(app)
+	engine.GET("/install.sh", installHandler.ServeShellScript)
+	engine.GET("/install.ps1", installHandler.ServePowerShellScript)
+	engine.GET("/install/client", installHandler.DownloadClient)
+
 	// API 路由 (需要 JWT)
 	api := engine.Group("/api")
 	api.Use(middleware.JWTAuth(jwtAuth))
@@ -94,7 +99,6 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		api.GET("/traffic/hourly", trafficHandler.GetHourly)
 
 		// 安装命令生成
-		installHandler := handler.NewInstallHandler(app)
 		api.POST("/install/generate", installHandler.GenerateInstallCommand)
 	}
 }

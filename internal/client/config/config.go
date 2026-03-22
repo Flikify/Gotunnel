@@ -6,14 +6,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ClientConfig 客户端配置
+// ClientConfig defines client runtime configuration.
 type ClientConfig struct {
-	Server string `yaml:"server"` // 服务器地址
-	Token  string `yaml:"token"`  // 认证 Token
-	NoTLS  bool   `yaml:"no_tls"` // 禁用 TLS
+	Server          string `yaml:"server"`
+	Token           string `yaml:"token"`
+	NoTLS           bool   `yaml:"no_tls"`
+	DataDir         string `yaml:"data_dir"`
+	Name            string `yaml:"name"`
+	ClientID        string `yaml:"client_id"`
+	ReconnectMinSec int    `yaml:"reconnect_min_sec"`
+	ReconnectMaxSec int    `yaml:"reconnect_max_sec"`
 }
 
-// LoadClientConfig 加载客户端配置
+// LoadClientConfig loads client configuration from YAML.
 func LoadClientConfig(path string) (*ClientConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

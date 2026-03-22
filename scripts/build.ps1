@@ -1,6 +1,6 @@
 # GoTunnel Build Script for Windows
 # Usage: .\build.ps1 [command]
-# Commands: all, current, web, server, client, clean, help
+# Commands: all, current, web, server, client, android, clean, help
 
 param(
     [Parameter(Position=0)]
@@ -13,15 +13,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# 项目根目录
-$RootDir = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-if (-not $RootDir) {
-    $RootDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-}
+$RootDir = Split-Path -Parent $PSScriptRoot
 $BuildDir = Join-Path $RootDir "build"
+$env:GOCACHE = if ($env:GOCACHE) { $env:GOCACHE } else { Join-Path $BuildDir ".gocache" }
 
-# 版本信息
-$BuildTime = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+$BuildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss")
 try {
     $GitCommit = (git -C $RootDir rev-parse --short HEAD 2>$null)
     if (-not $GitCommit) { $GitCommit = "unknown" }
@@ -29,17 +25,14 @@ try {
     $GitCommit = "unknown"
 }
 
-# 目标平台
-$Platforms = @(
-    @{OS="windows"; Arch="amd64"},
-    @{OS="linux"; Arch="amd64"},
-    @{OS="linux"; Arch="arm64"},
-    @{OS="darwin"; Arch="amd64"},
-    @{OS="darwin"; Arch="arm64"}
-)
+$DesktopPlatforms = @(
+    @{ OS = "windows"; Arch = "amd64" },
+    @{ OS = "linux"; Arch = "amd64" },
+    @{ OS = "linux"; Arch = "arm64" },
+    @{ OS = "darwin"; Arch = "amd64" },
+    @{ OS = "darwin"; Arch = "arm64" }
 )
 
-# 颜色输出函数
 function Write-Info {
     param([string]$Message)
     Write-Host "[INFO] " -ForegroundColor Green -NoNewline
@@ -58,7 +51,6 @@ function Write-Err {
     Write-Host $Message
 }
 
-# 检查 UPX 是否可用
 function Test-UPX {
     try {
         $null = Get-Command upx -ErrorAction Stop
@@ -68,16 +60,17 @@ function Test-UPX {
     }
 }
 
-# UPX 压缩二进制
 function Compress-Binary {
-    param([string]$FilePath, [string]$OS)
+    param(
+        [string]$FilePath,
+        [string]$OS
+    )
 
     if ($NoUPX) { return }
     if (-not (Test-UPX)) {
         Write-Warn "UPX not found, skipping compression"
         return
     }
-    # macOS 二进制不支持 UPX
     if ($OS -eq "darwin") {
         Write-Warn "Skipping UPX for macOS binary: $FilePath"
         return
@@ -91,7 +84,6 @@ function Compress-Binary {
     }
 }
 
-# 构建 Web UI
 function Build-Web {
     Write-Info "Building web UI..."
 
@@ -111,7 +103,6 @@ function Build-Web {
         Pop-Location
     }
 
-    # 复制到 embed 目录
     Write-Info "Copying dist to embed directory..."
     $DistSource = Join-Path $WebDir "dist"
     $DistDest = Join-Path $RootDir "internal\server\app\dist"
@@ -124,23 +115,34 @@ function Build-Web {
     Write-Info "Web UI built successfully"
 }
 
-# 构建单个二进制
+function Get-OutputName {
+    param(
+        [string]$Component,
+        [string]$OS
+    )
+
+    if ($OS -eq "windows") {
+        return "$Component.exe"
+    }
+
+    return $Component
+}
+
 function Build-Binary {
     param(
         [string]$OS,
         [string]$Arch,
-        [string]$Component  # server 或 client
+        [string]$Component
     )
-
-    $OutputName = $Component
-    if ($OS -eq "windows") {
-        $OutputName = "$Component.exe"
-    }
 
     $OutputDir = Join-Path $BuildDir "${OS}_${Arch}"
     if (-not (Test-Path $OutputDir)) {
         New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
     }
+
+    $OutputName = Get-OutputName -Component $Component -OS $OS
+    $OutputPath = Join-Path $OutputDir $OutputName
+    $SourcePath = Join-Path $RootDir "cmd\$Component"
 
     Write-Info "Building $Component for $OS/$Arch..."
 
@@ -148,27 +150,20 @@ function Build-Binary {
     $env:GOARCH = $Arch
     $env:CGO_ENABLED = "0"
 
-    $LDFlags = "-s -w -X 'github.com/gotunnel/pkg/version.Version=$Version' -X 'github.com/gotunnel/pkg/version.BuildTime=$BuildTime' -X 'github.com/gotunnel/pkg/version.GitCommit=$GitCommit'"
-    $OutputPath = Join-Path $OutputDir $OutputName
-    $SourcePath = Join-Path $RootDir "cmd\$Component"
-
-    & go build -ldflags $LDFlags -o $OutputPath $SourcePath
+    $LdFlags = "-s -w -X 'main.Version=$Version' -X 'main.BuildTime=$BuildTime' -X 'main.GitCommit=$GitCommit'"
+    & go build -buildvcs=false -trimpath -ldflags $LdFlags -o $OutputPath $SourcePath
 
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed for $Component $OS/$Arch"
     }
 
-    # UPX 压缩
     Compress-Binary -FilePath $OutputPath -OS $OS
-
-    # 显示文件大小
     $FileSize = (Get-Item $OutputPath).Length / 1MB
-    Write-Info "  -> $OutputPath ({0:N2} MB)" -f $FileSize
+    Write-Info ("  -> {0} ({1:N2} MB)" -f $OutputPath, $FileSize)
 }
 
-# 构建所有平台
 function Build-All {
-    foreach ($Platform in $Platforms) {
+    foreach ($Platform in $DesktopPlatforms) {
         Build-Binary -OS $Platform.OS -Arch $Platform.Arch -Component "server"
         Build-Binary -OS $Platform.OS -Arch $Platform.Arch -Component "client"
     }
@@ -184,7 +179,6 @@ function Build-All {
     }
 }
 
-# 仅构建当前平台
 function Build-Current {
     $OS = go env GOOS
     $Arch = go env GOARCH
@@ -195,7 +189,51 @@ function Build-Current {
     Write-Info "Binaries built in $BuildDir\${OS}_${Arch}\"
 }
 
-# 清理构建产物
+function Build-Android {
+    $OutputDir = Join-Path $BuildDir "android_arm64"
+    if (-not (Test-Path $OutputDir)) {
+        New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+    }
+
+    Write-Info "Building client for android/arm64..."
+    $env:GOOS = "android"
+    $env:GOARCH = "arm64"
+    $env:CGO_ENABLED = "0"
+
+    $OutputPath = Join-Path $OutputDir "client"
+    $LdFlags = "-s -w -X 'main.Version=$Version' -X 'main.BuildTime=$BuildTime' -X 'main.GitCommit=$GitCommit'"
+    & go build -buildvcs=false -trimpath -ldflags $LdFlags -o $OutputPath (Join-Path $RootDir "cmd\client")
+    if ($LASTEXITCODE -ne 0) {
+        throw "Build failed for client android/arm64"
+    }
+
+    if (Get-Command gomobile -ErrorAction SilentlyContinue) {
+        Write-Info "Building gomobile Android binding..."
+        & gomobile bind -target android/arm64 -o (Join-Path $OutputDir "gotunnelmobile.aar") "github.com/gotunnel/mobile/gotunnelmobile"
+        if ($LASTEXITCODE -ne 0) {
+            throw "gomobile bind failed"
+        }
+    } else {
+        Write-Warn "gomobile not found, skipping Android AAR build"
+    }
+
+    $GradleWrapper = Join-Path $RootDir "android\gradlew.bat"
+    if (Test-Path $GradleWrapper) {
+        Write-Info "Building Android debug APK..."
+        Push-Location (Join-Path $RootDir "android")
+        try {
+            & $GradleWrapper assembleDebug
+            if ($LASTEXITCODE -ne 0) {
+                throw "Android APK build failed"
+            }
+        } finally {
+            Pop-Location
+        }
+    } else {
+        Write-Warn "android\\gradlew.bat not found, skipping APK build"
+    }
+}
+
 function Clean-Build {
     Write-Info "Cleaning build directory..."
     if (Test-Path $BuildDir) {
@@ -204,7 +242,6 @@ function Clean-Build {
     Write-Info "Clean completed"
 }
 
-# 显示帮助
 function Show-Help {
     Write-Host @"
 GoTunnel Build Script for Windows
@@ -212,11 +249,12 @@ GoTunnel Build Script for Windows
 Usage: .\build.ps1 [command] [-Version <version>] [-NoUPX]
 
 Commands:
-  all       Build web UI + all platforms (default)
+  all       Build web UI + all desktop platforms (default)
   current   Build web UI + current platform only
   web       Build web UI only
   server    Build server for current platform
   client    Build client for current platform
+  android   Build android/arm64 client and optional Android artifacts
   clean     Clean build directory
   help      Show this help message
 
@@ -228,18 +266,17 @@ Target platforms:
   - windows/amd64
   - linux/amd64
   - linux/arm64
-  - darwin/amd64 (macOS Intel)
-  - darwin/arm64 (macOS Apple Silicon)
+  - darwin/amd64
+  - darwin/arm64
 
 Examples:
-  .\build.ps1                    # Build all platforms
+  .\build.ps1                    # Build all desktop platforms
   .\build.ps1 all -Version 1.0.0 # Build with version
   .\build.ps1 current            # Build current platform only
   .\build.ps1 clean              # Clean build directory
 "@
 }
 
-# 主函数
 function Main {
     Push-Location $RootDir
 
@@ -270,10 +307,13 @@ function Main {
                 $Arch = go env GOARCH
                 Build-Binary -OS $OS -Arch $Arch -Component "client"
             }
+            "android" {
+                Build-Android
+            }
             "clean" {
                 Clean-Build
             }
-            { $_ -in "help", "--help", "-h", "/?" } {
+            { $_ -in @("help", "--help", "-h", "/?") } {
                 Show-Help
                 return
             }
@@ -286,7 +326,6 @@ function Main {
 
         Write-Info ""
         Write-Info "Done!"
-
     } finally {
         Pop-Location
     }
