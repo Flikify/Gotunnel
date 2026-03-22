@@ -85,7 +85,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.statusValue.text = getStatusLabel(state.status)
         binding.statusDetail.text = state.detail.ifBlank { getString(R.string.state_no_detail) }
-        binding.statusMeta.text = getString(R.string.state_meta_format, timestamp)
+        binding.stateMeta.text = getString(R.string.state_meta_format, timestamp)
         binding.stateHint.text = getStateHint(state.status)
         binding.serverSummary.text = if (config.serverAddress.isBlank()) {
             getString(R.string.status_server_unconfigured)
