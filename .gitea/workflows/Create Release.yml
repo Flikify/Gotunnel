@@ -64,6 +64,20 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
       - name: Build frontend
         run: |
           cd web
@@ -74,6 +88,17 @@ jobs:
           cd ..
           echo "Frontend build completed"
           ls -la internal/server/app/dist/
+
+      - name: Build Android release APK
+        run: |
+          cd android
+          gradle --no-daemon assembleRelease
+          cd ..
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk \
+            "dist/gotunnel-android-${{ inputs.version }}-release-unsigned.apk"
+          echo "Android APK build completed"
+          ls -lah dist/gotunnel-android-${{ inputs.version }}-release-unsigned.apk
 
       - name: Build all platforms
         run: |
@@ -182,6 +207,7 @@ jobs:
             echo "- **Linux (amd64/arm64)**: \`.tar.gz\` files" >> release_notes.md
             echo "- **macOS (amd64/arm64)**: \`.tar.gz\` files" >> release_notes.md
             echo "- **Windows (amd64)**: \`.zip\` files" >> release_notes.md
+            echo "- **Android**: unsigned \`.apk\` file" >> release_notes.md
             echo "" >> release_notes.md
             echo "Verify downloads with \`SHA256SUMS\`" >> release_notes.md
           fi
@@ -197,6 +223,7 @@ jobs:
           files: |-
             dist/*.tar.gz
             dist/*.zip
+            dist/*.apk
             dist/SHA256SUMS
           draft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}

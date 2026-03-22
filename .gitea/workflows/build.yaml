@@ -40,6 +40,37 @@ jobs:
           path: web/dist
           retention-days: 1
 
+  build-android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build Android debug APK
+        working-directory: android
+        run: gradle --no-daemon assembleDebug
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: gotunnel-android-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
   build-binaries:
     needs: build-frontend
     runs-on: golang
