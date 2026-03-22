@@ -11,37 +11,19 @@ import (
 	"time"
 )
 
-// 版本信息
 var Version = "1.0.0"
 var GitCommit = ""
 var BuildTime = ""
 
-// SetVersion 设置版本号（由 main 包在初始化时调用）
-func SetVersion(v string) {
-	if v != "" {
-		Version = v
-	}
-}
-
-// SetBuildInfo 设置构建信息（由 main 包在初始化时调用）
-func SetBuildInfo(gitCommit, buildTime string) {
-	if gitCommit != "" {
-		GitCommit = gitCommit
-	}
-	if buildTime != "" {
-		BuildTime = buildTime
-	}
-}
-
-// 仓库信息
 const (
-	RepoURL    = "https://git.92coco.cn/flik/GoTunnel"
-	APIBaseURL = "https://git.92coco.cn/api/v1"
-	RepoOwner  = "flik"
-	RepoName   = "GoTunnel"
+	RepoURL          = "https://github.com/Flikify/Gotunnel"
+	APIBaseURL       = "https://api.github.com"
+	RepoOwner        = "Flikify"
+	RepoName         = "Gotunnel"
+	GitHubAPIVersion = "2022-11-28"
+	GitHubUserAgent  = "GoTunnel-Updater"
 )
 
-// Info 版本详细信息
 type Info struct {
 	Version   string `json:"version"`
 	GitCommit string `json:"git_commit"`
@@ -51,7 +33,43 @@ type Info struct {
 	Arch      string `json:"arch"`
 }
 
-// GetInfo 获取版本信息
+type ReleaseInfo struct {
+	TagName     string         `json:"tag_name"`
+	Name        string         `json:"name"`
+	Body        string         `json:"body"`
+	PublishedAt string         `json:"published_at"`
+	Assets      []ReleaseAsset `json:"assets"`
+}
+
+type ReleaseAsset struct {
+	Name               string `json:"name"`
+	Size               int64  `json:"size"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+type UpdateInfo struct {
+	Latest      string `json:"latest"`
+	ReleaseNote string `json:"release_note"`
+	DownloadURL string `json:"download_url"`
+	AssetName   string `json:"asset_name"`
+	AssetSize   int64  `json:"asset_size"`
+}
+
+func SetVersion(v string) {
+	if v != "" {
+		Version = v
+	}
+}
+
+func SetBuildInfo(gitCommit, buildTime string) {
+	if gitCommit != "" {
+		GitCommit = gitCommit
+	}
+	if buildTime != "" {
+		BuildTime = buildTime
+	}
+}
+
 func GetInfo() Info {
 	return Info{
 		Version:   Version,
@@ -63,39 +81,27 @@ func GetInfo() Info {
 	}
 }
 
-// ReleaseInfo Release 信息
-type ReleaseInfo struct {
-	TagName     string         `json:"tag_name"`
-	Name        string         `json:"name"`
-	Body        string         `json:"body"`
-	PublishedAt string         `json:"published_at"`
-	Assets      []ReleaseAsset `json:"assets"`
+func newGitHubRequest(url string) (*http.Request, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", GitHubAPIVersion)
+	req.Header.Set("User-Agent", GitHubUserAgent)
+	return req, nil
 }
 
-// ReleaseAsset Release 资产
-type ReleaseAsset struct {
-	Name               string `json:"name"`
-	Size               int64  `json:"size"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-}
-
-// UpdateInfo 更新信息
-type UpdateInfo struct {
-	Latest      string `json:"latest"`
-	ReleaseNote string `json:"release_note"`
-	DownloadURL string `json:"download_url"`
-	AssetName   string `json:"asset_name"`
-	AssetSize   int64  `json:"asset_size"`
-}
-
-// GetLatestRelease 获取最新 Release
-// Gitea 兼容：先尝试 /releases/latest，失败则尝试 /releases 取第一个
 func GetLatestRelease() (*ReleaseInfo, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	// 首先尝试 /releases/latest 端点（GitHub 兼容）
 	latestURL := fmt.Sprintf("%s/repos/%s/%s/releases/latest", APIBaseURL, RepoOwner, RepoName)
-	resp, err := client.Get(latestURL)
+	req, err := newGitHubRequest(latestURL)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -109,10 +115,15 @@ func GetLatestRelease() (*ReleaseInfo, error) {
 		return &release, nil
 	}
 
-	// 如果 /releases/latest 不可用，尝试 /releases 并取第一个
 	resp.Body.Close()
-	listURL := fmt.Sprintf("%s/repos/%s/%s/releases?limit=1", APIBaseURL, RepoOwner, RepoName)
-	resp, err = client.Get(listURL)
+
+	listURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=1", APIBaseURL, RepoOwner, RepoName)
+	req, err = newGitHubRequest(listURL)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+
+	resp, err = client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -135,14 +146,12 @@ func GetLatestRelease() (*ReleaseInfo, error) {
 	return &releases[0], nil
 }
 
-// CheckUpdate 检查更新（返回最新版本信息）
 func CheckUpdate(component string) (*UpdateInfo, error) {
 	release, err := GetLatestRelease()
 	if err != nil {
 		return nil, fmt.Errorf("get latest release: %w", err)
 	}
 
-	// 查找对应平台的资产
 	var downloadURL string
 	var assetName string
 	var assetSize int64
@@ -162,14 +171,12 @@ func CheckUpdate(component string) (*UpdateInfo, error) {
 	}, nil
 }
 
-// CheckUpdateForPlatform 检查指定平台的更新
 func CheckUpdateForPlatform(component, osName, arch string) (*UpdateInfo, error) {
 	release, err := GetLatestRelease()
 	if err != nil {
 		return nil, fmt.Errorf("get latest release: %w", err)
 	}
 
-	// 查找对应平台的资产
 	var downloadURL string
 	var assetName string
 	var assetSize int64
@@ -189,17 +196,12 @@ func CheckUpdateForPlatform(component, osName, arch string) (*UpdateInfo, error)
 	}, nil
 }
 
-// findAssetForPlatform 在 Release 资产中查找匹配的文件
 func findAssetForPlatform(assets []ReleaseAsset, component, osName, arch string) *ReleaseAsset {
-	// 构建匹配模式
-	// CI 格式: gotunnel-server-v1.0.0-linux-amd64.tar.gz
-	// 或者:    gotunnel-client-v1.0.0-windows-amd64.zip
 	prefix := fmt.Sprintf("gotunnel-%s-", component)
 	suffix := fmt.Sprintf("-%s-%s", osName, arch)
 
 	for i := range assets {
 		name := assets[i].Name
-		// 检查是否匹配 gotunnel-{component}-{version}-{os}-{arch}.{ext}
 		if strings.HasPrefix(name, prefix) && strings.Contains(name, suffix) {
 			return &assets[i]
 		}
@@ -207,8 +209,6 @@ func findAssetForPlatform(assets []ReleaseAsset, component, osName, arch string)
 	return nil
 }
 
-// CompareVersions 比较版本号
-// 返回: -1 (v1 < v2), 0 (v1 == v2), 1 (v1 > v2)
 func CompareVersions(v1, v2 string) int {
 	parts1 := parseVersionParts(v1)
 	parts2 := parseVersionParts(v2)

@@ -59,7 +59,7 @@ pkg/
   ├── relay/         # Bidirectional data relay (32KB buffers)
   ├── auth/          # JWT authentication
   ├── utils/         # Port availability checking
-  ├── version/       # Version info and update checking (Gitea API)
+  ├── version/       # Version info and update checking (GitHub Releases API)
   └── update/        # Shared update logic (download, extract tar.gz/zip)
 web/                 # Vue 3 + TypeScript frontend (Vite + naive-ui)
 scripts/             # Build scripts (build.sh, build.ps1)
@@ -106,7 +106,7 @@ The server provides Swagger-documented REST APIs at `/api/`.
 
 ## Update System
 
-Both server and client support self-update from Gitea releases.
+Both server and client support self-update from GitHub releases.
 
 - Release assets are compressed archives (`.tar.gz` for Linux/Mac, `.zip` for Windows)
 - The `pkg/update/` package handles download, extraction, and binary replacement
