@@ -4,8 +4,6 @@
         <item name="android:minHeight">52dp</item>
         <item name="android:paddingStart">0dp</item>
         <item name="android:paddingEnd">0dp</item>
-        <item name="insetTop">0dp</item>
-        <item name="insetBottom">0dp</item>
         <item name="backgroundTint">@color/gotunnel_surface_alt</item>
         <item name="strokeColor">@color/gotunnel_border</item>
         <item name="strokeWidth">1dp</item>
@@ -16,8 +14,6 @@
 
     <style name="Widget.GoTunnel.PrimaryButton" parent="Widget.Material3.Button">
         <item name="android:minHeight">54dp</item>
-        <item name="insetTop">0dp</item>
-        <item name="insetBottom">0dp</item>
         <item name="cornerRadius">18dp</item>
         <item name="backgroundTint">@color/gotunnel_primary</item>
         <item name="android:textColor">@android:color/white</item>
@@ -27,8 +23,6 @@
 
     <style name="Widget.GoTunnel.OutlinedButton" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:minHeight">52dp</item>
-        <item name="insetTop">0dp</item>
-        <item name="insetBottom">0dp</item>
         <item name="cornerRadius">18dp</item>
         <item name="backgroundTint">@color/gotunnel_surface_alt</item>
         <item name="strokeColor">@color/gotunnel_border</item>
