@@ -45,3 +45,6 @@ client.yaml
 *.tmp
 *.temp
 .claude/*
+.secrets/
+*.keystore
+*.jks

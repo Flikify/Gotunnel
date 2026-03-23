@@ -94,9 +94,20 @@ val verifyMobileAar by tasks.registering {
     }
 }
 
+val verifyReleaseSigning by tasks.registering {
+    doLast {
+        check(hasReleaseSigning) {
+            "Release APKs must be signed. Provide gotunnelReleaseStoreFile, gotunnelReleaseStorePassword, gotunnelReleaseKeyAlias, and gotunnelReleaseKeyPassword."
+        }
+    }
+}
+
 tasks.configureEach {
     if (name in setOf("preBuild", "preDebugBuild", "preReleaseBuild", "assembleDebug", "assembleRelease")) {
         dependsOn(verifyMobileAar)
+    }
+    if (name in setOf("preReleaseBuild", "assembleRelease", "bundleRelease", "packageRelease")) {
+        dependsOn(verifyReleaseSigning)
     }
 }
 

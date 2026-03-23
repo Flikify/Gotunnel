@@ -26,3 +26,16 @@ Open the `android/` folder as a Gradle project. Android Studio can sync it direc
 - Auto-start is controlled by the saved configuration.
 - Network restoration restarts the native Go client.
 - The packaged AAR is generated from `github.com/gotunnel/mobile/gotunnelmobile` using `gomobile bind -javapkg com.gotunnel.mobilebind`.
+
+## Release signing
+
+Release APKs must be signed before installation or self-update will work.
+
+The release workflow reads these GitHub secrets:
+
+- `GOTUNNEL_ANDROID_KEYSTORE_B64`
+- `GOTUNNEL_ANDROID_STORE_PASSWORD`
+- `GOTUNNEL_ANDROID_KEY_ALIAS`
+- `GOTUNNEL_ANDROID_KEY_PASSWORD`
+
+Keep using the same signing key for every future release, otherwise installed Android clients will not be able to upgrade in place.

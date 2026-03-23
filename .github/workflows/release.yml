@@ -154,6 +154,19 @@ jobs:
           fi
           gradle "${GRADLE_ARGS[@]}"
 
+      - name: Verify signed Android release APK
+        shell: bash
+        run: |
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
+          if [ "${{ steps.sign.outputs.enabled }}" != "true" ]; then
+            echo "Android release signing secrets are required to publish an installable release APK." >&2
+            exit 1
+          fi
+          if [ ! -f "${APK_PATH}" ]; then
+            echo "Signed release APK not found at ${APK_PATH}" >&2
+            exit 1
+          fi
+
       - name: Package Android release asset
         id: package
         shell: bash
@@ -161,10 +174,6 @@ jobs:
           mkdir -p dist/out
           APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
           ARCHIVE="gotunnel-android-${{ steps.meta.outputs.tag }}-release.apk"
-          if [ ! -f "${APK_PATH}" ]; then
-            APK_PATH="android/app/build/outputs/apk/release/app-release-unsigned.apk"
-            ARCHIVE="gotunnel-android-${{ steps.meta.outputs.tag }}-release-unsigned.apk"
-          fi
           cp "${APK_PATH}" "dist/out/${ARCHIVE}"
           echo "archive=dist/out/${ARCHIVE}" >> "$GITHUB_OUTPUT"
 
