@@ -9,7 +9,7 @@
         <item name="colorOnSurface">@color/gotunnel_text</item>
         <item name="colorOutline">@color/gotunnel_border</item>
         <item name="android:colorBackground">@color/gotunnel_background</item>
-        <item name="android:windowBackground">@color/gotunnel_background</item>
+        <item name="android:windowBackground">@drawable/bg_shell_gradient</item>
         <item name="android:textColorPrimary">@color/gotunnel_text</item>
         <item name="android:textColorSecondary">@color/gotunnel_text_muted</item>
         <item name="android:statusBarColor" tools:targetApi="l">@color/gotunnel_background</item>

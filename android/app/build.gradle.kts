@@ -4,7 +4,7 @@ plugins {
 }
 
 val mobileAar = file("libs/gotunnelmobile.aar")
-val appVersionName = providers.gradleProperty("gotunnelVersionName").orNull ?: "0.1.0"
+val appVersionName = normalizeVersionName(providers.gradleProperty("gotunnelVersionName").orNull ?: "v0.1.0")
 val appVersionCode = providers.gradleProperty("gotunnelVersionCode").orNull?.toIntOrNull()
     ?: parseVersionCode(appVersionName)
 
@@ -116,4 +116,19 @@ fun parseVersionCode(versionName: String): Int {
     val minor = numbers.getOrElse(1) { 0 }.coerceIn(0, 999)
     val patch = numbers.getOrElse(2) { 0 }.coerceIn(0, 999)
     return (major * 1_000_000 + minor * 1_000 + patch).coerceAtLeast(1)
+}
+
+fun normalizeVersionName(versionName: String): String {
+    val trimmed = versionName.trim()
+    if (trimmed.isBlank()) {
+        return "v0.1.0"
+    }
+    if (trimmed.startsWith("v", ignoreCase = true)) {
+        return trimmed
+    }
+    return if (trimmed.matches(Regex("\\d+(\\.\\d+){1,3}([-+].*)?"))) {
+        "v$trimmed"
+    } else {
+        trimmed
+    }
 }

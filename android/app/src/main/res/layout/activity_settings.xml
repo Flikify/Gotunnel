@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/gotunnel_background"
+    android:background="@drawable/bg_shell_gradient"
     android:fillViewport="true">
 
     <LinearLayout
@@ -12,17 +12,62 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/topToolbar"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@android:color/transparent"
-            app:navigationIcon="@android:drawable/ic_media_previous"
-            app:navigationIconTint="@color/gotunnel_text"
-            app:subtitle="@string/settings_subtitle"
-            app:subtitleTextColor="@color/gotunnel_text_muted"
-            app:title="@string/settings_title"
-            app:titleTextColor="@color/gotunnel_text" />
+            app:cardBackgroundColor="@color/gotunnel_surface"
+            app:cardCornerRadius="28dp"
+            app:strokeColor="@color/gotunnel_border"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="20dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/backButton"
+                    style="@style/Widget.GoTunnel.HeaderActionButton"
+                    android:layout_marginEnd="14dp"
+                    android:contentDescription="@string/action_back"
+                    app:icon="@drawable/ic_arrow_back_rounded" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:letterSpacing="0.08"
+                        android:text="@string/settings_eyebrow"
+                        android:textColor="@color/gotunnel_text_muted"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/settings_title"
+                        android:textColor="@color/gotunnel_text"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/settings_subtitle"
+                        android:textColor="@color/gotunnel_text_muted"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
@@ -48,15 +93,16 @@
                     android:textStyle="bold" />
 
                 <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.GoTunnel.TextInputLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="18dp"
                     android:hint="@string/server_host_label"
-                    app:boxBackgroundMode="outline"
                     app:helperText="@string/server_host_helper">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/serverHostInput"
+                        style="@style/Widget.GoTunnel.TextInputEditText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="textUri"
@@ -64,15 +110,16 @@
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.GoTunnel.TextInputLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
                     android:hint="@string/server_port_label"
-                    app:boxBackgroundMode="outline"
                     app:helperText="@string/server_port_helper">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/serverPortInput"
+                        style="@style/Widget.GoTunnel.TextInputEditText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="number"
@@ -80,15 +127,16 @@
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.GoTunnel.TextInputLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
                     android:hint="@string/token_label"
-                    app:boxBackgroundMode="outline"
                     app:helperText="@string/token_helper">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/tokenInput"
+                        style="@style/Widget.GoTunnel.TextInputEditText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="textPassword"
@@ -182,6 +230,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
+                    android:textStyle="bold"
                     android:textColor="@color/gotunnel_text"
                     android:textSize="14sp" />
 
@@ -227,7 +276,7 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/checkUpdateButton"
-                        style="?attr/materialButtonOutlinedStyle"
+                        style="@style/Widget.GoTunnel.OutlinedButton"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
@@ -235,6 +284,7 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/installUpdateButton"
+                        style="@style/Widget.GoTunnel.PrimaryButton"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
@@ -247,7 +297,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/batteryButton"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.GoTunnel.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
@@ -255,6 +305,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/saveButton"
+            style="@style/Widget.GoTunnel.PrimaryButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"

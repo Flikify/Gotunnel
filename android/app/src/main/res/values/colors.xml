@@ -1,9 +1,11 @@
 <resources>
-    <color name="gotunnel_background">#F3F7FB</color>
-    <color name="gotunnel_surface">#FFFFFF</color>
-    <color name="gotunnel_primary">#0F766E</color>
-    <color name="gotunnel_secondary">#0891B2</color>
-    <color name="gotunnel_text">#0F172A</color>
-    <color name="gotunnel_text_muted">#475569</color>
-    <color name="gotunnel_border">#D9E2EC</color>
+    <color name="gotunnel_background">#E8EEF4</color>
+    <color name="gotunnel_surface">#B3FFFFFF</color>
+    <color name="gotunnel_surface_alt">#80FFFFFF</color>
+    <color name="gotunnel_primary">#3B82F6</color>
+    <color name="gotunnel_secondary">#8B5CF6</color>
+    <color name="gotunnel_accent_glow">#4D3B82F6</color>
+    <color name="gotunnel_text">#1A202C</color>
+    <color name="gotunnel_text_muted">#B31A202C</color>
+    <color name="gotunnel_border">#14000000</color>
 </resources>

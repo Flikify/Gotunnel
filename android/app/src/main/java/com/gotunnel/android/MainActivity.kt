@@ -3,6 +3,7 @@ package com.gotunnel.android
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.View
@@ -10,11 +11,11 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.annotation.IdRes
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.button.MaterialButton
 import com.gotunnel.android.bridge.ActiveTunnel
 import com.gotunnel.android.bridge.GoTunnelBridge
 import com.gotunnel.android.bridge.TunnelStatus
@@ -59,31 +60,11 @@ class MainActivity : AppCompatActivity() {
         stateStore = ServiceStateStore(this)
         tunnelController = GoTunnelBridge.create(applicationContext)
 
-        binding.topToolbar.setOnMenuItemClickListener { item ->
-            handleToolbarAction(item.itemId)
+        binding.settingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
-
-        binding.startButton.setOnClickListener {
-            val config = configStore.load()
-            if (config.serverAddress.isBlank() || config.token.isBlank()) {
-                Toast.makeText(this, R.string.config_missing, Toast.LENGTH_SHORT).show()
-                startActivity(Intent(this, SettingsActivity::class.java))
-                return@setOnClickListener
-            }
-
-            ContextCompat.startForegroundService(
-                this,
-                TunnelService.createStartIntent(this, "manual-start"),
-            )
-            Toast.makeText(this, R.string.service_start_requested, Toast.LENGTH_SHORT).show()
-        }
-
-        binding.stopButton.setOnClickListener {
-            ContextCompat.startForegroundService(
-                this,
-                TunnelService.createStopIntent(this, "manual-stop"),
-            )
-            Toast.makeText(this, R.string.service_stop_requested, Toast.LENGTH_SHORT).show()
+        binding.actionButton.setOnClickListener {
+            handlePrimaryAction()
         }
     }
 
@@ -128,6 +109,7 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.status_server_configured, config.serverAddress)
         }
         binding.logValue.text = state.recentLogs.ifBlank { "No logs yet." }
+        renderPrimaryAction(state.status)
         renderActiveTunnels(runtimeSnapshot.activeTunnels)
     }
 
@@ -166,6 +148,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun handlePrimaryAction() {
+        val state = stateStore.load()
+        if (state.status.isActive()) {
+            ContextCompat.startForegroundService(
+                this,
+                TunnelService.createStopIntent(this, "manual-stop"),
+            )
+            Toast.makeText(this, R.string.service_stop_requested, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val config = configStore.load()
+        if (config.serverAddress.isBlank() || config.token.isBlank()) {
+            Toast.makeText(this, R.string.config_missing, Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, SettingsActivity::class.java))
+            return
+        }
+
+        ContextCompat.startForegroundService(
+            this,
+            TunnelService.createStartIntent(this, "manual-start"),
+        )
+        Toast.makeText(this, R.string.service_start_requested, Toast.LENGTH_SHORT).show()
+    }
+
     private fun startRefreshLoop() {
         refreshJob?.cancel()
         refreshJob = uiScope.launch {
@@ -185,11 +192,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun renderPrimaryAction(status: TunnelStatus) {
+        val isActive = status.isActive()
+        val button = binding.actionButton
+        button.text = if (isActive) {
+            getString(R.string.stop_button)
+        } else {
+            getString(R.string.start_button)
+        }
+        button.icon = ContextCompat.getDrawable(
+            this,
+            if (isActive) R.drawable.ic_stop_circle else R.drawable.ic_play_circle,
+        )
+        button.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+        button.iconPadding = dp(10)
+        button.backgroundTintList = ColorStateList.valueOf(
+            ContextCompat.getColor(
+                this,
+                if (isActive) R.color.gotunnel_surface_alt else R.color.gotunnel_primary,
+            ),
+        )
+        button.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (isActive) R.color.gotunnel_text else android.R.color.white,
+            ),
+        )
+        button.strokeWidth = if (isActive) dp(1) else 0
+        button.strokeColor = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.gotunnel_border))
+    }
+
     private fun buildTunnelItemView(tunnel: ActiveTunnel, addTopMargin: Boolean): View {
         val card = MaterialCardView(this).apply {
             radius = dp(18).toFloat()
             strokeWidth = dp(1)
-            setCardBackgroundColor(ContextCompat.getColor(context, R.color.gotunnel_background))
+            setCardBackgroundColor(ContextCompat.getColor(context, R.color.gotunnel_surface_alt))
             strokeColor = ContextCompat.getColor(context, R.color.gotunnel_border)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -281,14 +318,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
-    private fun handleToolbarAction(@IdRes itemId: Int): Boolean {
-        return when (itemId) {
-            R.id.action_settings -> {
-                startActivity(Intent(this, SettingsActivity::class.java))
-                true
-            }
-
-            else -> false
-        }
+    private fun TunnelStatus.isActive(): Boolean {
+        return this == TunnelStatus.RUNNING ||
+            this == TunnelStatus.STARTING ||
+            this == TunnelStatus.RECONNECTING
     }
 }

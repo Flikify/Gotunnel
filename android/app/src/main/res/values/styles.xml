@@ -1,0 +1,58 @@
+<resources>
+    <style name="Widget.GoTunnel.HeaderActionButton" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:minWidth">52dp</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
+        <item name="insetTop">0dp</item>
+        <item name="insetBottom">0dp</item>
+        <item name="backgroundTint">@color/gotunnel_surface_alt</item>
+        <item name="strokeColor">@color/gotunnel_border</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="cornerRadius">18dp</item>
+        <item name="iconTint">@color/gotunnel_text</item>
+        <item name="iconPadding">0dp</item>
+    </style>
+
+    <style name="Widget.GoTunnel.PrimaryButton" parent="Widget.Material3.Button">
+        <item name="android:minHeight">54dp</item>
+        <item name="insetTop">0dp</item>
+        <item name="insetBottom">0dp</item>
+        <item name="cornerRadius">18dp</item>
+        <item name="backgroundTint">@color/gotunnel_primary</item>
+        <item name="android:textColor">@android:color/white</item>
+        <item name="iconTint">@android:color/white</item>
+        <item name="rippleColor">@color/gotunnel_accent_glow</item>
+    </style>
+
+    <style name="Widget.GoTunnel.OutlinedButton" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:minHeight">52dp</item>
+        <item name="insetTop">0dp</item>
+        <item name="insetBottom">0dp</item>
+        <item name="cornerRadius">18dp</item>
+        <item name="backgroundTint">@color/gotunnel_surface_alt</item>
+        <item name="strokeColor">@color/gotunnel_border</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:textColor">@color/gotunnel_text</item>
+        <item name="iconTint">@color/gotunnel_text</item>
+        <item name="rippleColor">@color/gotunnel_accent_glow</item>
+    </style>
+
+    <style name="Widget.GoTunnel.TextInputLayout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxBackgroundColor">@color/gotunnel_surface_alt</item>
+        <item name="boxStrokeColor">@color/gotunnel_border</item>
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeWidthFocused">1dp</item>
+        <item name="boxCornerRadiusTopStart">18dp</item>
+        <item name="boxCornerRadiusTopEnd">18dp</item>
+        <item name="boxCornerRadiusBottomStart">18dp</item>
+        <item name="boxCornerRadiusBottomEnd">18dp</item>
+        <item name="hintTextColor">@color/gotunnel_text_muted</item>
+        <item name="helperTextTextColor">@color/gotunnel_text_muted</item>
+    </style>
+
+    <style name="Widget.GoTunnel.TextInputEditText" parent="Widget.Material3.TextInputEditText.OutlinedBox">
+        <item name="android:textColor">@color/gotunnel_text</item>
+        <item name="android:textColorHint">@color/gotunnel_text_muted</item>
+    </style>
+</resources>

@@ -46,14 +46,13 @@ class SettingsActivity : AppCompatActivity() {
         configStore = ConfigStore(this)
         populateForm(configStore.load())
 
-        binding.topToolbar.setNavigationOnClickListener {
+        binding.backButton.setOnClickListener {
             finish()
         }
 
         binding.aboutVersionValue.text = getString(
             R.string.about_version_format,
             BuildConfig.VERSION_NAME,
-            BuildConfig.VERSION_CODE,
         )
         binding.aboutPackageValue.text = getString(
             R.string.about_package_format,
