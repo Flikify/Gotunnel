@@ -34,7 +34,7 @@ object ServerEndpointParser {
     }
 
     fun compose(host: String, port: String): String {
-        val cleanHost = host.trim()
+        val cleanHost = normalizeHost(host)
         val cleanPort = port.trim()
         if (cleanHost.isBlank()) {
             return ""
@@ -49,5 +49,17 @@ object ServerEndpointParser {
             cleanHost
         }
         return "$normalizedHost:$cleanPort"
+    }
+
+    private fun normalizeHost(host: String): String {
+        var normalized = host.trim()
+        if (normalized.contains("://")) {
+            normalized = normalized.substringAfter("://")
+        }
+        normalized = normalized.substringBefore("/").substringBefore("?").substringBefore("#").trim()
+        if (normalized.startsWith("[") && normalized.endsWith("]") && normalized.length > 2) {
+            normalized = normalized.substring(1, normalized.length - 1).trim()
+        }
+        return normalized
     }
 }

@@ -23,6 +23,8 @@ class NativeTunnelController(
     private var bridge: MobileBinding? = null
     private var pollJob: Job? = null
     private var currentSnapshot: TunnelSnapshot = TunnelSnapshot()
+    private val localLogs = ArrayDeque<String>()
+    private var latestNativeLogs: String = ""
 
     override val isRunning: Boolean
         get() = bridge?.snapshot()?.isRunning == true
@@ -42,44 +44,54 @@ class NativeTunnelController(
 
     override fun start(config: AppConfig) {
         updateConfig(config)
+        appendLocalLog("Android start requested for ${config.serverAddress}")
 
         val binding = runCatching { bridge ?: MobileBinding.load(context).also { bridge = it } }
             .getOrElse { error ->
+                appendLocalLog("Failed to load native Go binding: ${error.message ?: error::class.java.simpleName}")
                 emitSnapshot(
                     currentSnapshot.copy(
                         status = TunnelStatus.ERROR,
                         detail = error.message ?: "Failed to load native Go binding",
                         lastError = error.message ?: error::class.java.simpleName,
+                        recentLogs = combinedLogs(latestNativeLogs),
                     ),
                 )
                 return
             }
+        appendLocalLog("Native Go binding loaded")
 
         if (binding.snapshot().isRunning) {
+            appendLocalLog("Native Go core already running, resuming snapshot polling")
             startPolling(binding)
             return
         }
 
+        appendLocalLog("Configuring native Go core for ${config.serverAddress}")
         emitSnapshot(
             currentSnapshot.copy(
                 status = TunnelStatus.STARTING,
                 detail = "Starting native Go core",
                 lastError = "",
+                recentLogs = combinedLogs(latestNativeLogs),
             ),
         )
 
         val error = binding.configureAndStart(config, dataDir = File(context.filesDir, "gotunnel"))
         if (!error.isNullOrBlank()) {
+            appendLocalLog("Native Go core failed to start: $error")
             emitSnapshot(
                 currentSnapshot.copy(
                     status = TunnelStatus.ERROR,
                     detail = error,
                     lastError = error,
+                    recentLogs = combinedLogs(latestNativeLogs),
                 ),
             )
             return
         }
 
+        appendLocalLog("Native Go core start requested")
         startPolling(binding)
     }
 
@@ -87,30 +99,36 @@ class NativeTunnelController(
         pollJob?.cancel()
         pollJob = null
         bridge?.stop()
+        appendLocalLog("Android stop requested: $reason")
         emitSnapshot(
             currentSnapshot.copy(
                 isRunning = false,
                 status = TunnelStatus.STOPPED,
                 detail = reason,
+                recentLogs = combinedLogs(latestNativeLogs),
             ),
         )
     }
 
     override fun restart(reason: String) {
+        appendLocalLog("Android restart requested: $reason")
         emitSnapshot(
             currentSnapshot.copy(
                 status = TunnelStatus.RECONNECTING,
                 detail = reason,
+                recentLogs = combinedLogs(latestNativeLogs),
             ),
         )
 
         val binding = runCatching { bridge ?: MobileBinding.load(context).also { bridge = it } }
             .getOrElse { error ->
+                appendLocalLog("Failed to load native Go binding: ${error.message ?: error::class.java.simpleName}")
                 emitSnapshot(
                     currentSnapshot.copy(
                         status = TunnelStatus.ERROR,
                         detail = error.message ?: "Failed to load native Go binding",
                         lastError = error.message ?: error::class.java.simpleName,
+                        recentLogs = combinedLogs(latestNativeLogs),
                     ),
                 )
                 return
@@ -120,18 +138,22 @@ class NativeTunnelController(
         pollJob = null
         binding.stop()
 
+        appendLocalLog("Restarting native Go core for ${config.serverAddress}")
         val result = binding.configureAndStart(config, dataDir = File(context.filesDir, "gotunnel"))
         if (!result.isNullOrBlank()) {
+            appendLocalLog("Native Go core restart failed: $result")
             emitSnapshot(
                 currentSnapshot.copy(
                     status = TunnelStatus.ERROR,
                     detail = result,
                     lastError = result,
+                    recentLogs = combinedLogs(latestNativeLogs),
                 ),
             )
             return
         }
 
+        appendLocalLog("Native Go core restart requested")
         startPolling(binding)
     }
 
@@ -149,6 +171,7 @@ class NativeTunnelController(
     }
 
     private fun publishSnapshot(snapshot: MobileBinding.Snapshot) {
+        latestNativeLogs = snapshot.recentLogs
         val status = mapStatus(snapshot.status, snapshot.isRunning)
         val detail = snapshot.detail.ifBlank {
             snapshot.lastError.ifBlank {
@@ -168,7 +191,7 @@ class NativeTunnelController(
                 status = status,
                 detail = detail,
                 lastError = snapshot.lastError,
-                recentLogs = snapshot.recentLogs,
+                recentLogs = combinedLogs(snapshot.recentLogs),
                 activeTunnels = bridge?.activeTunnels().orEmpty(),
             ),
         )
@@ -182,6 +205,34 @@ class NativeTunnelController(
         listener?.onSnapshot(snapshot)
     }
 
+    private fun appendLocalLog(message: String) {
+        val line = message.trim()
+        if (line.isBlank()) {
+            return
+        }
+        if (localLogs.size >= MAX_LOCAL_LOG_LINES) {
+            localLogs.removeFirst()
+        }
+        localLogs.addLast(line)
+    }
+
+    private fun combinedLogs(nativeLogs: String): String {
+        val lines = mutableListOf<String>()
+        fun appendLine(line: String) {
+            if (line.isBlank()) {
+                return
+            }
+            if (lines.lastOrNull() == line) {
+                return
+            }
+            lines += line
+        }
+
+        localLogs.forEach(::appendLine)
+        nativeLogs.lines().forEach(::appendLine)
+        return lines.takeLast(MAX_COMBINED_LOG_LINES).joinToString("\n")
+    }
+
     private fun mapStatus(status: String, isRunning: Boolean): TunnelStatus {
         return when (status.lowercase()) {
             "running" -> TunnelStatus.RUNNING
@@ -191,6 +242,12 @@ class NativeTunnelController(
             "stopped" -> if (isRunning) TunnelStatus.STARTING else TunnelStatus.STOPPED
             else -> if (isRunning) TunnelStatus.RUNNING else TunnelStatus.STOPPED
         }
+    }
+
+    companion object {
+        private const val POLL_INTERVAL_MS = 1_000L
+        private const val MAX_LOCAL_LOG_LINES = 20
+        private const val MAX_COMBINED_LOG_LINES = 80
     }
 
     private class MobileBinding private constructor(

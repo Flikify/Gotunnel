@@ -40,6 +40,11 @@ class SettingsActivity : AppCompatActivity() {
         )
 
         binding.saveButton.setOnClickListener {
+            val validationError = validateForm()
+            if (validationError != null) {
+                Toast.makeText(this, validationError, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             configStore.save(readForm())
             Toast.makeText(this, R.string.config_saved, Toast.LENGTH_SHORT).show()
             finish()
@@ -69,6 +74,29 @@ class SettingsActivity : AppCompatActivity() {
             autoStart = binding.autoStartSwitch.isChecked,
             autoReconnect = binding.autoReconnectSwitch.isChecked,
         )
+    }
+
+    private fun validateForm(): String? {
+        val host = binding.serverHostInput.text?.toString().orEmpty().trim()
+        if (host.isBlank()) {
+            return getString(R.string.server_host_required)
+        }
+
+        val portText = binding.serverPortInput.text?.toString().orEmpty().trim()
+        if (portText.isBlank()) {
+            return getString(R.string.server_port_required)
+        }
+
+        val port = portText.toIntOrNull() ?: return getString(R.string.server_port_invalid)
+        if (port !in 1..65535) {
+            return getString(R.string.server_port_invalid)
+        }
+
+        if (binding.tokenInput.text?.toString().orEmpty().trim().isBlank()) {
+            return getString(R.string.server_token_required)
+        }
+
+        return null
     }
 
     private fun openBatteryOptimizationSettings() {

@@ -11,6 +11,7 @@ import com.gotunnel.android.bridge.TunnelSnapshot
 import com.gotunnel.android.bridge.TunnelStatus
 import com.gotunnel.android.config.AppConfig
 import com.gotunnel.android.config.ConfigStore
+import com.gotunnel.android.config.ServerEndpointParser
 import com.gotunnel.android.config.ServiceStateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -122,8 +123,9 @@ class TunnelService : Service() {
         )
         updateNotification(TunnelStatus.STARTING, reason)
 
-        if (!isConfigReady(currentConfig)) {
-            val detail = getString(com.gotunnel.android.R.string.config_missing)
+        val configError = configValidationError(currentConfig)
+        if (configError != null) {
+            val detail = configError
             stateStore.save(
                 TunnelSnapshot(
                     isRunning = false,
@@ -167,7 +169,7 @@ class TunnelService : Service() {
     }
 
     private fun isConfigReady(config: AppConfig): Boolean {
-        return config.serverAddress.isNotBlank() && config.token.isNotBlank()
+        return configValidationError(config) == null
     }
 
     private fun appendLog(existing: String, message: String): String {
@@ -177,6 +179,25 @@ class TunnelService : Service() {
             lines.removeAt(0)
         }
         return lines.joinToString("\n")
+    }
+
+    private fun configValidationError(config: AppConfig): String? {
+        val endpoint = ServerEndpointParser.parse(config.serverAddress)
+        if (endpoint.host.isBlank()) {
+            return getString(com.gotunnel.android.R.string.server_host_required)
+        }
+        if (endpoint.port.isBlank()) {
+            return getString(com.gotunnel.android.R.string.server_port_required)
+        }
+
+        val port = endpoint.port.toIntOrNull()
+        if (port == null || port !in 1..65535) {
+            return getString(com.gotunnel.android.R.string.server_port_invalid)
+        }
+        if (config.token.isBlank()) {
+            return getString(com.gotunnel.android.R.string.server_token_required)
+        }
+        return null
     }
 
     companion object {

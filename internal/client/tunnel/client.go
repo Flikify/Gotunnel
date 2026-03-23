@@ -215,22 +215,36 @@ func (c *Client) connect(ctx context.Context) error {
 		KeepAlive: tcpKeepAlive,
 	}
 
+	c.logf("Dialing server %s (tls=%t)", c.ServerAddr, c.TLSEnabled && c.TLSConfig != nil)
+
 	if c.TLSEnabled && c.TLSConfig != nil {
 		rawConn, dialErr := dialer.DialContext(ctx, "tcp", c.ServerAddr)
 		if dialErr != nil {
-			return dialErr
+			return fmt.Errorf("dial server %s: %w", c.ServerAddr, dialErr)
 		}
+		c.logf("TCP connection established to %s", c.ServerAddr)
+		c.logf("Starting TLS handshake with %s", c.ServerAddr)
 		tlsConn := tls.Client(rawConn, c.TLSConfig)
 		if handshakeErr := tlsConn.HandshakeContext(ctx); handshakeErr != nil {
 			rawConn.Close()
-			return handshakeErr
+			return fmt.Errorf("tls handshake with %s: %w", c.ServerAddr, handshakeErr)
 		}
+		state := tlsConn.ConnectionState()
+		c.logf(
+			"TLS handshake completed with %s using %s / %s",
+			c.ServerAddr,
+			tls.VersionName(state.Version),
+			tls.CipherSuiteName(state.CipherSuite),
+		)
 		conn = tlsConn
 	} else {
 		conn, err = dialer.DialContext(ctx, "tcp", c.ServerAddr)
+		if err == nil {
+			c.logf("TCP connection established to %s without TLS", c.ServerAddr)
+		}
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("dial server %s: %w", c.ServerAddr, err)
 	}
 
 	authReq := protocol.AuthRequest{
@@ -241,16 +255,17 @@ func (c *Client) connect(ctx context.Context) error {
 		Arch:     runtime.GOARCH,
 		Version:  version.Version,
 	}
+	c.logf("Sending auth request as %s (%s/%s, version=%s)", c.ID, runtime.GOOS, runtime.GOARCH, version.Version)
 	msg, _ := protocol.NewMessage(protocol.MsgTypeAuth, authReq)
 	if err := protocol.WriteMessage(conn, msg); err != nil {
 		conn.Close()
-		return err
+		return fmt.Errorf("write auth request: %w", err)
 	}
 
 	resp, err := protocol.ReadMessage(conn)
 	if err != nil {
 		conn.Close()
-		return err
+		return fmt.Errorf("read auth response: %w", err)
 	}
 
 	var authResp protocol.AuthResponse
@@ -267,17 +282,20 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("server returned unexpected client id: %s", authResp.ClientID)
 	}
 
+	c.logf("Server authentication accepted for %s", c.ID)
 	c.logf("Authenticated as %s", c.ID)
 
 	session, err := yamux.Client(conn, nil)
 	if err != nil {
 		conn.Close()
-		return err
+		return fmt.Errorf("open yamux session: %w", err)
 	}
 
 	c.mu.Lock()
 	c.session = session
 	c.mu.Unlock()
+
+	c.logf("Tunnel session established with %s", c.ServerAddr)
 
 	return nil
 }

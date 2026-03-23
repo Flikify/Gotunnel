@@ -230,6 +230,17 @@ func (s *Service) consumeLogEntry(entry protocol.LogEntry) {
 
 	lower := strings.ToLower(entry.Message)
 	switch {
+	case strings.HasPrefix(lower, "dialing server"),
+		strings.HasPrefix(lower, "tcp connection established"),
+		strings.HasPrefix(lower, "starting tls handshake"),
+		strings.HasPrefix(lower, "tls handshake completed"),
+		strings.HasPrefix(lower, "sending auth request"),
+		strings.HasPrefix(lower, "server authentication accepted"),
+		strings.HasPrefix(lower, "tunnel session established"):
+		if s.status != "running" {
+			s.status = "starting"
+		}
+		s.detail = entry.Message
 	case strings.HasPrefix(lower, "authenticated as"):
 		s.status = "running"
 		s.detail = entry.Message
