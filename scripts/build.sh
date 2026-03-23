@@ -148,7 +148,7 @@ build_android() {
 
     if command -v gomobile >/dev/null 2>&1; then
         log_info "Building gomobile Android binding..."
-        gomobile bind -target=android/arm64 -javapkg com.gotunnel.mobilebind -o "$output_dir/gotunnelmobile.aar" github.com/gotunnel/mobile/gotunnelmobile
+        gomobile bind -target=android/arm64 -androidapi 21 -javapkg com.gotunnel.mobilebind -o "$output_dir/gotunnelmobile.aar" github.com/gotunnel/mobile/gotunnelmobile
         mkdir -p "$android_lib_dir"
         cp "$output_dir/gotunnelmobile.aar" "$android_lib_dir/gotunnelmobile.aar"
     else

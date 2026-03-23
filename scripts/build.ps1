@@ -210,7 +210,7 @@ function Build-Android {
 
     if (Get-Command gomobile -ErrorAction SilentlyContinue) {
         Write-Info "Building gomobile Android binding..."
-        & gomobile bind -target android/arm64 -javapkg com.gotunnel.mobilebind -o (Join-Path $OutputDir "gotunnelmobile.aar") "github.com/gotunnel/mobile/gotunnelmobile"
+        & gomobile bind -target android/arm64 -androidapi 21 -javapkg com.gotunnel.mobilebind -o (Join-Path $OutputDir "gotunnelmobile.aar") "github.com/gotunnel/mobile/gotunnelmobile"
         if ($LASTEXITCODE -ne 0) {
             throw "gomobile bind failed"
         }

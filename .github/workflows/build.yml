@@ -81,7 +81,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p android/app/libs
-          gomobile bind -target=android/arm64 -javapkg com.gotunnel.mobilebind -o android/app/libs/gotunnelmobile.aar github.com/gotunnel/mobile/gotunnelmobile
+          gomobile bind -target=android/arm64 -androidapi 21 -javapkg com.gotunnel.mobilebind -o android/app/libs/gotunnelmobile.aar github.com/gotunnel/mobile/gotunnelmobile
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
