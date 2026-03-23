@@ -91,17 +91,62 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Prepare Android signing
+        id: sign
+        shell: bash
+        env:
+          GOTUNNEL_ANDROID_KEYSTORE_B64: ${{ secrets.GOTUNNEL_ANDROID_KEYSTORE_B64 }}
+          GOTUNNEL_ANDROID_STORE_PASSWORD: ${{ secrets.GOTUNNEL_ANDROID_STORE_PASSWORD }}
+          GOTUNNEL_ANDROID_KEY_ALIAS: ${{ secrets.GOTUNNEL_ANDROID_KEY_ALIAS }}
+          GOTUNNEL_ANDROID_KEY_PASSWORD: ${{ secrets.GOTUNNEL_ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "${GOTUNNEL_ANDROID_KEYSTORE_B64}" ] && \
+             [ -n "${GOTUNNEL_ANDROID_STORE_PASSWORD}" ] && \
+             [ -n "${GOTUNNEL_ANDROID_KEY_ALIAS}" ] && \
+             [ -n "${GOTUNNEL_ANDROID_KEY_PASSWORD}" ]; then
+            mkdir -p .github/tmp
+            echo "${GOTUNNEL_ANDROID_KEYSTORE_B64}" | base64 --decode > .github/tmp/android-release.keystore
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "store_file=${GITHUB_WORKSPACE}/.github/tmp/android-release.keystore" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build release APK
         working-directory: android
-        run: gradle --no-daemon assembleRelease
+        shell: bash
+        env:
+          GOTUNNEL_ANDROID_STORE_PASSWORD: ${{ secrets.GOTUNNEL_ANDROID_STORE_PASSWORD }}
+          GOTUNNEL_ANDROID_KEY_ALIAS: ${{ secrets.GOTUNNEL_ANDROID_KEY_ALIAS }}
+          GOTUNNEL_ANDROID_KEY_PASSWORD: ${{ secrets.GOTUNNEL_ANDROID_KEY_PASSWORD }}
+        run: |
+          GRADLE_ARGS=(
+            "--no-daemon"
+            "assembleRelease"
+            "-PgotunnelVersionName=${{ steps.meta.outputs.tag }}"
+          )
+          if [ "${{ steps.sign.outputs.enabled }}" = "true" ]; then
+            GRADLE_ARGS+=(
+              "-PgotunnelReleaseStoreFile=${{ steps.sign.outputs.store_file }}"
+              "-PgotunnelReleaseStorePassword=${GOTUNNEL_ANDROID_STORE_PASSWORD}"
+              "-PgotunnelReleaseKeyAlias=${GOTUNNEL_ANDROID_KEY_ALIAS}"
+              "-PgotunnelReleaseKeyPassword=${GOTUNNEL_ANDROID_KEY_PASSWORD}"
+            )
+          fi
+          gradle "${GRADLE_ARGS[@]}"
 
       - name: Package Android release asset
         id: package
         shell: bash
         run: |
           mkdir -p dist/out
-          ARCHIVE="gotunnel-android-${{ steps.meta.outputs.tag }}-release-unsigned.apk"
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk "dist/out/${ARCHIVE}"
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
+          ARCHIVE="gotunnel-android-${{ steps.meta.outputs.tag }}-release.apk"
+          if [ ! -f "${APK_PATH}" ]; then
+            APK_PATH="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+            ARCHIVE="gotunnel-android-${{ steps.meta.outputs.tag }}-release-unsigned.apk"
+          fi
+          cp "${APK_PATH}" "dist/out/${ARCHIVE}"
           echo "archive=dist/out/${ARCHIVE}" >> "$GITHUB_OUTPUT"
 
       - name: Upload Android release artifact

@@ -71,7 +71,13 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        run: gradle --no-daemon assembleDebug
+        shell: bash
+        run: |
+          VERSION_NAME="${GITHUB_SHA::7}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION_NAME="${GITHUB_REF_NAME}"
+          fi
+          gradle --no-daemon assembleDebug -PgotunnelVersionName="${VERSION_NAME}"
 
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v4

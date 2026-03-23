@@ -419,8 +419,4 @@ class NativeTunnelController(
             }
         }
     }
-
-    companion object {
-        private const val POLL_INTERVAL_MS = 1_000L
-    }
 }
