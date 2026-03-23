@@ -11,10 +11,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gotunnel/internal/server/db"
+	serverupdate "github.com/gotunnel/internal/server/updateapp"
 )
 
 type InstallHandler struct {
-	app AppInterface
+	tokenStore db.InstallTokenStore
+	serverInfo ServerInfoInterface
 }
 
 const (
@@ -22,8 +24,11 @@ const (
 	installTokenTTL    = 3600
 )
 
-func NewInstallHandler(app AppInterface) *InstallHandler {
-	return &InstallHandler{app: app}
+func NewInstallHandler(tokenStore db.InstallTokenStore, serverInfo ServerInfoInterface) *InstallHandler {
+	return &InstallHandler{
+		tokenStore: tokenStore,
+		serverInfo: serverInfo,
+	}
 }
 
 type InstallCommandResponse struct {
@@ -56,13 +61,7 @@ func (h *InstallHandler) GenerateInstallCommand(c *gin.Context) {
 		Used:      false,
 	}
 
-	store, ok := h.app.GetClientStore().(db.InstallTokenStore)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "install token store is not supported"})
-		return
-	}
-
-	if err := store.CreateInstallToken(installToken); err != nil {
+	if err := h.tokenStore.CreateInstallToken(installToken); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist token"})
 		return
 	}
@@ -70,7 +69,7 @@ func (h *InstallHandler) GenerateInstallCommand(c *gin.Context) {
 	c.JSON(http.StatusOK, InstallCommandResponse{
 		Token:      token,
 		ExpiresAt:  now + installTokenTTL,
-		TunnelPort: h.app.GetServer().GetBindPort(),
+		TunnelPort: h.serverInfo.GetBindPort(),
 	})
 }
 
@@ -102,7 +101,7 @@ func (h *InstallHandler) DownloadClient(c *gin.Context) {
 	osName := c.Query("os")
 	arch := c.Query("arch")
 
-	updateInfo, err := checkClientUpdateForPlatform(osName, arch)
+	updateInfo, err := serverupdate.CheckClientForPlatform(osName, arch)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve client package"})
 		return
@@ -155,13 +154,7 @@ func (h *InstallHandler) validateInstallToken(c *gin.Context) bool {
 		return false
 	}
 
-	store, ok := h.app.GetClientStore().(db.InstallTokenStore)
-	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
-		return false
-	}
-
-	installToken, err := store.GetInstallToken(token)
+	installToken, err := h.tokenStore.GetInstallToken(token)
 	if err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
 		return false

@@ -6,27 +6,14 @@ all: build-frontend sync-frontend build-current-platform
 
 build-frontend:
 	@echo "Building frontend..."
+	go generate ./cmd/server
 	cd web && npm ci && npm run build
 
 sync-frontend:
-	@echo "Syncing frontend to embed directory..."
-ifeq ($(OS),Windows_NT)
-	if exist internal\server\app\dist rmdir /s /q internal\server\app\dist
-	xcopy /E /I /Y web\dist internal\server\app\dist
-else
-	rm -rf internal/server/app/dist
-	cp -r web/dist internal/server/app/dist
-endif
+	@echo "Frontend build now writes directly to internal/server/app/dist"
 
 sync-only:
-	@echo "Syncing existing frontend build..."
-ifeq ($(OS),Windows_NT)
-	if exist internal\server\app\dist rmdir /s /q internal\server\app\dist
-	xcopy /E /I /Y web\dist internal\server\app\dist
-else
-	rm -rf internal/server/app/dist
-	cp -r web/dist internal/server/app/dist
-endif
+	@echo "Frontend build now writes directly to internal/server/app/dist"
 
 build-server:
 	@echo "Building server for current platform..."
@@ -79,8 +66,8 @@ help:
 	@echo "Available targets:"
 	@echo "  all                    - Build frontend, sync, and current platform binaries"
 	@echo "  build-frontend         - Build frontend (npm)"
-	@echo "  sync-frontend          - Sync web/dist to internal/server/app/dist"
-	@echo "  sync-only              - Sync without rebuilding frontend"
+	@echo "  sync-frontend          - No-op; frontend build writes directly to internal/server/app/dist"
+	@echo "  sync-only              - No-op; frontend build writes directly to internal/server/app/dist"
 	@echo "  build-server           - Build server for current platform"
 	@echo "  build-client           - Build client for current platform"
 	@echo "  build-current-platform - Build server/client into build/<os>_<arch>/"

@@ -10,6 +10,16 @@ enum class TunnelStatus {
     ERROR,
 }
 
+data class ActiveTunnel(
+    val name: String = "",
+    val type: String = "",
+    val remotePort: Int = 0,
+    val localIP: String = "",
+    val localPort: Int = 0,
+    val status: String = "",
+    val connectedAt: Long = 0L,
+)
+
 interface TunnelController {
     interface Listener {
         fun onStatusChanged(status: TunnelStatus, detail: String = "")
@@ -23,4 +33,5 @@ interface TunnelController {
     fun start(config: AppConfig)
     fun stop(reason: String = "manual")
     fun restart(reason: String = "manual")
+    fun getActiveTunnels(): List<ActiveTunnel>
 }

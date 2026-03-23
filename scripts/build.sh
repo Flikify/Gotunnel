@@ -55,7 +55,11 @@ compress_binary() {
 }
 
 build_web() {
+    log_info "Generating Swagger docs..."
+    go generate "$ROOT_DIR/cmd/server"
+
     log_info "Building web UI..."
+    rm -rf "$ROOT_DIR/web/dist"
     pushd "$ROOT_DIR/web" >/dev/null
 
     if [ ! -d "node_modules" ]; then
@@ -65,10 +69,6 @@ build_web() {
     npm run build
 
     popd >/dev/null
-
-    log_info "Copying dist to embed directory..."
-    rm -rf "$ROOT_DIR/internal/server/app/dist"
-    cp -r "$ROOT_DIR/web/dist" "$ROOT_DIR/internal/server/app/dist"
 
     log_info "Web UI built successfully"
 }
@@ -135,6 +135,7 @@ build_current() {
 
 build_android() {
     local output_dir="$BUILD_DIR/android_arm64"
+    local android_lib_dir="$ROOT_DIR/android/app/libs"
 
     mkdir -p "$output_dir"
     log_info "Building client for android/arm64..."
@@ -147,7 +148,9 @@ build_android() {
 
     if command -v gomobile >/dev/null 2>&1; then
         log_info "Building gomobile Android binding..."
-        gomobile bind -target=android/arm64 -o "$output_dir/gotunnelmobile.aar" github.com/gotunnel/mobile/gotunnelmobile
+        gomobile bind -target=android/arm64 -javapkg com.gotunnel.mobilebind -o "$output_dir/gotunnelmobile.aar" github.com/gotunnel/mobile/gotunnelmobile
+        mkdir -p "$android_lib_dir"
+        cp "$output_dir/gotunnelmobile.aar" "$android_lib_dir/gotunnelmobile.aar"
     else
         log_warn "gomobile not found, skipping Android AAR build"
     fi

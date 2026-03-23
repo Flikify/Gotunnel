@@ -1,19 +1,21 @@
 package handler
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
-	// removed router import
 	"github.com/gotunnel/internal/server/router/dto"
+	"github.com/gotunnel/internal/server/service"
 )
 
 // ConfigHandler 配置处理器
 type ConfigHandler struct {
-	app AppInterface
+	config service.ConfigService
 }
 
 // NewConfigHandler 创建配置处理器
-func NewConfigHandler(app AppInterface) *ConfigHandler {
-	return &ConfigHandler{app: app}
+func NewConfigHandler(config service.ConfigService) *ConfigHandler {
+	return &ConfigHandler{config: config}
 }
 
 // Get 获取服务器配置
@@ -25,7 +27,7 @@ func NewConfigHandler(app AppInterface) *ConfigHandler {
 // @Success 200 {object} Response{data=dto.ServerConfigResponse}
 // @Router /api/config [get]
 func (h *ConfigHandler) Get(c *gin.Context) {
-	cfg := h.app.GetConfig()
+	cfg := h.config.Snapshot()
 
 	// Token 脱敏处理，只显示前4位
 	maskedToken := cfg.Server.Token
@@ -35,11 +37,13 @@ func (h *ConfigHandler) Get(c *gin.Context) {
 
 	resp := dto.ServerConfigResponse{
 		Server: dto.ServerConfigInfo{
-			BindAddr:         cfg.Server.BindAddr,
-			BindPort:         cfg.Server.BindPort,
-			Token:            maskedToken,
-			HeartbeatSec:     cfg.Server.HeartbeatSec,
-			HeartbeatTimeout: cfg.Server.HeartbeatTimeout,
+			BindAddr:                 cfg.Server.BindAddr,
+			BindPort:                 cfg.Server.BindPort,
+			Token:                    maskedToken,
+			HeartbeatSec:             cfg.Server.HeartbeatSec,
+			HeartbeatTimeout:         cfg.Server.HeartbeatTimeout,
+			MaxClientProxies:         cfg.Server.MaxClientProxies,
+			ClientResponseTimeoutSec: cfg.Server.ClientResponseTimeoutSec,
 		},
 		Web: dto.WebConfigInfo{
 			Enabled:  cfg.Server.Web.Enabled,
@@ -60,7 +64,7 @@ func (h *ConfigHandler) Get(c *gin.Context) {
 // @Produce json
 // @Security Bearer
 // @Param request body dto.UpdateServerConfigRequest true "配置内容"
-// @Success 200 {object} Response
+// @Success 200 {object} Response{data=dto.ConfigUpdateResponse}
 // @Failure 400 {object} Response
 // @Router /api/config [put]
 func (h *ConfigHandler) Update(c *gin.Context) {
@@ -69,59 +73,27 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		return
 	}
 
-	cfg := h.app.GetConfig()
-
-	// 更新 Server 配置
-	if req.Server != nil {
-		if req.Server.BindAddr != "" {
-			cfg.Server.BindAddr = req.Server.BindAddr
+	persisted, err := h.config.Persist(req.ToConfigUpdate())
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidHeartbeatConfig) {
+			BadRequest(c, err.Error())
+			return
 		}
-		if req.Server.BindPort > 0 {
-			cfg.Server.BindPort = req.Server.BindPort
-		}
-		if req.Server.Token != "" {
-			cfg.Server.Token = req.Server.Token
-		}
-		if req.Server.HeartbeatSec > 0 {
-			cfg.Server.HeartbeatSec = req.Server.HeartbeatSec
-		}
-		if req.Server.HeartbeatTimeout > 0 {
-			cfg.Server.HeartbeatTimeout = req.Server.HeartbeatTimeout
-		}
-	}
-
-	// 更新 Web 配置
-	if req.Web != nil {
-		cfg.Server.Web.Enabled = req.Web.Enabled
-		if req.Web.BindPort > 0 {
-			cfg.Server.Web.BindPort = req.Web.BindPort
-		}
-		cfg.Server.Web.Username = req.Web.Username
-		cfg.Server.Web.Password = req.Web.Password
-	}
-
-	if err := h.app.SaveConfig(); err != nil {
 		InternalError(c, err.Error())
 		return
 	}
 
-	Success(c, gin.H{"status": "ok"})
-}
+	result := h.config.ApplyRuntimeConfig(persisted.RuntimeApplyFields)
+	result.RestartRequiredFields = persisted.RestartRequiredFields
 
-// Reload 重新加载配置
-// @Summary 重新加载配置
-// @Description 重新加载服务器配置
-// @Tags 配置
-// @Produce json
-// @Security Bearer
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/config/reload [post]
-func (h *ConfigHandler) Reload(c *gin.Context) {
-	if err := h.app.GetServer().ReloadConfig(); err != nil {
-		InternalError(c, err.Error())
-		return
+	message := "配置已保存并同步了可热生效项"
+	if len(result.RestartRequiredFields) > 0 {
+		message = "配置已保存，部分变更需要重启后生效"
 	}
 
-	Success(c, gin.H{"status": "ok"})
+	SuccessWithMessage(c, dto.ConfigUpdateResponse{
+		Status:                "ok",
+		AppliedRuntimeFields:  result.AppliedRuntimeFields,
+		RestartRequiredFields: result.RestartRequiredFields,
+	}, message)
 }

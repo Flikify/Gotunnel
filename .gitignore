@@ -32,6 +32,7 @@ pkg/webserver/dist/
 internal/server/app/dist/*
 !internal/server/app/dist/.gitkeep
 build/**
+android/app/libs/*.aar
 
 # 日志
 *.log

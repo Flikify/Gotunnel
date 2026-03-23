@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	maxBufferSize  = 1000              // 环形缓冲区最大条目数
-	logFilePattern = "client.%s.log"   // 日志文件名模式
+	maxBufferSize  = 1000            // 环形缓冲区最大条目数
+	logFilePattern = "client.%s.log" // 日志文件名模式
 )
 
 // LogLevel 日志级别
@@ -36,6 +36,9 @@ type Logger struct {
 	fileDate    string
 	subscribers map[string]chan protocol.LogEntry
 	subMu       sync.RWMutex
+	observers   map[int]func(protocol.LogEntry)
+	observerMu  sync.RWMutex
+	nextObsID   int
 }
 
 // NewLogger 创建新的日志收集器
@@ -44,6 +47,7 @@ func NewLogger(dataDir string) (*Logger, error) {
 		dataDir:     dataDir,
 		buffer:      ring.New(maxBufferSize),
 		subscribers: make(map[string]chan protocol.LogEntry),
+		observers:   make(map[int]func(protocol.LogEntry)),
 	}
 
 	// 确保日志目录存在
@@ -118,6 +122,7 @@ func (l *Logger) log(level LogLevel, source, format string, args ...interface{})
 
 	// 通知订阅者
 	l.notifySubscribers(entry)
+	l.notifyObservers(entry)
 }
 
 // Subscribe 订阅日志流
@@ -137,6 +142,25 @@ func (l *Logger) Unsubscribe(sessionID string) {
 		delete(l.subscribers, sessionID)
 	}
 	l.subMu.Unlock()
+}
+
+// AddObserver registers an in-process observer for every new log entry.
+func (l *Logger) AddObserver(fn func(protocol.LogEntry)) func() {
+	if fn == nil {
+		return func() {}
+	}
+
+	l.observerMu.Lock()
+	id := l.nextObsID
+	l.nextObsID++
+	l.observers[id] = fn
+	l.observerMu.Unlock()
+
+	return func() {
+		l.observerMu.Lock()
+		delete(l.observers, id)
+		l.observerMu.Unlock()
+	}
 }
 
 // GetRecentLogs 获取最近的日志
@@ -180,6 +204,10 @@ func (l *Logger) Close() {
 	}
 	l.subscribers = make(map[string]chan protocol.LogEntry)
 	l.subMu.Unlock()
+
+	l.observerMu.Lock()
+	l.observers = make(map[int]func(protocol.LogEntry))
+	l.observerMu.Unlock()
 }
 
 func (l *Logger) writeToFile(entry protocol.LogEntry) {
@@ -217,6 +245,19 @@ func (l *Logger) notifySubscribers(entry protocol.LogEntry) {
 		default:
 			// 订阅者太慢，丢弃日志
 		}
+	}
+}
+
+func (l *Logger) notifyObservers(entry protocol.LogEntry) {
+	l.observerMu.RLock()
+	observers := make([]func(protocol.LogEntry), 0, len(l.observers))
+	for _, fn := range l.observers {
+		observers = append(observers, fn)
+	}
+	l.observerMu.RUnlock()
+
+	for _, fn := range observers {
+		fn(entry)
 	}
 }
 

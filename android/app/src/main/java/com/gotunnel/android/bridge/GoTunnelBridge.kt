@@ -3,8 +3,12 @@ package com.gotunnel.android.bridge
 import android.content.Context
 
 object GoTunnelBridge {
+    @Volatile
+    private var controller: TunnelController? = null
+
     fun create(context: Context): TunnelController {
-        // Stub bridge for the Android shell. Replace with a native Go binding later.
-        return StubTunnelController(context.applicationContext)
+        return controller ?: synchronized(this) {
+            controller ?: NativeTunnelController(context.applicationContext).also { controller = it }
+        }
     }
 }

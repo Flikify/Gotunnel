@@ -1,13 +1,9 @@
 package db
 
-import "github.com/gotunnel/pkg/protocol"
+import "github.com/gotunnel/internal/server/domain"
 
-// Client 客户端数据
-type Client struct {
-	ID       string               `json:"id"`
-	Nickname string               `json:"nickname,omitempty"`
-	Rules    []protocol.ProxyRule `json:"rules"`
-}
+// Client re-exports the server domain client model for storage callers.
+type Client = domain.Client
 
 // ClientStore 客户端存储接口
 type ClientStore interface {
@@ -17,7 +13,11 @@ type ClientStore interface {
 	UpdateClient(c *Client) error
 	DeleteClient(id string) error
 	ClientExists(id string) (bool, error)
-	GetClientRules(id string) ([]protocol.ProxyRule, error)
+	GetClientRules(id string) ([]domain.ProxyRule, error)
+	CreateInstallToken(token *InstallToken) error
+	GetInstallToken(token string) (*InstallToken, error)
+	MarkTokenUsed(token string) error
+	DeleteExpiredTokens(expireTime int64) error
 	Close() error
 }
 

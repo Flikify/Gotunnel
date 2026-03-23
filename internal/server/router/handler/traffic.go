@@ -2,16 +2,18 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/gotunnel/internal/server/db"
+	"github.com/gotunnel/internal/server/router/dto"
 )
 
 // TrafficHandler 流量统计处理器
 type TrafficHandler struct {
-	app AppInterface
+	store db.TrafficStore
 }
 
 // NewTrafficHandler 创建流量统计处理器
-func NewTrafficHandler(app AppInterface) *TrafficHandler {
-	return &TrafficHandler{app: app}
+func NewTrafficHandler(store db.TrafficStore) *TrafficHandler {
+	return &TrafficHandler{store: store}
 }
 
 // GetStats 获取流量统计
@@ -20,33 +22,31 @@ func NewTrafficHandler(app AppInterface) *TrafficHandler {
 // @Tags 流量
 // @Produce json
 // @Security Bearer
-// @Success 200 {object} Response
+// @Success 200 {object} Response{data=dto.TrafficStatsResponse}
 // @Router /api/traffic/stats [get]
 func (h *TrafficHandler) GetStats(c *gin.Context) {
-	store := h.app.GetTrafficStore()
-
 	// 获取24小时流量
-	in24h, out24h, err := store.Get24HourTraffic()
+	in24h, out24h, err := h.store.Get24HourTraffic()
 	if err != nil {
 		InternalError(c, err.Error())
 		return
 	}
 
 	// 获取总流量
-	inTotal, outTotal, err := store.GetTotalTraffic()
+	inTotal, outTotal, err := h.store.GetTotalTraffic()
 	if err != nil {
 		InternalError(c, err.Error())
 		return
 	}
 
-	Success(c, gin.H{
-		"traffic_24h": gin.H{
-			"inbound":  in24h,
-			"outbound": out24h,
+	Success(c, dto.TrafficStatsResponse{
+		Traffic24h: dto.TrafficTotals{
+			Inbound:  in24h,
+			Outbound: out24h,
 		},
-		"traffic_total": gin.H{
-			"inbound":  inTotal,
-			"outbound": outTotal,
+		TrafficTotal: dto.TrafficTotals{
+			Inbound:  inTotal,
+			Outbound: outTotal,
 		},
 	})
 }
@@ -58,19 +58,16 @@ func (h *TrafficHandler) GetStats(c *gin.Context) {
 // @Produce json
 // @Security Bearer
 // @Param hours query int false "小时数" default(24)
-// @Success 200 {object} Response
+// @Success 200 {object} Response{data=dto.HourlyTrafficResponse}
 // @Router /api/traffic/hourly [get]
 func (h *TrafficHandler) GetHourly(c *gin.Context) {
 	hours := 24
 
-	store := h.app.GetTrafficStore()
-	records, err := store.GetHourlyTraffic(hours)
+	records, err := h.store.GetHourlyTraffic(hours)
 	if err != nil {
 		InternalError(c, err.Error())
 		return
 	}
 
-	Success(c, gin.H{
-		"records": records,
-	})
+	Success(c, dto.HourlyTrafficResponse{Records: records})
 }

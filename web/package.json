@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "generate:api": "node ./scripts/generate-api.mjs",
+    "dev": "npm run generate:api && vite",
+    "build": "npm run generate:api && vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

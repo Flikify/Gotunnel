@@ -13,7 +13,7 @@ import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
-  checkClientUpdate, applyClientUpdate, getClientSystemStats, getVersionInfo,
+  checkClientUpdate, applyClientUpdate, getClientSystemStats, getVersionInfo, getServerConfig,
   getClientScreenshot, executeClientShell,
   type UpdateInfo, type SystemStats, type ScreenshotData
 } from '../api'
@@ -29,6 +29,7 @@ const clientId = route.params.id as string
 // Data
 const online = ref(false)
 const lastPing = ref('')
+const lastOfflineAt = ref(0)
 const remoteAddr = ref('')
 const nickname = ref('')
 const rules = ref<ProxyRule[]>([])
@@ -36,6 +37,9 @@ const loading = ref(false)
 const clientOs = ref('')
 const clientArch = ref('')
 const clientVersion = ref('')
+const serverHeartbeatSec = ref(0)
+const serverHeartbeatTimeout = ref(0)
+const serverResponseTimeout = ref(0)
 
 // 客户端更新相关
 const clientUpdate = ref<UpdateInfo | null>(null)
@@ -100,6 +104,17 @@ const loadServerVersion = async () => {
   }
 }
 
+const loadServerRuntimeConfig = async () => {
+  try {
+    const { data } = await getServerConfig()
+    serverHeartbeatSec.value = data.server.heartbeat_sec
+    serverHeartbeatTimeout.value = data.server.heartbeat_timeout
+    serverResponseTimeout.value = data.server.client_response_timeout_sec
+  } catch (e) {
+    console.error('Failed to load server runtime config', e)
+  }
+}
+
 // 版本比较函数：返回 -1 (v1 < v2), 0 (v1 == v2), 1 (v1 > v2)
 const compareVersions = (v1: string, v2: string): number => {
   const normalize = (v: string) => v.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0)
@@ -152,6 +167,7 @@ const loadClient = async () => {
     const { data } = await getClient(clientId)
     online.value = data.online
     lastPing.value = data.last_ping || ''
+    lastOfflineAt.value = data.last_offline_at || 0
     remoteAddr.value = data.remote_addr || ''
     nickname.value = data.nickname || ''
     rules.value = data.rules || []
@@ -170,6 +186,24 @@ const loadClient = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const formatDateTime = (value?: string | number) => {
+  if (!value) return '-'
+  const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString()
+}
+
+const heartbeatSummary = () => {
+  if (!serverHeartbeatSec.value || !serverHeartbeatTimeout.value) return '-'
+  return `${serverHeartbeatSec.value}s / ${serverHeartbeatTimeout.value}s`
+}
+
+const connectionStateText = () => {
+  if (online.value) return '在线'
+  if (lastOfflineAt.value) return `离线于 ${formatDateTime(lastOfflineAt.value)}`
+  return '离线'
 }
 
 // 自动检测客户端更新（静默）
@@ -303,7 +337,7 @@ const handleApplyClientUpdate = () => {
     onPositiveClick: async () => {
       updatingClient.value = true
       try {
-        await applyClientUpdate(clientId, clientUpdate.value!.download_url)
+        await applyClientUpdate(clientId, clientUpdate.value!.download_url!)
         message.success('更新命令已发送，客户端将自动重启')
         clientUpdate.value = null
       } catch (e: any) {
@@ -325,7 +359,6 @@ const openRenameModal = () => {
 const saveRename = async () => {
   try {
     await updateClient(clientId, {
-      id: clientId,
       nickname: renameValue.value,
       rules: rules.value
     })
@@ -366,7 +399,6 @@ const handleDeleteRule = (rule: ProxyRule) => {
 const saveRules = async (newRules: ProxyRule[]) => {
   try {
     await updateClient(clientId, {
-      id: clientId,
       nickname: nickname.value,
       rules: newRules
     })
@@ -377,7 +409,7 @@ const saveRules = async (newRules: ProxyRule[]) => {
       message.success('配置已推送到客户端')
     }
   } catch (e: any) {
-    message.error('保存失败: ' + (e.response?.data || e.message))
+    message.error('保存失败: ' + (e.response?.data?.message || e.message))
     await loadClient()
   }
 }
@@ -454,6 +486,7 @@ const pollTimer = ref<number | null>(null)
 
 onMounted(() => {
   loadServerVersion()
+  loadServerRuntimeConfig()
   loadClient()
   // 启动自动轮询，每 5 秒刷新一次
   pollTimer.value = window.setInterval(() => {
@@ -528,7 +561,11 @@ onUnmounted(() => {
                 <span class="stat-value mono">{{ clientId }}</span>
               </div>
               <div class="stat-item">
-                <span class="stat-label">远程 IP</span>
+                <span class="stat-label">连接状态</span>
+                <span class="stat-value">{{ connectionStateText() }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">{{ online ? '当前远程 IP' : '离线时 IP' }}</span>
                 <span class="stat-value">{{ remoteAddr || '-' }}</span>
               </div>
               <div class="stat-item">
@@ -544,8 +581,20 @@ onUnmounted(() => {
                 </span>
               </div>
               <div class="stat-item">
-                <span class="stat-label">最后心跳</span>
-                <span class="stat-value">{{ lastPing ? new Date(lastPing).toLocaleTimeString() : '-' }}</span>
+                <span class="stat-label">{{ online ? '最后心跳' : '离线时间' }}</span>
+                <span class="stat-value">{{ online ? formatDateTime(lastPing) : formatDateTime(lastOfflineAt) }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">系统平台</span>
+                <span class="stat-value">{{ clientOs && clientArch ? `${clientOs}/${clientArch}` : '-' }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">服务端心跳策略</span>
+                <span class="stat-value">{{ heartbeatSummary() }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">客户端响应超时</span>
+                <span class="stat-value">{{ serverResponseTimeout ? `${serverResponseTimeout}s` : '-' }}</span>
               </div>
             </div>
             <div class="card-actions">

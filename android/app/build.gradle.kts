@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val mobileAar = file("libs/gotunnelmobile.aar")
+
 android {
     namespace = "com.gotunnel.android"
     compileSdk = 34
@@ -45,4 +47,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.2")
     implementation("com.google.android.material:material:1.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    if (mobileAar.exists()) {
+        implementation(files(mobileAar))
+    }
 }

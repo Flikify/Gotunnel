@@ -3,12 +3,13 @@ package dto
 // CheckUpdateResponse 检查更新响应
 // @Description 更新检查结果
 type CheckUpdateResponse struct {
-	HasUpdate      bool   `json:"has_update"`
-	CurrentVersion string `json:"current_version"`
-	LatestVersion  string `json:"latest_version,omitempty"`
-	DownloadURL    string `json:"download_url,omitempty"`
-	ReleaseNotes   string `json:"release_notes,omitempty"`
-	PublishedAt    string `json:"published_at,omitempty"`
+	Available   bool   `json:"available"`
+	Current     string `json:"current"`
+	Latest      string `json:"latest,omitempty"`
+	DownloadURL string `json:"download_url,omitempty"`
+	ReleaseNote string `json:"release_note,omitempty"`
+	AssetName   string `json:"asset_name,omitempty"`
+	AssetSize   int64  `json:"asset_size,omitempty"`
 }
 
 // CheckClientUpdateQuery 检查客户端更新查询参数

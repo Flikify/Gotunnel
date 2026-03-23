@@ -1,21 +1,27 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gotunnel/internal/server/db"
+	"github.com/gotunnel/internal/server/domain"
 	"github.com/gotunnel/internal/server/router/dto"
+	"github.com/gotunnel/internal/server/service"
 )
 
 // ClientHandler 客户端处理器
 type ClientHandler struct {
-	app AppInterface
+	clients   service.ClientService
+	remoteOps service.RemoteOpsService
 }
 
 // NewClientHandler 创建客户端处理器
-func NewClientHandler(app AppInterface) *ClientHandler {
-	return &ClientHandler{app: app}
+func NewClientHandler(clients service.ClientService, remoteOps service.RemoteOpsService) *ClientHandler {
+	return &ClientHandler{
+		clients:   clients,
+		remoteOps: remoteOps,
+	}
 }
 
 // List 获取客户端列表
@@ -27,32 +33,13 @@ func NewClientHandler(app AppInterface) *ClientHandler {
 // @Success 200 {object} Response{data=[]dto.ClientListItem}
 // @Router /api/clients [get]
 func (h *ClientHandler) List(c *gin.Context) {
-	clients, err := h.app.GetClientStore().GetAllClients()
+	clients, err := h.clients.ListClients()
 	if err != nil {
 		InternalError(c, err.Error())
 		return
 	}
 
-	statusMap := h.app.GetServer().GetAllClientStatus()
-	result := make([]dto.ClientListItem, 0, len(clients))
-
-	for _, client := range clients {
-		item := dto.ClientListItem{
-			ID:        client.ID,
-			Nickname:  client.Nickname,
-			RuleCount: len(client.Rules),
-		}
-		if status, ok := statusMap[client.ID]; ok {
-			item.Online = status.Online
-			item.LastPing = status.LastPing
-			item.RemoteAddr = status.RemoteAddr
-			item.OS = status.OS
-			item.Arch = status.Arch
-		}
-		result = append(result, item)
-	}
-
-	Success(c, result)
+	Success(c, toClientListItems(clients))
 }
 
 // Create 创建客户端
@@ -73,25 +60,13 @@ func (h *ClientHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// 验证客户端 ID 格式
-	if !validateClientID(req.ID) {
-		BadRequest(c, "invalid client id: must be 1-64 alphanumeric characters, underscore or hyphen")
+	if err := h.clients.CreateClient(service.CreateClientInput{
+		ID:    req.ID,
+		Rules: toDomainRules(req.Rules),
+	}); err != nil {
+		h.handleClientServiceError(c, err)
 		return
 	}
-
-	// 检查客户端是否已存在
-	exists, _ := h.app.GetClientStore().ClientExists(req.ID)
-	if exists {
-		Conflict(c, "client already exists")
-		return
-	}
-
-	client := &db.Client{ID: req.ID, Rules: req.Rules}
-	if err := h.app.GetClientStore().CreateClient(client); err != nil {
-		InternalError(c, err.Error())
-		return
-	}
-
 	Success(c, gin.H{"status": "ok"})
 }
 
@@ -108,33 +83,13 @@ func (h *ClientHandler) Create(c *gin.Context) {
 func (h *ClientHandler) Get(c *gin.Context) {
 	clientID := c.Param("id")
 
-	client, err := h.app.GetClientStore().GetClient(clientID)
+	client, err := h.clients.GetClient(clientID)
 	if err != nil {
-		NotFound(c, "client not found")
+		h.handleClientServiceError(c, err)
 		return
 	}
 
-	online, lastPing, remoteAddr, clientName, clientOS, clientArch, clientVersion := h.app.GetServer().GetClientStatus(clientID)
-
-	// 如果客户端在线且有名称，优先使用在线名称
-	nickname := client.Nickname
-	if online && clientName != "" && nickname == "" {
-		nickname = clientName
-	}
-
-	resp := dto.ClientResponse{
-		ID:         client.ID,
-		Nickname:   nickname,
-		Rules:      client.Rules,
-		Online:     online,
-		LastPing:   lastPing,
-		RemoteAddr: remoteAddr,
-		OS:         clientOS,
-		Arch:       clientArch,
-		Version:    clientVersion,
-	}
-
-	Success(c, resp)
+	Success(c, toClientResponse(client))
 }
 
 // Update 更新客户端
@@ -158,17 +113,11 @@ func (h *ClientHandler) Update(c *gin.Context) {
 		return
 	}
 
-	client, err := h.app.GetClientStore().GetClient(clientID)
-	if err != nil {
-		NotFound(c, "client not found")
-		return
-	}
-
-	client.Nickname = req.Nickname
-	client.Rules = req.Rules
-
-	if err := h.app.GetClientStore().UpdateClient(client); err != nil {
-		InternalError(c, err.Error())
+	if err := h.clients.UpdateClient(clientID, service.UpdateClientInput{
+		Nickname: req.Nickname,
+		Rules:    toDomainRules(req.Rules),
+	}); err != nil {
+		h.handleClientServiceError(c, err)
 		return
 	}
 
@@ -188,14 +137,8 @@ func (h *ClientHandler) Update(c *gin.Context) {
 func (h *ClientHandler) Delete(c *gin.Context) {
 	clientID := c.Param("id")
 
-	exists, _ := h.app.GetClientStore().ClientExists(clientID)
-	if !exists {
-		NotFound(c, "client not found")
-		return
-	}
-
-	if err := h.app.GetClientStore().DeleteClient(clientID); err != nil {
-		InternalError(c, err.Error())
+	if err := h.clients.DeleteClient(clientID); err != nil {
+		h.handleClientServiceError(c, err)
 		return
 	}
 
@@ -215,13 +158,8 @@ func (h *ClientHandler) Delete(c *gin.Context) {
 func (h *ClientHandler) PushConfig(c *gin.Context) {
 	clientID := c.Param("id")
 
-	if !h.app.GetServer().IsClientOnline(clientID) {
-		ClientNotOnline(c)
-		return
-	}
-
-	if err := h.app.GetServer().PushConfigToClient(clientID); err != nil {
-		InternalError(c, err.Error())
+	if err := h.clients.PushConfig(clientID); err != nil {
+		h.handleClientServiceError(c, err)
 		return
 	}
 
@@ -240,8 +178,8 @@ func (h *ClientHandler) PushConfig(c *gin.Context) {
 func (h *ClientHandler) Disconnect(c *gin.Context) {
 	clientID := c.Param("id")
 
-	if err := h.app.GetServer().DisconnectClient(clientID); err != nil {
-		InternalError(c, err.Error())
+	if err := h.clients.DisconnectClient(clientID); err != nil {
+		h.handleClientServiceError(c, err)
 		return
 	}
 
@@ -260,25 +198,27 @@ func (h *ClientHandler) Disconnect(c *gin.Context) {
 func (h *ClientHandler) Restart(c *gin.Context) {
 	clientID := c.Param("id")
 
-	if err := h.app.GetServer().RestartClient(clientID); err != nil {
-		InternalError(c, err.Error())
+	if err := h.clients.RestartClient(clientID); err != nil {
+		h.handleClientServiceError(c, err)
 		return
 	}
 
 	SuccessWithMessage(c, gin.H{"status": "ok"}, "client restart initiated")
 }
 
-// @Failure 400 {object} Response
-// @Router /api/client/{id}/install-plugins [post]
-
-// @Failure 400 {object} Response
-// @Router /api/client/{id}/plugin/{pluginID}/{action} [post]
-
-
 // GetSystemStats 获取客户端系统状态
+// @Summary 获取客户端系统状态
+// @Description 获取在线客户端的系统资源使用情况
+// @Tags 客户端
+// @Produce json
+// @Security Bearer
+// @Param id path string true "客户端ID"
+// @Success 200 {object} Response{data=dto.SystemStatsResponse}
+// @Failure 400 {object} Response
+// @Router /api/client/{id}/system-stats [get]
 func (h *ClientHandler) GetSystemStats(c *gin.Context) {
 	clientID := c.Param("id")
-	stats, err := h.app.GetServer().GetClientSystemStats(clientID)
+	stats, err := h.remoteOps.GetClientSystemStats(clientID)
 	if err != nil {
 		ClientNotOnline(c)
 		return
@@ -287,6 +227,16 @@ func (h *ClientHandler) GetSystemStats(c *gin.Context) {
 }
 
 // GetScreenshot 获取客户端截图
+// @Summary 获取客户端截图
+// @Description 获取在线客户端当前屏幕截图
+// @Tags 客户端
+// @Produce json
+// @Security Bearer
+// @Param id path string true "客户端ID"
+// @Param quality query int false "JPEG 质量，1-100，0 使用默认值"
+// @Success 200 {object} Response{data=dto.ScreenshotResponse}
+// @Failure 400 {object} Response
+// @Router /api/client/{id}/screenshot [get]
 func (h *ClientHandler) GetScreenshot(c *gin.Context) {
 	clientID := c.Param("id")
 	quality := 0
@@ -294,7 +244,7 @@ func (h *ClientHandler) GetScreenshot(c *gin.Context) {
 		fmt.Sscanf(q, "%d", &quality)
 	}
 
-	screenshot, err := h.app.GetServer().GetClientScreenshot(clientID, quality)
+	screenshot, err := h.remoteOps.GetClientScreenshot(clientID, quality)
 	if err != nil {
 		InternalError(c, err.Error())
 		return
@@ -303,22 +253,27 @@ func (h *ClientHandler) GetScreenshot(c *gin.Context) {
 	Success(c, screenshot)
 }
 
-// ExecuteShellRequest Shell 执行请求体
-type ExecuteShellRequest struct {
-	Command string `json:"command" binding:"required"`
-	Timeout int    `json:"timeout"`
-}
-
 // ExecuteShell 执行 Shell 命令
+// @Summary 执行客户端 Shell 命令
+// @Description 在在线客户端执行单条 Shell 命令并返回输出
+// @Tags 客户端
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path string true "客户端ID"
+// @Param request body dto.ExecuteShellRequest true "Shell 执行参数"
+// @Success 200 {object} Response{data=dto.ShellExecuteResponse}
+// @Failure 400 {object} Response
+// @Router /api/client/{id}/shell [post]
 func (h *ClientHandler) ExecuteShell(c *gin.Context) {
 	clientID := c.Param("id")
-	var req ExecuteShellRequest
+	var req dto.ExecuteShellRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
 
-	result, err := h.app.GetServer().ExecuteClientShell(clientID, req.Command, req.Timeout)
+	result, err := h.remoteOps.ExecuteClientShell(clientID, req.Command, req.Timeout)
 	if err != nil {
 		InternalError(c, err.Error())
 		return
@@ -327,16 +282,95 @@ func (h *ClientHandler) ExecuteShell(c *gin.Context) {
 	Success(c, result)
 }
 
-// validateClientID 验证客户端 ID 格式
-func validateClientID(id string) bool {
-	if len(id) < 1 || len(id) > 64 {
-		return false
+func (h *ClientHandler) handleClientServiceError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidClientID), errors.Is(err, service.ErrProxyRuleLimitExceeded):
+		BadRequest(c, err.Error())
+	case errors.Is(err, service.ErrClientAlreadyExists):
+		Conflict(c, err.Error())
+	case errors.Is(err, service.ErrClientNotFound):
+		NotFound(c, err.Error())
+	case errors.Is(err, service.ErrClientNotOnline):
+		ClientNotOnline(c)
+	default:
+		InternalError(c, err.Error())
 	}
-	for _, c := range id {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-			(c >= '0' && c <= '9') || c == '_' || c == '-') {
-			return false
-		}
+}
+
+func toClientListItems(items []service.ClientListItem) []dto.ClientListItem {
+	result := make([]dto.ClientListItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, dto.ClientListItem{
+			ID:            item.ID,
+			Nickname:      item.Nickname,
+			Online:        item.Online,
+			LastPing:      item.LastPing,
+			LastOfflineAt: item.LastOfflineAt,
+			RemoteAddr:    item.RemoteAddr,
+			RuleCount:     item.RuleCount,
+			OS:            item.OS,
+			Arch:          item.Arch,
+			Version:       item.Version,
+		})
 	}
-	return true
+	return result
+}
+
+func toClientResponse(client *service.ClientDetail) dto.ClientResponse {
+	return dto.ClientResponse{
+		ID:            client.ID,
+		Nickname:      client.Nickname,
+		Rules:         toDTOProxyRules(client.Rules),
+		Online:        client.Online,
+		LastPing:      client.LastPing,
+		LastOfflineAt: client.LastOfflineAt,
+		RemoteAddr:    client.RemoteAddr,
+		OS:            client.OS,
+		Arch:          client.Arch,
+		Version:       client.Version,
+	}
+}
+
+func toDomainRules(rules []dto.ProxyRule) []domain.ProxyRule {
+	if len(rules) == 0 {
+		return nil
+	}
+	result := make([]domain.ProxyRule, 0, len(rules))
+	for _, rule := range rules {
+		result = append(result, domain.ProxyRule{
+			Name:         rule.Name,
+			Type:         rule.Type,
+			LocalIP:      rule.LocalIP,
+			LocalPort:    rule.LocalPort,
+			RemotePort:   rule.RemotePort,
+			Enabled:      rule.Enabled,
+			AuthEnabled:  rule.AuthEnabled,
+			AuthUsername: rule.AuthUsername,
+			AuthPassword: rule.AuthPassword,
+			PortStatus:   rule.PortStatus,
+		})
+	}
+	return result
+}
+
+func toDTOProxyRules(rules []domain.ProxyRule) []dto.ProxyRule {
+	if len(rules) == 0 {
+		return nil
+	}
+	result := make([]dto.ProxyRule, 0, len(rules))
+	for _, rule := range rules {
+		result = append(result, dto.ProxyRule{
+			Name:         rule.Name,
+			Type:         rule.Type,
+			LocalIP:      rule.LocalIP,
+			LocalPort:    rule.LocalPort,
+			RemotePort:   rule.RemotePort,
+			Enabled:      rule.Enabled,
+			AuthEnabled:  rule.AuthEnabled,
+			AuthUsername: rule.AuthUsername,
+			AuthPassword: rule.AuthPassword,
+			PortStatus:   rule.PortStatus,
+		})
+	}
+	return result
 }

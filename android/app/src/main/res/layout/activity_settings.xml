@@ -51,15 +51,31 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="18dp"
-                    android:hint="@string/server_address_label"
+                    android:hint="@string/server_host_label"
                     app:boxBackgroundMode="outline"
-                    app:helperText="@string/server_address_helper">
+                    app:helperText="@string/server_host_helper">
 
                     <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/serverAddressInput"
+                        android:id="@+id/serverHostInput"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="textUri"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:hint="@string/server_port_label"
+                    app:boxBackgroundMode="outline"
+                    app:helperText="@string/server_port_helper">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/serverPortInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
                         android:maxLines="1" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -133,6 +149,56 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
                     android:text="@string/auto_reconnect_helper"
+                    android:textColor="@color/gotunnel_text_muted"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="@color/gotunnel_surface"
+            app:cardCornerRadius="24dp"
+            app:strokeColor="@color/gotunnel_border"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_about_title"
+                    android:textColor="@color/gotunnel_text"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/aboutVersionValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:textColor="@color/gotunnel_text"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/aboutPackageValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@color/gotunnel_text"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/aboutSummaryValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/about_summary"
                     android:textColor="@color/gotunnel_text_muted"
                     android:textSize="13sp" />
             </LinearLayout>

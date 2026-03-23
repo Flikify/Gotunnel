@@ -61,4 +61,6 @@ class StubTunnelController(
         stop(reason)
         start(config)
     }
+
+    override fun getActiveTunnels(): List<ActiveTunnel> = emptyList()
 }

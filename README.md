@@ -211,26 +211,25 @@ GoTunnel/
 │   └── client/main.go       # 客户端入口
 ├── internal/
 │   ├── server/
-│   │   ├── tunnel/          # 隧道服务
 │   │   ├── config/          # 配置管理
 │   │   ├── db/              # 数据库存储
 │   │   ├── app/             # Web 服务
 │   │   ├── router/          # API 路由
-│   │   └── plugin/          # 服务端插件管理
+│   │   ├── service/         # 应用服务
+│   │   ├── tunnel/          # 隧道服务
+│   │   └── update/          # 服务端更新编排
 │   └── client/
-│       ├── tunnel/          # 客户端隧道
-│       └── plugin/          # 客户端插件管理和缓存
+│       └── tunnel/          # 客户端隧道
 ├── pkg/
-│   ├── protocol/            # 通信协议
+│   ├── auth/                # JWT 认证
 │   ├── crypto/              # TLS 加密
+│   ├── protocol/            # 通信协议
 │   ├── proxy/               # 代理服务器
 │   ├── relay/               # 数据转发
-│   ├── auth/                # JWT 认证
+│   ├── security/            # 安全审计辅助
 │   ├── utils/               # 工具函数
-│   ├── version/             # 版本信息和更新检查
 │   ├── update/              # 共享更新逻辑 (下载、解压)
-│   └── plugin/              # JS 插件系统核心 (goja)
-│       └── store/           # 插件持久化 (SQLite)
+│   └── version/             # 版本信息和更新检查
 ├── web/                     # Vue 3 + naive-ui 前端
 ├── scripts/                 # 构建脚本
 │   ├── build.sh             # Linux/macOS 构建脚本
@@ -238,58 +237,11 @@ GoTunnel/
 └── go.mod
 ```
 
-## 插件系统
-
-GoTunnel 支持灵活的 JS 插件系统，可扩展代理协议和应用功能。
-
-### 插件类型
-
-| 类型 | 说明 | 运行位置 |
-|------|------|----------|
-| `app` | 应用插件 (如 HTTP 文件服务、Echo 服务) | 客户端 |
-
-### 插件来源
-
-- **JS 插件**: 基于 goja 运行时，支持动态加载和热更新
-- **插件商店**: 从服务端管理的插件商店浏览和安装
-
-### 开发 JS 插件
-
-详细的插件开发文档请参考 [PLUGINS.md](PLUGINS.md)。
-
-**快速示例 - Echo 插件：**
-
-```javascript
-function metadata() {
-    return {
-        name: "echo",
-        version: "1.0.0",
-        type: "app",
-        description: "Echo service plugin",
-        author: "GoTunnel"
-    };
-}
-
-function start() {
-    log("Echo plugin started");
-}
-
-function handleConn(conn) {
-    var data = conn.Read(1024);
-    if (data) {
-        conn.Write(data);
-    }
-    conn.Close();
-}
-
-function stop() {
-    log("Echo plugin stopped");
-}
-```
+> 说明：当前仓库不包含独立的 JS 插件系统，`plugin/` 相关目录和 `/api/plugins` 接口已从 README 中移除，以免与实际实现混淆。
 
 ## Web API
 
-Web 控制台提供 RESTful API 用于管理客户端和配置。配置了 `username` 和 `password` 后，API 需要 JWT 认证。
+Web 控制台提供 RESTful API 用于管理客户端、配置、更新和运行时操作。配置了 `username` 和 `password` 后，所有 `/api/*` 请求都需要 JWT 认证。
 
 ### 认证
 
@@ -306,68 +258,61 @@ Content-Type: application/json
 Authorization: Bearer <token>
 ```
 
-### 客户端管理
+### API 列表
 
-```bash
-# 获取所有客户端
-GET /api/clients
+#### 认证
 
-# 获取单个客户端
-GET /api/client/{id}
+- `POST /api/auth/login`
+- `GET /api/auth/check`
 
-# 更新客户端（昵称和规则）
-PUT /api/client/{id}
-Content-Type: application/json
-{"nickname": "办公室电脑", "rules": [...]}
+#### 状态与版本
 
-# 删除客户端
-DELETE /api/client/{id}
-```
+- `GET /api/status`
+- `GET /api/update/version`
 
-### 客户端控制
+#### 客户端管理
 
-```bash
-# 推送配置到在线客户端（客户端会立即应用新规则）
-POST /api/client/{id}/push
+- `GET /api/clients`
+- `POST /api/clients`
+- `GET /api/client/{id}`
+- `PUT /api/client/{id}`
+- `DELETE /api/client/{id}`
 
-# 断开客户端连接
-POST /api/client/{id}/disconnect
-```
+#### 客户端控制与远程运维
 
-### 插件管理
+- `POST /api/client/{id}/push`
+- `POST /api/client/{id}/disconnect`
+- `POST /api/client/{id}/restart`
+- `GET /api/client/{id}/logs`
+- `GET /api/client/{id}/system-stats`
+- `GET /api/client/{id}/screenshot`
+- `POST /api/client/{id}/shell`
 
-```bash
-# 获取已注册的插件列表
-GET /api/plugins
+#### 配置管理
 
-# 响应示例
-[
-  {
-    "name": "socks5",
-    "version": "1.0.0",
-    "description": "SOCKS5 proxy plugin",
-    "source": "builtin"
-  }
-]
-```
+- `GET /api/config`
+- `PUT /api/config`
 
-### 服务状态
+`PUT /api/config` 会把配置持久化到 YAML，并返回两类结果：已即时生效的运行时字段，以及需要重启服务后才会生效的字段。当前版本不再暴露独立的热重载入口。
 
-```bash
-# 获取服务状态
-GET /api/status
+#### 更新管理
 
-# 获取配置
-GET /api/config
+- `GET /api/update/check/server`
+- `GET /api/update/check/client`
+- `POST /api/update/apply/server`
+- `POST /api/update/apply/client`
 
-# 更新配置
-PUT /api/config
-Content-Type: application/json
-{"server": {"heartbeat_sec": 30}, "web": {"enabled": true}}
+#### 流量统计与安装
 
-# 重载配置
-POST /api/config/reload
-```
+- `GET /api/traffic/stats`
+- `GET /api/traffic/hourly`
+- `POST /api/install/generate`
+
+#### 安装脚本与客户端下载
+
+- `GET /install.sh`
+- `GET /install.ps1`
+- `GET /install/client`
 
 ## 使用场景
 
@@ -587,4 +532,3 @@ $env:VERSION="1.0.0"; .\scripts\build.ps1 all
 ## 许可证
 
 本项目采用 [MIT License](LICENSE) 开源许可证。
-

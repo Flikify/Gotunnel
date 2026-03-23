@@ -15,14 +15,16 @@ type ServerConfig struct {
 
 // ServerSettings 服务端设置
 type ServerSettings struct {
-	BindAddr         string      `yaml:"bind_addr"`
-	BindPort         int         `yaml:"bind_port"`
-	Token            string      `yaml:"token"`
-	HeartbeatSec     int         `yaml:"heartbeat_sec"`
-	HeartbeatTimeout int         `yaml:"heartbeat_timeout"`
-	DBPath           string      `yaml:"db_path"`
-	TLSDisabled      bool        `yaml:"tls_disabled"`
-	Web              WebSettings `yaml:"web"`
+	BindAddr                 string      `yaml:"bind_addr"`
+	BindPort                 int         `yaml:"bind_port"`
+	Token                    string      `yaml:"token"`
+	HeartbeatSec             int         `yaml:"heartbeat_sec"`
+	HeartbeatTimeout         int         `yaml:"heartbeat_timeout"`
+	MaxClientProxies         int         `yaml:"max_client_proxies"`
+	ClientResponseTimeoutSec int         `yaml:"client_response_timeout_sec"`
+	DBPath                   string      `yaml:"db_path"`
+	TLSDisabled              bool        `yaml:"tls_disabled"`
+	Web                      WebSettings `yaml:"web"`
 }
 
 // WebSettings Web控制台设置
@@ -64,6 +66,9 @@ func setDefaults(cfg *ServerConfig) {
 	}
 	if cfg.Server.HeartbeatTimeout == 0 {
 		cfg.Server.HeartbeatTimeout = 90
+	}
+	if cfg.Server.ClientResponseTimeoutSec == 0 {
+		cfg.Server.ClientResponseTimeoutSec = 15
 	}
 	if cfg.Server.DBPath == "" {
 		cfg.Server.DBPath = "gotunnel.db"

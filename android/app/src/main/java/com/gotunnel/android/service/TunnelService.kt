@@ -91,6 +91,7 @@ class TunnelService : Service() {
     override fun onDestroy() {
         runCatching { networkMonitor.stop() }
         runCatching { controller.stop("service-destroyed") }
+        controller.setListener(null)
         serviceScope.cancel()
         super.onDestroy()
     }

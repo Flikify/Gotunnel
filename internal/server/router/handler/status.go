@@ -2,18 +2,22 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
-	// removed router import
+	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/internal/server/router/dto"
 )
 
 // StatusHandler 状态处理器
 type StatusHandler struct {
-	app AppInterface
+	clientStore db.ClientStore
+	serverInfo  ServerInfoInterface
 }
 
 // NewStatusHandler 创建状态处理器
-func NewStatusHandler(app AppInterface) *StatusHandler {
-	return &StatusHandler{app: app}
+func NewStatusHandler(clientStore db.ClientStore, serverInfo ServerInfoInterface) *StatusHandler {
+	return &StatusHandler{
+		clientStore: clientStore,
+		serverInfo:  serverInfo,
+	}
 }
 
 // GetStatus 获取服务器状态
@@ -25,12 +29,12 @@ func NewStatusHandler(app AppInterface) *StatusHandler {
 // @Success 200 {object} Response{data=dto.StatusResponse}
 // @Router /api/status [get]
 func (h *StatusHandler) GetStatus(c *gin.Context) {
-	clients, _ := h.app.GetClientStore().GetAllClients()
+	clients, _ := h.clientStore.GetAllClients()
 
 	status := dto.StatusResponse{
 		Server: dto.ServerStatus{
-			BindAddr: h.app.GetServer().GetBindAddr(),
-			BindPort: h.app.GetServer().GetBindPort(),
+			BindAddr: h.serverInfo.GetBindAddr(),
+			BindPort: h.serverInfo.GetBindPort(),
 		},
 		ClientCount: len(clients),
 	}

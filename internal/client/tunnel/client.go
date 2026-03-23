@@ -110,7 +110,7 @@ func (c *Client) logf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	log.Print(msg)
 	if c.logger != nil {
-		c.logger.Printf(msg)
+		c.logger.Printf("%s", msg)
 	}
 }
 
@@ -118,7 +118,7 @@ func (c *Client) logErrorf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	log.Print(msg)
 	if c.logger != nil {
-		c.logger.Errorf(msg)
+		c.logger.Errorf("%s", msg)
 	}
 }
 
@@ -126,8 +126,30 @@ func (c *Client) logWarnf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	log.Print(msg)
 	if c.logger != nil {
-		c.logger.Warnf(msg)
+		c.logger.Warnf("%s", msg)
 	}
+}
+
+// ObserveLogs subscribes an in-process callback to future client log entries.
+func (c *Client) ObserveLogs(fn func(protocol.LogEntry)) func() {
+	if c.logger == nil || fn == nil {
+		return func() {}
+	}
+	return c.logger.AddObserver(fn)
+}
+
+// RulesSnapshot returns a copy of the latest proxy rules pushed by the server.
+func (c *Client) RulesSnapshot() []protocol.ProxyRule {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if len(c.rules) == 0 {
+		return nil
+	}
+
+	rules := make([]protocol.ProxyRule, len(c.rules))
+	copy(rules, c.rules)
+	return rules
 }
 
 // Run starts the reconnect loop until the process exits.
@@ -379,6 +401,12 @@ func (c *Client) handleNewProxy(stream net.Conn, msg *protocol.Message) {
 	localConn, err := net.DialTimeout("tcp", localAddr, localDialTimeout)
 	if err != nil {
 		c.logErrorf("Connect %s error: %v", localAddr, err)
+		c.sendProxyResult(stream, false, err.Error())
+		return
+	}
+	defer localConn.Close()
+
+	if err := c.sendProxyResult(stream, true, ""); err != nil {
 		return
 	}
 

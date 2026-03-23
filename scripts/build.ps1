@@ -86,7 +86,15 @@ function Compress-Binary {
 }
 
 function Build-Web {
+    Write-Info "Generating Swagger docs..."
+    & go generate (Join-Path $RootDir "cmd\server")
+    if ($LASTEXITCODE -ne 0) { throw "swagger generation failed" }
+
     Write-Info "Building web UI..."
+    $LegacyDistDir = Join-Path $RootDir "web\dist"
+    if (Test-Path $LegacyDistDir) {
+        Remove-Item -Recurse -Force $LegacyDistDir
+    }
 
     $WebDir = Join-Path $RootDir "web"
     Push-Location $WebDir
@@ -103,15 +111,6 @@ function Build-Web {
     } finally {
         Pop-Location
     }
-
-    Write-Info "Copying dist to embed directory..."
-    $DistSource = Join-Path $WebDir "dist"
-    $DistDest = Join-Path $RootDir "internal\server\app\dist"
-
-    if (Test-Path $DistDest) {
-        Remove-Item -Recurse -Force $DistDest
-    }
-    Copy-Item -Recurse $DistSource $DistDest
 
     Write-Info "Web UI built successfully"
 }
@@ -192,6 +191,7 @@ function Build-Current {
 
 function Build-Android {
     $OutputDir = Join-Path $BuildDir "android_arm64"
+    $AndroidLibDir = Join-Path $RootDir "android\app\libs"
     if (-not (Test-Path $OutputDir)) {
         New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
     }
@@ -210,10 +210,14 @@ function Build-Android {
 
     if (Get-Command gomobile -ErrorAction SilentlyContinue) {
         Write-Info "Building gomobile Android binding..."
-        & gomobile bind -target android/arm64 -o (Join-Path $OutputDir "gotunnelmobile.aar") "github.com/gotunnel/mobile/gotunnelmobile"
+        & gomobile bind -target android/arm64 -javapkg com.gotunnel.mobilebind -o (Join-Path $OutputDir "gotunnelmobile.aar") "github.com/gotunnel/mobile/gotunnelmobile"
         if ($LASTEXITCODE -ne 0) {
             throw "gomobile bind failed"
         }
+        if (-not (Test-Path $AndroidLibDir)) {
+            New-Item -ItemType Directory -Path $AndroidLibDir -Force | Out-Null
+        }
+        Copy-Item (Join-Path $OutputDir "gotunnelmobile.aar") (Join-Path $AndroidLibDir "gotunnelmobile.aar") -Force
     } else {
         Write-Warn "gomobile not found, skipping Android AAR build"
     }

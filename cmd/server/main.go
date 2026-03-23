@@ -1,5 +1,7 @@
 package main
 
+//go:generate go run github.com/swaggo/swag/cmd/swag init -g main.go -d .,../../internal/server/router/handler,../../internal/server/router/dto,../../internal/server/db,../../pkg/protocol -o ../../docs --parseDependency --parseInternal
+
 // @title GoTunnel API
 // @version 1.0
 // @description GoTunnel 内网穿透服务器 API
@@ -68,6 +70,12 @@ func main() {
 		cfg.Server.HeartbeatSec,
 		cfg.Server.HeartbeatTimeout,
 	)
+	server.ApplyRuntimeConfig(
+		cfg.Server.HeartbeatSec,
+		cfg.Server.HeartbeatTimeout,
+		cfg.Server.MaxClientProxies,
+		cfg.Server.ClientResponseTimeoutSec,
+	)
 
 	// 配置 TLS（默认启用）
 	if !cfg.Server.TLSDisabled {
@@ -95,7 +103,7 @@ func main() {
 			}
 		}
 
-		ws := app.NewWebServer(clientStore, server, cfg, *configPath, clientStore)
+		ws := app.NewWebServer(clientStore, server, cfg, *configPath)
 		addr := fmt.Sprintf("%s:%d", cfg.Server.BindAddr, cfg.Server.Web.BindPort)
 
 		go func() {

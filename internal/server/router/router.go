@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gotunnel/internal/server/db"
+	"github.com/gotunnel/internal/server/service"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
@@ -13,6 +15,18 @@ import (
 	"github.com/gotunnel/internal/server/router/middleware"
 	"github.com/gotunnel/pkg/auth"
 )
+
+// Dependencies declares the explicit contracts required to assemble HTTP routes.
+type Dependencies struct {
+	ClientStore       db.ClientStore
+	InstallTokenStore db.InstallTokenStore
+	ServerRuntime     handler.ServerInterface
+	ConfigService     service.ConfigService
+	TrafficStore      db.TrafficStore
+	JWTAuth           *auth.JWTAuth
+	Username          string
+	Password          string
+}
 
 // GinRouter Gin 路由管理器
 type GinRouter struct {
@@ -32,8 +46,9 @@ func (r *GinRouter) Handler() http.Handler {
 }
 
 // SetupRoutes 配置所有路由
-func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth, username, password string) {
+func (r *GinRouter) SetupRoutes(deps Dependencies) {
 	engine := r.Engine
+	remoteOps := service.NewRemoteOpsService(deps.ServerRuntime)
 
 	// 全局中间件
 	engine.Use(middleware.Recovery())
@@ -44,26 +59,27 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// 认证路由 (无需 JWT)
-	authHandler := handler.NewAuthHandler(username, password, jwtAuth)
+	authHandler := handler.NewAuthHandler(deps.Username, deps.Password, deps.JWTAuth)
 	engine.POST("/api/auth/login", authHandler.Login)
 	engine.GET("/api/auth/check", authHandler.Check)
 
-	installHandler := handler.NewInstallHandler(app)
+	installHandler := handler.NewInstallHandler(deps.InstallTokenStore, deps.ServerRuntime)
 	engine.GET("/install.sh", installHandler.ServeShellScript)
 	engine.GET("/install.ps1", installHandler.ServePowerShellScript)
 	engine.GET("/install/client", installHandler.DownloadClient)
 
 	// API 路由 (需要 JWT)
 	api := engine.Group("/api")
-	api.Use(middleware.JWTAuth(jwtAuth))
+	api.Use(middleware.JWTAuth(deps.JWTAuth))
 	{
 		// 状态
-		statusHandler := handler.NewStatusHandler(app)
+		statusHandler := handler.NewStatusHandler(deps.ClientStore, deps.ServerRuntime)
 		api.GET("/status", statusHandler.GetStatus)
 		api.GET("/update/version", statusHandler.GetVersion)
 
 		// 客户端管理
-		clientHandler := handler.NewClientHandler(app)
+		clientService := service.NewClientService(deps.ClientStore, service.NewClientRuntimeAdapter(deps.ServerRuntime), deps.ConfigService)
+		clientHandler := handler.NewClientHandler(clientService, remoteOps)
 		api.GET("/clients", clientHandler.List)
 		api.POST("/clients", clientHandler.Create)
 		api.GET("/client/:id", clientHandler.Get)
@@ -77,24 +93,23 @@ func (r *GinRouter) SetupRoutes(app handler.AppInterface, jwtAuth *auth.JWTAuth,
 		api.POST("/client/:id/shell", clientHandler.ExecuteShell)
 
 		// 配置管理
-		configHandler := handler.NewConfigHandler(app)
+		configHandler := handler.NewConfigHandler(deps.ConfigService)
 		api.GET("/config", configHandler.Get)
 		api.PUT("/config", configHandler.Update)
-		api.POST("/config/reload", configHandler.Reload)
 
 		// 更新管理
-		updateHandler := handler.NewUpdateHandler(app)
+		updateHandler := handler.NewUpdateHandler(service.NewUpdateService(deps.ServerRuntime))
 		api.GET("/update/check/server", updateHandler.CheckServer)
 		api.GET("/update/check/client", updateHandler.CheckClient)
 		api.POST("/update/apply/server", updateHandler.ApplyServer)
 		api.POST("/update/apply/client", updateHandler.ApplyClient)
 
 		// 日志管理
-		logHandler := handler.NewLogHandler(app)
+		logHandler := handler.NewLogHandler(remoteOps)
 		api.GET("/client/:id/logs", logHandler.StreamLogs)
 
 		// 流量统计
-		trafficHandler := handler.NewTrafficHandler(app)
+		trafficHandler := handler.NewTrafficHandler(deps.TrafficStore)
 		api.GET("/traffic/stats", trafficHandler.GetStats)
 		api.GET("/traffic/hourly", trafficHandler.GetHourly)
 
@@ -178,7 +193,4 @@ func isStaticAsset(path string) bool {
 }
 
 // Re-export types from handler package for backward compatibility
-type (
-	ServerInterface = handler.ServerInterface
-	AppInterface    = handler.AppInterface
-)
+type ServerInterface = handler.ServerInterface

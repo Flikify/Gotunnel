@@ -17,8 +17,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@android:color/transparent"
-            app:navigationIcon="@android:drawable/ic_menu_manage"
-            app:navigationIconTint="@color/gotunnel_text"
+            app:menu="@menu/main_actions"
             app:subtitle="@string/main_subtitle"
             app:subtitleTextColor="@color/gotunnel_text_muted"
             app:title="@string/home_title"
@@ -145,6 +144,55 @@
                     android:textColor="@color/gotunnel_text"
                     android:textIsSelectable="true"
                     android:textSize="13sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="@color/gotunnel_surface"
+            app:cardCornerRadius="24dp"
+            app:strokeColor="@color/gotunnel_border"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/active_tunnels_title"
+                    android:textColor="@color/gotunnel_text"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/active_tunnels_subtitle"
+                    android:textColor="@color/gotunnel_text_muted"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/activeTunnelEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/active_tunnels_empty"
+                    android:textColor="@color/gotunnel_text_muted"
+                    android:textSize="14sp" />
+
+                <LinearLayout
+                    android:id="@+id/activeTunnelList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

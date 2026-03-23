@@ -2,19 +2,19 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
-	// removed router import
 	"github.com/gotunnel/internal/server/router/dto"
+	"github.com/gotunnel/internal/server/service"
 	"github.com/gotunnel/pkg/version"
 )
 
 // UpdateHandler 更新处理器
 type UpdateHandler struct {
-	app AppInterface
+	updates service.UpdateService
 }
 
 // NewUpdateHandler 创建更新处理器
-func NewUpdateHandler(app AppInterface) *UpdateHandler {
-	return &UpdateHandler{app: app}
+func NewUpdateHandler(updates service.UpdateService) *UpdateHandler {
+	return &UpdateHandler{updates: updates}
 }
 
 // CheckServer 检查服务端更新
@@ -26,7 +26,7 @@ func NewUpdateHandler(app AppInterface) *UpdateHandler {
 // @Success 200 {object} Response{data=dto.CheckUpdateResponse}
 // @Router /api/update/check/server [get]
 func (h *UpdateHandler) CheckServer(c *gin.Context) {
-	updateInfo, err := checkUpdateForComponent("server")
+	updateInfo, err := h.updates.CheckServer()
 	if err != nil {
 		InternalError(c, err.Error())
 		return
@@ -51,7 +51,7 @@ func (h *UpdateHandler) CheckClient(c *gin.Context) {
 		return
 	}
 
-	updateInfo, err := checkClientUpdateForPlatform(query.OS, query.Arch)
+	updateInfo, err := h.updates.CheckClient(query.OS, query.Arch)
 	if err != nil {
 		InternalError(c, err.Error())
 		return
@@ -79,7 +79,7 @@ func (h *UpdateHandler) ApplyServer(c *gin.Context) {
 
 	// 异步执行更新
 	go func() {
-		if err := performSelfUpdate(req.DownloadURL, req.Restart); err != nil {
+		if err := h.updates.ApplyServer(req.DownloadURL, req.Restart); err != nil {
 			println("[Update] Server update failed:", err.Error())
 		}
 	}()
@@ -108,7 +108,7 @@ func (h *UpdateHandler) ApplyClient(c *gin.Context) {
 	}
 
 	// 发送更新命令到客户端
-	if err := h.app.GetServer().SendUpdateToClient(req.ClientID, req.DownloadURL); err != nil {
+	if err := h.updates.ApplyClient(req.ClientID, req.DownloadURL); err != nil {
 		InternalError(c, err.Error())
 		return
 	}

@@ -6,9 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gotunnel/internal/server/domain"
 	_ "modernc.org/sqlite"
-
-	"github.com/gotunnel/pkg/protocol"
 )
 
 // SQLiteStore SQLite 存储实现
@@ -40,7 +39,12 @@ func (s *SQLiteStore) init() error {
 		CREATE TABLE IF NOT EXISTS clients (
 			id TEXT PRIMARY KEY,
 			nickname TEXT NOT NULL DEFAULT '',
-			rules TEXT NOT NULL DEFAULT '[]'
+			rules TEXT NOT NULL DEFAULT '[]',
+			last_remote_addr TEXT NOT NULL DEFAULT '',
+			last_os TEXT NOT NULL DEFAULT '',
+			last_arch TEXT NOT NULL DEFAULT '',
+			last_version TEXT NOT NULL DEFAULT '',
+			last_offline_at INTEGER NOT NULL DEFAULT 0
 		)
 	`)
 	if err != nil {
@@ -49,6 +53,11 @@ func (s *SQLiteStore) init() error {
 
 	// 迁移：添加 nickname 列
 	s.db.Exec(`ALTER TABLE clients ADD COLUMN nickname TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE clients ADD COLUMN last_remote_addr TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE clients ADD COLUMN last_os TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE clients ADD COLUMN last_arch TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE clients ADD COLUMN last_version TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE clients ADD COLUMN last_offline_at INTEGER NOT NULL DEFAULT 0`)
 
 	// 创建流量统计表
 	_, err = s.db.Exec(`
@@ -103,7 +112,10 @@ func (s *SQLiteStore) GetAllClients() ([]Client, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT id, nickname, rules FROM clients`)
+	rows, err := s.db.Query(`
+		SELECT id, nickname, rules, last_remote_addr, last_os, last_arch, last_version, last_offline_at
+		FROM clients
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +125,20 @@ func (s *SQLiteStore) GetAllClients() ([]Client, error) {
 	for rows.Next() {
 		var c Client
 		var rulesJSON string
-		if err := rows.Scan(&c.ID, &c.Nickname, &rulesJSON); err != nil {
+		if err := rows.Scan(
+			&c.ID,
+			&c.Nickname,
+			&rulesJSON,
+			&c.LastRemoteAddr,
+			&c.LastOS,
+			&c.LastArch,
+			&c.LastVersion,
+			&c.LastOfflineAt,
+		); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(rulesJSON), &c.Rules); err != nil {
-			c.Rules = []protocol.ProxyRule{}
+			c.Rules = []domain.ProxyRule{}
 		}
 		clients = append(clients, c)
 	}
@@ -131,12 +152,24 @@ func (s *SQLiteStore) GetClient(id string) (*Client, error) {
 
 	var c Client
 	var rulesJSON string
-	err := s.db.QueryRow(`SELECT id, nickname, rules FROM clients WHERE id = ?`, id).Scan(&c.ID, &c.Nickname, &rulesJSON)
+	err := s.db.QueryRow(`
+		SELECT id, nickname, rules, last_remote_addr, last_os, last_arch, last_version, last_offline_at
+		FROM clients WHERE id = ?
+	`, id).Scan(
+		&c.ID,
+		&c.Nickname,
+		&rulesJSON,
+		&c.LastRemoteAddr,
+		&c.LastOS,
+		&c.LastArch,
+		&c.LastVersion,
+		&c.LastOfflineAt,
+	)
 	if err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(rulesJSON), &c.Rules); err != nil {
-		c.Rules = []protocol.ProxyRule{}
+		c.Rules = []domain.ProxyRule{}
 	}
 	return &c, nil
 }
@@ -150,8 +183,12 @@ func (s *SQLiteStore) CreateClient(c *Client) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`INSERT INTO clients (id, nickname, rules) VALUES (?, ?, ?)`,
-		c.ID, c.Nickname, string(rulesJSON))
+	_, err = s.db.Exec(`
+		INSERT INTO clients (
+			id, nickname, rules, last_remote_addr, last_os, last_arch, last_version, last_offline_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		c.ID, c.Nickname, string(rulesJSON), c.LastRemoteAddr, c.LastOS, c.LastArch, c.LastVersion, c.LastOfflineAt)
 	return err
 }
 
@@ -164,8 +201,12 @@ func (s *SQLiteStore) UpdateClient(c *Client) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`UPDATE clients SET nickname = ?, rules = ? WHERE id = ?`,
-		c.Nickname, string(rulesJSON), c.ID)
+	_, err = s.db.Exec(`
+		UPDATE clients
+		SET nickname = ?, rules = ?, last_remote_addr = ?, last_os = ?, last_arch = ?, last_version = ?, last_offline_at = ?
+		WHERE id = ?
+	`,
+		c.Nickname, string(rulesJSON), c.LastRemoteAddr, c.LastOS, c.LastArch, c.LastVersion, c.LastOfflineAt, c.ID)
 	return err
 }
 
@@ -189,7 +230,7 @@ func (s *SQLiteStore) ClientExists(id string) (bool, error) {
 }
 
 // GetClientRules 获取客户端规则
-func (s *SQLiteStore) GetClientRules(id string) ([]protocol.ProxyRule, error) {
+func (s *SQLiteStore) GetClientRules(id string) ([]domain.ProxyRule, error) {
 	c, err := s.GetClient(id)
 	if err != nil {
 		return nil, err

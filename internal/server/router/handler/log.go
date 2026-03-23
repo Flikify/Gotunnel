@@ -7,16 +7,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/gotunnel/internal/server/service"
 )
 
 // LogHandler 日志处理器
 type LogHandler struct {
-	app AppInterface
+	remoteOps service.RemoteOpsService
 }
 
 // NewLogHandler 创建日志处理器
-func NewLogHandler(app AppInterface) *LogHandler {
-	return &LogHandler{app: app}
+func NewLogHandler(remoteOps service.RemoteOpsService) *LogHandler {
+	return &LogHandler{remoteOps: remoteOps}
 }
 
 // StreamLogs 流式传输客户端日志
@@ -29,13 +30,13 @@ func NewLogHandler(app AppInterface) *LogHandler {
 // @Param lines query int false "初始日志行数" default(100)
 // @Param follow query bool false "是否持续推送新日志" default(true)
 // @Param level query string false "日志级别过滤 (info, warn, error)"
-// @Success 200 {object} protocol.LogEntry
+// @Success 200 {string} string "Server-Sent Events stream"
 // @Router /api/client/{id}/logs [get]
 func (h *LogHandler) StreamLogs(c *gin.Context) {
 	clientID := c.Param("id")
 
 	// 检查客户端是否在线
-	if !h.app.GetServer().IsClientOnline(clientID) {
+	if !h.remoteOps.IsClientOnline(clientID) {
 		c.JSON(400, gin.H{"code": 400, "message": "client not online"})
 		return
 	}
@@ -59,7 +60,7 @@ func (h *LogHandler) StreamLogs(c *gin.Context) {
 	sessionID := uuid.New().String()
 
 	// 启动日志流
-	logCh, err := h.app.GetServer().StartClientLogStream(clientID, sessionID, lines, follow, level)
+	logCh, err := h.remoteOps.StartClientLogStream(clientID, sessionID, lines, follow, level)
 	if err != nil {
 		c.JSON(500, gin.H{"code": 500, "message": err.Error()})
 		return
@@ -78,7 +79,7 @@ func (h *LogHandler) StreamLogs(c *gin.Context) {
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case <-clientGone:
-			h.app.GetServer().StopClientLogStream(sessionID)
+			h.remoteOps.StopClientLogStream(sessionID)
 			return false
 		case entry, ok := <-logCh:
 			if !ok {

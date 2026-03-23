@@ -7,6 +7,7 @@ import {
   getServerConfig,
   getVersionInfo,
   updateServerConfig,
+  type ConfigUpdateResult,
   type ServerConfigResponse,
   type UpdateServerConfigRequest,
   type VersionInfo,
@@ -23,6 +24,8 @@ const saving = ref(false)
 const configForm = ref({
   heartbeat_sec: 30,
   heartbeat_timeout: 90,
+  max_client_proxies: 0,
+  client_response_timeout_sec: 15,
   web_username: '',
   web_password: '',
 })
@@ -47,6 +50,8 @@ const loadServerConfig = async () => {
     configForm.value = {
       heartbeat_sec: data.server.heartbeat_sec,
       heartbeat_timeout: data.server.heartbeat_timeout,
+      max_client_proxies: data.server.max_client_proxies,
+      client_response_timeout_sec: data.server.client_response_timeout_sec,
       web_username: data.web.username,
       web_password: '',
     }
@@ -59,12 +64,23 @@ const loadServerConfig = async () => {
 }
 
 const handleSaveConfig = async () => {
+  if (configForm.value.heartbeat_timeout < configForm.value.heartbeat_sec) {
+    message.error('心跳超时必须大于或等于心跳间隔')
+    return
+  }
+  if (configForm.value.max_client_proxies < 0) {
+    message.error('单客户端最大代理数不能小于 0')
+    return
+  }
+
   saving.value = true
   try {
     const payload: UpdateServerConfigRequest = {
       server: {
         heartbeat_sec: configForm.value.heartbeat_sec,
         heartbeat_timeout: configForm.value.heartbeat_timeout,
+        max_client_proxies: configForm.value.max_client_proxies,
+        client_response_timeout_sec: configForm.value.client_response_timeout_sec,
       },
       web: {
         username: configForm.value.web_username,
@@ -78,11 +94,16 @@ const handleSaveConfig = async () => {
       }
     }
 
-    await updateServerConfig(payload)
+    const { data } = await updateServerConfig(payload)
     configForm.value.web_password = ''
-    message.success('配置已保存，部分配置需要重启后生效')
+    const restartFields = (data as ConfigUpdateResult).restart_required_fields || []
+    if (restartFields.length > 0) {
+      message.success(`配置已保存，以下变更需重启生效：${restartFields.join(', ')}`)
+      return
+    }
+    message.success('配置已保存并同步了可热生效项')
   } catch (error: any) {
-    message.error(error.response?.data || '保存配置失败')
+    message.error(error.response?.data?.message || '保存配置失败')
   } finally {
     saving.value = false
   }
@@ -105,7 +126,7 @@ onMounted(() => {
       <MetricCard label="当前版本" :value="versionInfo?.version || '—'" :hint="versionInfo?.git_commit?.slice(0, 8) || '未知提交'" />
       <MetricCard label="Go 版本" :value="versionInfo?.go_version || '—'" hint="运行时版本" tone="info" />
       <MetricCard label="运行平台" :value="versionInfo ? `${versionInfo.os}/${versionInfo.arch}` : '—'" hint="服务端当前平台" tone="success" />
-      <MetricCard label="Web 用户名" :value="configForm.web_username || '—'" hint="控制台登录账号" tone="warning" />
+      <MetricCard label="单客户端代理上限" :value="configForm.max_client_proxies === 0 ? '无限制' : String(configForm.max_client_proxies)" hint="0 表示不限制" tone="warning" />
     </template>
 
     <div class="settings-grid">
@@ -122,7 +143,7 @@ onMounted(() => {
         <div v-else class="empty-state">无法获取版本信息。</div>
       </SectionCard>
 
-      <SectionCard title="服务配置" description="保留最常用的心跳与登录项配置，页面结构更精简。">
+      <SectionCard title="服务配置" description="统一配置心跳、客户端响应超时和单客户端代理上限。带运行时效果的选项保存后会立即生效，Web 登录凭据仍需重启服务端。">
         <div v-if="loadingConfig" class="empty-state">正在加载服务器配置...</div>
         <form v-else class="config-form" @submit.prevent="handleSaveConfig">
           <label class="form-group">
@@ -131,7 +152,17 @@ onMounted(() => {
           </label>
           <label class="form-group">
             <span>心跳超时（秒）</span>
-            <input v-model.number="configForm.heartbeat_timeout" class="glass-input" min="1" max="600" type="number" />
+            <input v-model.number="configForm.heartbeat_timeout" class="glass-input" min="1" max="3600" type="number" />
+          </label>
+          <label class="form-group">
+            <span>客户端响应超时（秒）</span>
+            <input v-model.number="configForm.client_response_timeout_sec" class="glass-input" min="1" max="300" type="number" />
+            <small class="form-hint">外部用户连入代理后，服务端等待客户端建立本地连接并返回结果的最长时间。</small>
+          </label>
+          <label class="form-group">
+            <span>单客户端最大代理数</span>
+            <input v-model.number="configForm.max_client_proxies" class="glass-input" min="0" max="10000" type="number" />
+            <small class="form-hint">`0` 表示无限制。超过上限时，保存客户端规则会被拒绝。</small>
           </label>
           <label class="form-group form-group--full">
             <span>Web 用户名</span>
@@ -191,6 +222,12 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.form-hint {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .form-group--full {

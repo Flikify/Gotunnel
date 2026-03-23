@@ -115,7 +115,7 @@ const handleApplyServerUpdate = () => {
     onPositiveClick: async () => {
       updatingServer.value = true
       try {
-        await applyServerUpdate(updateInfo.value!.download_url)
+        await applyServerUpdate(updateInfo.value!.download_url!)
         message.success('升级任务已提交，页面将在 5 秒后尝试刷新')
         showUpdateModal.value = false
         window.setTimeout(() => window.location.reload(), 5000)
@@ -240,7 +240,7 @@ onUnmounted(() => {
         <div><span>当前版本</span><strong>{{ updateInfo.current }}</strong></div>
         <div><span>最新版本</span><strong>{{ updateInfo.latest }}</strong></div>
         <div><span>文件名</span><strong>{{ updateInfo.asset_name || '未提供' }}</strong></div>
-        <div><span>文件大小</span><strong>{{ formatBytes(updateInfo.asset_size) }}</strong></div>
+        <div><span>文件大小</span><strong>{{ formatBytes(updateInfo.asset_size || 0) }}</strong></div>
       </div>
       <div v-if="updateInfo?.release_note" class="release-note">{{ updateInfo.release_note }}</div>
       <template #footer>

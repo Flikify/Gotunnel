@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/gotunnel/pkg/protocol"
+	"github.com/gotunnel/internal/server/domain"
 	"github.com/gotunnel/pkg/relay"
 )
 
@@ -91,7 +91,7 @@ func (a *WSConnAdapter) SetWriteDeadline(t time.Time) error {
 }
 
 // acceptWebsocketConns 接受 Websocket 连接
-func (s *Server) acceptWebsocketConns(cs *ClientSession, ln net.Listener, rule protocol.ProxyRule) {
+func (m *proxyManager) acceptWebsocketConns(cs *ClientSession, ln net.Listener, rule domain.ProxyRule) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		wsConn, err := upgrader.Upgrade(w, r, nil)
@@ -106,7 +106,7 @@ func (s *Server) acceptWebsocketConns(cs *ClientSession, ln net.Listener, rule p
 		// 查看 relay.Relay 签名：func Relay(c1, c2 io.ReadWriteCloser)
 		// 假设 relay.Relay 接受 io.ReadWriteCloser。
 
-		go s.handleWebsocketProxyConn(cs, conn, rule)
+		go m.handleWebsocketProxyConn(cs, conn, rule)
 	})
 
 	server := &http.Server{
@@ -125,7 +125,7 @@ func (s *Server) acceptWebsocketConns(cs *ClientSession, ln net.Listener, rule p
 }
 
 // handleWebsocketProxyConn 处理 Websocket 代理连接
-func (s *Server) handleWebsocketProxyConn(cs *ClientSession, conn net.Conn, rule protocol.ProxyRule) {
+func (m *proxyManager) handleWebsocketProxyConn(cs *ClientSession, conn net.Conn, rule domain.ProxyRule) {
 	defer conn.Close()
 
 	stream, err := cs.Session.Open()
@@ -135,12 +135,10 @@ func (s *Server) handleWebsocketProxyConn(cs *ClientSession, conn net.Conn, rule
 	}
 	defer stream.Close()
 
-	// 发送新代理连接请求，告知客户端连接到哪里
-	req := protocol.NewProxyRequest{RemotePort: rule.RemotePort}
-	msg, _ := protocol.NewMessage(protocol.MsgTypeNewProxy, req)
-	if err := protocol.WriteMessage(stream, msg); err != nil {
+	if err := m.requestProxyOpen(stream, rule.RemotePort); err != nil {
+		log.Printf("[Server] Websocket proxy %s open failed for client %s on port %d: %v", rule.Name, cs.ID, rule.RemotePort, err)
 		return
 	}
 
-	relay.RelayWithStats(conn, stream, s.recordTraffic)
+	relay.RelayWithStats(conn, stream, m.recordTraffic)
 }

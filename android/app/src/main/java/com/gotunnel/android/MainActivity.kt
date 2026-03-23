@@ -3,25 +3,45 @@ package com.gotunnel.android
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.IdRes
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.android.material.card.MaterialCardView
+import com.gotunnel.android.bridge.ActiveTunnel
+import com.gotunnel.android.bridge.GoTunnelBridge
 import com.gotunnel.android.bridge.TunnelStatus
 import com.gotunnel.android.config.ConfigStore
 import com.gotunnel.android.config.LogStore
 import com.gotunnel.android.config.ServiceStateStore
 import com.gotunnel.android.databinding.ActivityMainBinding
 import com.gotunnel.android.service.TunnelService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+    private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var refreshJob: Job? = null
     private lateinit var configStore: ConfigStore
     private lateinit var stateStore: ServiceStateStore
     private lateinit var logStore: LogStore
+    private lateinit var tunnelController: com.gotunnel.android.bridge.TunnelController
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -40,9 +60,10 @@ class MainActivity : AppCompatActivity() {
         configStore = ConfigStore(this)
         stateStore = ServiceStateStore(this)
         logStore = LogStore(this)
+        tunnelController = GoTunnelBridge.create(applicationContext)
 
-        binding.topToolbar.setNavigationOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
+        binding.topToolbar.setOnMenuItemClickListener { item ->
+            handleToolbarAction(item.itemId)
         }
 
         binding.startButton.setOnClickListener {
@@ -74,6 +95,22 @@ class MainActivity : AppCompatActivity() {
         renderScreen()
     }
 
+    override fun onStart() {
+        super.onStart()
+        startRefreshLoop()
+    }
+
+    override fun onStop() {
+        refreshJob?.cancel()
+        refreshJob = null
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        uiScope.cancel()
+        super.onDestroy()
+    }
+
     private fun renderScreen() {
         val config = configStore.load()
         val state = stateStore.load()
@@ -93,6 +130,7 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.status_server_configured, config.serverAddress)
         }
         binding.logValue.text = logStore.render()
+        renderActiveTunnels(tunnelController.getActiveTunnels())
     }
 
     private fun getStatusLabel(status: TunnelStatus): String {
@@ -127,6 +165,132 @@ class MainActivity : AppCompatActivity() {
         ) == PackageManager.PERMISSION_GRANTED
         if (!granted) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun startRefreshLoop() {
+        refreshJob?.cancel()
+        refreshJob = uiScope.launch {
+            while (isActive) {
+                renderScreen()
+                delay(1_000L)
+            }
+        }
+    }
+
+    private fun renderActiveTunnels(tunnels: List<ActiveTunnel>) {
+        binding.activeTunnelList.removeAllViews()
+        binding.activeTunnelEmpty.visibility = if (tunnels.isEmpty()) View.VISIBLE else View.GONE
+
+        tunnels.forEachIndexed { index, tunnel ->
+            binding.activeTunnelList.addView(buildTunnelItemView(tunnel, index > 0))
+        }
+    }
+
+    private fun buildTunnelItemView(tunnel: ActiveTunnel, addTopMargin: Boolean): View {
+        val card = MaterialCardView(this).apply {
+            radius = dp(18).toFloat()
+            strokeWidth = dp(1)
+            setCardBackgroundColor(ContextCompat.getColor(context, R.color.gotunnel_background))
+            strokeColor = ContextCompat.getColor(context, R.color.gotunnel_border)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                if (addTopMargin) {
+                    topMargin = dp(12)
+                }
+            }
+        }
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+        }
+
+        val title = TextView(this).apply {
+            text = tunnel.name.ifBlank {
+                tunnel.type.uppercase().ifBlank { getString(R.string.active_tunnel_title_fallback) }
+            }
+            setTextColor(ContextCompat.getColor(context, R.color.gotunnel_text))
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+
+        val serverPort = TextView(this).apply {
+            text = getString(R.string.active_tunnel_server_port, formatPort(tunnel.remotePort))
+            setTextColor(ContextCompat.getColor(context, R.color.gotunnel_text))
+            textSize = 14f
+            setPadding(0, dp(10), 0, 0)
+        }
+
+        val clientPort = TextView(this).apply {
+            text = getString(R.string.active_tunnel_client_port, formatPort(tunnel.localPort))
+            setTextColor(ContextCompat.getColor(context, R.color.gotunnel_text))
+            textSize = 14f
+            setPadding(0, dp(4), 0, 0)
+        }
+
+        val establishedAt = TextView(this).apply {
+            text = getString(R.string.active_tunnel_established_at, formatEstablishedAt(tunnel.connectedAt))
+            setTextColor(ContextCompat.getColor(context, R.color.gotunnel_text_muted))
+            textSize = 13f
+            setPadding(0, dp(8), 0, 0)
+        }
+
+        val duration = TextView(this).apply {
+            text = getString(R.string.active_tunnel_duration, formatDuration(tunnel.connectedAt))
+            setTextColor(ContextCompat.getColor(context, R.color.gotunnel_text_muted))
+            textSize = 13f
+            setPadding(0, dp(4), 0, 0)
+        }
+
+        container.addView(title)
+        container.addView(serverPort)
+        container.addView(clientPort)
+        container.addView(establishedAt)
+        container.addView(duration)
+        card.addView(container)
+        return card
+    }
+
+    private fun formatEstablishedAt(timestamp: Long): String {
+        if (timestamp <= 0L) {
+            return getString(R.string.state_never_updated)
+        }
+        return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(Date(timestamp))
+    }
+
+    private fun formatDuration(connectedAt: Long): String {
+        if (connectedAt <= 0L) {
+            return "00:00:00"
+        }
+
+        val totalSeconds = ((System.currentTimeMillis() - connectedAt).coerceAtLeast(0L)) / 1_000L
+        val hours = totalSeconds / 3_600L
+        val minutes = (totalSeconds % 3_600L) / 60L
+        val seconds = totalSeconds % 60L
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    }
+
+    private fun formatPort(port: Int): String {
+        return if (port > 0) {
+            port.toString()
+        } else {
+            getString(R.string.active_tunnel_unknown_port)
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun handleToolbarAction(@IdRes itemId: Int): Boolean {
+        return when (itemId) {
+            R.id.action_settings -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+
+            else -> false
         }
     }
 }

@@ -1,23 +1,9 @@
 package handler
 
-import (
-	"github.com/gotunnel/internal/server/config"
-	"github.com/gotunnel/internal/server/db"
-	"github.com/gotunnel/pkg/protocol"
-)
+import "github.com/gotunnel/internal/server/service"
 
-// AppInterface 应用接口
-type AppInterface interface {
-	GetClientStore() db.ClientStore
-	GetServer() ServerInterface
-	GetConfig() *config.ServerConfig
-	GetConfigPath() string
-	SaveConfig() error
-	GetTrafficStore() db.TrafficStore
-}
-
-// ServerInterface 服务端接口
-type ServerInterface interface {
+// ClientRuntimeInterface covers client status and control operations used by ClientHandler.
+type ClientRuntimeInterface interface {
 	IsClientOnline(clientID string) bool
 	GetClientStatus(clientID string) (online bool, lastPing, remoteAddr, clientName, clientOS, clientArch, clientVersion string)
 	GetAllClientStatus() map[string]struct {
@@ -29,22 +15,29 @@ type ServerInterface interface {
 		Arch       string
 		Version    string
 	}
-	ReloadConfig() error
-	GetBindAddr() string
-	GetBindPort() int
 	PushConfigToClient(clientID string) error
 	DisconnectClient(clientID string) error
 	RestartClient(clientID string) error
+}
+
+// UpdateRuntimeInterface covers client update delivery.
+type UpdateRuntimeInterface interface {
 	SendUpdateToClient(clientID, downloadURL string) error
-	// 日志流
-	StartClientLogStream(clientID, sessionID string, lines int, follow bool, level string) (<-chan protocol.LogEntry, error)
-	StopClientLogStream(sessionID string)
+}
+
+// ServerInfoInterface provides readonly server bind information.
+type ServerInfoInterface interface {
+	GetBindAddr() string
+	GetBindPort() int
+}
+
+// ServerInterface 服务端接口
+type ServerInterface interface {
+	ClientRuntimeInterface
+	UpdateRuntimeInterface
+	ServerInfoInterface
+	service.RemoteOpsRuntime
+	ApplyRuntimeConfig(heartbeatSec, heartbeatTimeoutSec, maxClientProxies, clientResponseTimeoutSec int)
 	// 端口检查
 	IsPortAvailable(port int, excludeClientID string) bool
-	// 系统状态
-	GetClientSystemStats(clientID string) (*protocol.SystemStatsResponse, error)
-	// 截图
-	GetClientScreenshot(clientID string, quality int) (*protocol.ScreenshotResponse, error)
-	// Shell 执行
-	ExecuteClientShell(clientID, command string, timeout int) (*protocol.ShellExecuteResponse, error)
 }

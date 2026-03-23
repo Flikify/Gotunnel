@@ -8,29 +8,32 @@ import (
 	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/db"
 	"github.com/gotunnel/internal/server/router"
+	"github.com/gotunnel/internal/server/service"
 	"github.com/gotunnel/pkg/auth"
 )
 
 //go:embed all:dist/*
 var staticFiles embed.FS
 
+type webStore interface {
+	db.ClientStore
+	db.InstallTokenStore
+	db.TrafficStore
+}
+
 // WebServer Web控制台服务
 type WebServer struct {
-	ClientStore  db.ClientStore
-	Server       router.ServerInterface
-	Config       *config.ServerConfig
-	ConfigPath   string
-	TrafficStore db.TrafficStore
+	Store     webStore
+	Server    router.ServerInterface
+	ConfigSvc service.ConfigService
 }
 
 // NewWebServer 创建Web服务
-func NewWebServer(cs db.ClientStore, srv router.ServerInterface, cfg *config.ServerConfig, cfgPath string, store db.Store) *WebServer {
+func NewWebServer(store webStore, srv router.ServerInterface, cfg *config.ServerConfig, cfgPath string) *WebServer {
 	return &WebServer{
-		ClientStore:  cs,
-		Server:       srv,
-		Config:       cfg,
-		ConfigPath:   cfgPath,
-		TrafficStore: store,
+		Store:     store,
+		Server:    srv,
+		ConfigSvc: service.NewConfigService(cfg, cfgPath, srv),
 	}
 }
 
@@ -40,7 +43,16 @@ func (w *WebServer) Run(addr string) error {
 
 	// 使用默认凭据和 JWT
 	jwtAuth := auth.NewJWTAuth("dev-secret", 24)
-	r.SetupRoutes(w, jwtAuth, "admin", "admin")
+	r.SetupRoutes(router.Dependencies{
+		ClientStore:       w.Store,
+		InstallTokenStore: w.Store,
+		ServerRuntime:     w.Server,
+		ConfigService:     w.ConfigSvc,
+		TrafficStore:      w.Store,
+		JWTAuth:           jwtAuth,
+		Username:          "admin",
+		Password:          "admin",
+	})
 
 	// 静态文件
 	staticFS, err := fs.Sub(staticFiles, "dist")
@@ -67,7 +79,16 @@ func (w *WebServer) RunWithJWT(addr, username, password, jwtSecret string) error
 	jwtAuth := auth.NewJWTAuth(jwtSecret, 24) // 24小时过期
 
 	// 设置所有路由
-	r.SetupRoutes(w, jwtAuth, username, password)
+	r.SetupRoutes(router.Dependencies{
+		ClientStore:       w.Store,
+		InstallTokenStore: w.Store,
+		ServerRuntime:     w.Server,
+		ConfigService:     w.ConfigSvc,
+		TrafficStore:      w.Store,
+		JWTAuth:           jwtAuth,
+		Username:          username,
+		Password:          password,
+	})
 
 	// 静态文件
 	staticFS, err := fs.Sub(staticFiles, "dist")
@@ -78,34 +99,4 @@ func (w *WebServer) RunWithJWT(addr, username, password, jwtSecret string) error
 
 	log.Printf("[Web] Console listening on %s (JWT auth enabled)", addr)
 	return r.Engine.Run(addr)
-}
-
-// GetClientStore 获取客户端存储
-func (w *WebServer) GetClientStore() db.ClientStore {
-	return w.ClientStore
-}
-
-// GetServer 获取服务端接口
-func (w *WebServer) GetServer() router.ServerInterface {
-	return w.Server
-}
-
-// GetConfig 获取配置
-func (w *WebServer) GetConfig() *config.ServerConfig {
-	return w.Config
-}
-
-// GetConfigPath 获取配置文件路径
-func (w *WebServer) GetConfigPath() string {
-	return w.ConfigPath
-}
-
-// SaveConfig 保存配置
-func (w *WebServer) SaveConfig() error {
-	return config.SaveServerConfig(w.ConfigPath, w.Config)
-}
-
-// GetTrafficStore 获取流量存储
-func (w *WebServer) GetTrafficStore() db.TrafficStore {
-	return w.TrafficStore
 }

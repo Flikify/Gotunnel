@@ -17,11 +17,6 @@ const docTemplate = `{
     "paths": {
         "/api/auth/check": {
             "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
                 "description": "验证 JWT token 是否有效",
                 "produces": [
                     "application/json"
@@ -36,13 +31,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.TokenCheckResponse"
+                                            "$ref": "#/definitions/dto.TokenCheckResponse"
                                         }
                                     }
                                 }
@@ -52,10 +47,15 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
             }
         },
         "/api/auth/login": {
@@ -78,7 +78,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.LoginRequest"
+                            "$ref": "#/definitions/dto.LoginRequest"
                         }
                     }
                 ],
@@ -88,13 +88,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.LoginResponse"
+                                            "$ref": "#/definitions/dto.LoginResponse"
                                         }
                                     }
                                 }
@@ -104,135 +104,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/client-plugin/{clientID}/{pluginName}/config": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取客户端上指定插件的配置",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "插件"
-                ],
-                "summary": "获取客户端插件配置",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "客户端ID",
-                        "name": "clientID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "插件名称",
-                        "name": "pluginName",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.PluginConfigResponse"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "更新客户端上指定插件的配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "插件"
-                ],
-                "summary": "更新客户端插件配置",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "客户端ID",
-                        "name": "clientID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "插件名称",
-                        "name": "pluginName",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "配置内容",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.PluginConfigRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
                 }
@@ -240,11 +118,6 @@ const docTemplate = `{
         },
         "/api/client/{id}": {
             "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
                 "description": "获取指定客户端的详细信息",
                 "produces": [
                     "application/json"
@@ -268,13 +141,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ClientResponse"
+                                            "$ref": "#/definitions/dto.ClientResponse"
                                         }
                                     }
                                 }
@@ -284,17 +157,17 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "更新指定客户端的配置信息",
                 "consumes": [
                     "application/json"
@@ -320,7 +193,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.UpdateClientRequest"
+                            "$ref": "#/definitions/dto.UpdateClientRequest"
                         }
                     }
                 ],
@@ -328,29 +201,29 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "删除指定的客户端配置",
                 "produces": [
                     "application/json"
@@ -372,25 +245,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            }
-        },
-        "/api/client/{id}/disconnect": {
-            "post": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            }
+        },
+        "/api/client/{id}/disconnect": {
+            "post": {
                 "description": "强制断开客户端连接",
                 "produces": [
                     "application/json"
@@ -412,142 +285,73 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            }
-        },
-        "/api/client/{id}/install-plugins": {
-            "post": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
-                "description": "将指定插件安装到客户端",
-                "consumes": [
-                    "application/json"
-                ],
+                ]
+            }
+        },
+        "/api/client/{id}/logs": {
+            "get": {
+                "description": "通过 Server-Sent Events 实时接收客户端日志",
                 "produces": [
-                    "application/json"
+                    "text/event-stream"
                 ],
                 "tags": [
-                    "客户端"
+                    "Logs"
                 ],
-                "summary": "安装插件",
+                "summary": "流式传输客户端日志",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "客户端ID",
+                        "description": "客户端 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "插件列表",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.InstallPluginsRequest"
-                        }
+                        "type": "integer",
+                        "default": 100,
+                        "description": "初始日志行数",
+                        "name": "lines",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "是否持续推送新日志",
+                        "name": "follow",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "日志级别过滤 (info, warn, error)",
+                        "name": "level",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Server-Sent Events stream",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/api/client/{id}/plugin/{pluginName}/{action}": {
-            "post": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
-                "description": "对客户端插件执行操作(stop/restart/config/delete)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "客户端"
-                ],
-                "summary": "插件操作",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "客户端ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "插件名称",
-                        "name": "pluginName",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "stop",
-                            "restart",
-                            "config",
-                            "delete"
-                        ],
-                        "type": "string",
-                        "description": "操作类型",
-                        "name": "action",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "操作参数",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ClientPluginActionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
+                ]
             }
         },
         "/api/client/{id}/push": {
             "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
                 "description": "将配置推送到在线客户端",
                 "produces": [
                     "application/json"
@@ -569,25 +373,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            }
-        },
-        "/api/client/{id}/restart": {
-            "post": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            }
+        },
+        "/api/client/{id}/restart": {
+            "post": {
                 "description": "发送重启命令到客户端",
                 "produces": [
                     "application/json"
@@ -609,19 +413,193 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            }
-        },
-        "/api/clients": {
-            "get": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
+                ]
+            }
+        },
+        "/api/client/{id}/screenshot": {
+            "get": {
+                "description": "获取在线客户端当前屏幕截图",
+                "produces": [
+                    "application/json"
                 ],
+                "tags": [
+                    "客户端"
+                ],
+                "summary": "获取客户端截图",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "客户端ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "JPEG 质量，1-100，0 使用默认值",
+                        "name": "quality",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.ScreenshotResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
+            }
+        },
+        "/api/client/{id}/shell": {
+            "post": {
+                "description": "在在线客户端执行单条 Shell 命令并返回输出",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端"
+                ],
+                "summary": "执行客户端 Shell 命令",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "客户端ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Shell 执行参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.ExecuteShellRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.ShellExecuteResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
+            }
+        },
+        "/api/client/{id}/system-stats": {
+            "get": {
+                "description": "获取在线客户端的系统资源使用情况",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端"
+                ],
+                "summary": "获取客户端系统状态",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "客户端ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.SystemStatsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
+            }
+        },
+        "/api/clients": {
+            "get": {
                 "description": "返回所有注册客户端的列表及其在线状态",
                 "produces": [
                     "application/json"
@@ -636,7 +614,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
@@ -644,7 +622,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ClientListItem"
+                                                "$ref": "#/definitions/dto.ClientListItem"
                                             }
                                         }
                                     }
@@ -652,14 +630,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "创建一个新的客户端配置",
                 "consumes": [
                     "application/json"
@@ -678,7 +656,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.CreateClientRequest"
+                            "$ref": "#/definitions/dto.CreateClientRequest"
                         }
                     }
                 ],
@@ -686,31 +664,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            }
-        },
-        "/api/config": {
-            "get": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            }
+        },
+        "/api/config": {
+            "get": {
                 "description": "返回服务器配置（敏感信息脱敏）",
                 "produces": [
                     "application/json"
@@ -725,27 +703,27 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ServerConfigResponse"
+                                            "$ref": "#/definitions/dto.ServerConfigResponse"
                                         }
                                     }
                                 }
                             ]
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "更新服务器配置",
                 "consumes": [
                     "application/json"
@@ -764,79 +742,8 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.UpdateServerConfigRequest"
+                            "$ref": "#/definitions/dto.UpdateServerConfigRequest"
                         }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/config/reload": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "重新加载服务器配置",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "配置"
-                ],
-                "summary": "重新加载配置",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/js-plugin/{name}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取指定 JS 插件的详细信息",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "JS插件"
-                ],
-                "summary": "获取 JS 插件详情",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "插件名称",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
                     }
                 ],
                 "responses": {
@@ -845,401 +752,47 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_db.JSPlugin"
+                                            "$ref": "#/definitions/dto.ConfigUpdateResponse"
                                         }
                                     }
                                 }
                             ]
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "更新指定 JS 插件的信息",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "JS插件"
-                ],
-                "summary": "更新 JS 插件",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "插件名称",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "更新内容",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.JSPluginUpdateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
-                "description": "删除指定的 JS 插件",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "JS插件"
-                ],
-                "summary": "删除 JS 插件",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "插件名称",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
+                ]
             }
         },
-        "/api/js-plugin/{name}/push/{clientID}": {
+        "/api/install/generate": {
             "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "将 JS 插件推送到指定客户端",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "JS插件"
+                    "install"
                 ],
-                "summary": "推送插件到客户端",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "插件名称",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "客户端ID",
-                        "name": "clientID",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
+                "summary": "Generate install command payload",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/js-plugins": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "返回所有注册的 JS 插件",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "JS插件"
-                ],
-                "summary": "获取所有 JS 插件",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/github_com_gotunnel_internal_server_db.JSPlugin"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "创建新的 JS 插件",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "JS插件"
-                ],
-                "summary": "创建 JS 插件",
-                "parameters": [
-                    {
-                        "description": "插件信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.JSPluginCreateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/plugin/{name}/disable": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "禁用指定插件",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "插件"
-                ],
-                "summary": "禁用插件",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "插件名称",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/plugin/{name}/enable": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "启用指定插件",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "插件"
-                ],
-                "summary": "启用插件",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "插件名称",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/plugins": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "返回服务端所有注册的插件",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "插件"
-                ],
-                "summary": "获取所有插件",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.PluginInfo"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        },
-        "/api/rule-schemas": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "返回所有协议类型的配置模式",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "插件"
-                ],
-                "summary": "获取规则模式",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "object",
-                                            "additionalProperties": {
-                                                "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.RuleSchema"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
+                            "$ref": "#/definitions/handler.InstallCommandResponse"
                         }
                     }
                 }
@@ -1247,11 +800,6 @@ const docTemplate = `{
         },
         "/api/status": {
             "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
                 "description": "返回服务器运行状态和客户端数量",
                 "produces": [
                     "application/json"
@@ -1266,131 +814,112 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.StatusResponse"
+                                            "$ref": "#/definitions/dto.StatusResponse"
                                         }
                                     }
                                 }
                             ]
                         }
                     }
-                }
-            }
-        },
-        "/api/store/install": {
-            "post": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
-                "description": "从插件商店下载并安装插件到指定客户端",
-                "consumes": [
-                    "application/json"
-                ],
+                ]
+            }
+        },
+        "/api/traffic/hourly": {
+            "get": {
+                "description": "获取最近N小时的流量记录",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "插件商店"
+                    "流量"
                 ],
-                "summary": "安装商店插件",
+                "summary": "获取每小时流量",
                 "parameters": [
                     {
-                        "description": "安装请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.StoreInstallRequest"
-                        }
+                        "type": "integer",
+                        "default": 24,
+                        "description": "小时数",
+                        "name": "hours",
+                        "in": "query"
                     }
                 ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    },
-                    "502": {
-                        "description": "Bad Gateway",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/store/plugins": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "从远程插件商店获取可用插件列表",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "插件商店"
-                ],
-                "summary": "获取商店插件",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "object",
-                                            "properties": {
-                                                "plugins": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.StorePluginInfo"
-                                                    }
-                                                }
-                                            }
+                                            "$ref": "#/definitions/dto.HourlyTrafficResponse"
                                         }
                                     }
                                 }
                             ]
                         }
-                    },
-                    "502": {
-                        "description": "Bad Gateway",
-                        "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
-                        }
                     }
-                }
-            }
-        },
-        "/api/update/apply/client": {
-            "post": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
+                ]
+            }
+        },
+        "/api/traffic/stats": {
+            "get": {
+                "description": "获取24小时和总流量统计",
+                "produces": [
+                    "application/json"
                 ],
+                "tags": [
+                    "流量"
+                ],
+                "summary": "获取流量统计",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.TrafficStatsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
+            }
+        },
+        "/api/update/apply/client": {
+            "post": {
                 "description": "向指定客户端推送更新命令",
                 "consumes": [
                     "application/json"
@@ -1409,7 +938,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ApplyClientUpdateRequest"
+                            "$ref": "#/definitions/dto.ApplyClientUpdateRequest"
                         }
                     }
                 ],
@@ -1417,25 +946,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            }
-        },
-        "/api/update/apply/server": {
-            "post": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            }
+        },
+        "/api/update/apply/server": {
+            "post": {
                 "description": "下载并应用服务端更新，服务器将自动重启",
                 "consumes": [
                     "application/json"
@@ -1454,7 +983,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ApplyServerUpdateRequest"
+                            "$ref": "#/definitions/dto.ApplyServerUpdateRequest"
                         }
                     }
                 ],
@@ -1462,25 +991,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server_router_handler.Response"
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
-                }
-            }
-        },
-        "/api/update/check/client": {
-            "get": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            }
+        },
+        "/api/update/check/client": {
+            "get": {
                 "description": "检查是否有新的客户端版本可用",
                 "produces": [
                     "application/json"
@@ -1520,29 +1049,29 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.CheckUpdateResponse"
+                                            "$ref": "#/definitions/dto.CheckUpdateResponse"
                                         }
                                     }
                                 }
                             ]
                         }
                     }
-                }
-            }
-        },
-        "/api/update/check/server": {
-            "get": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            }
+        },
+        "/api/update/check/server": {
+            "get": {
                 "description": "检查是否有新的服务端版本可用",
                 "produces": [
                     "application/json"
@@ -1557,29 +1086,29 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.CheckUpdateResponse"
+                                            "$ref": "#/definitions/dto.CheckUpdateResponse"
                                         }
                                     }
                                 }
                             ]
                         }
                     }
-                }
-            }
-        },
-        "/api/update/version": {
-            "get": {
+                },
                 "security": [
                     {
                         "Bearer": []
                     }
-                ],
+                ]
+            }
+        },
+        "/api/update/version": {
+            "get": {
                 "description": "返回服务器版本信息",
                 "produces": [
                     "application/json"
@@ -1594,88 +1123,47 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/internal_server_router_handler.Response"
+                                    "$ref": "#/definitions/handler.Response"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.VersionInfo"
+                                            "$ref": "#/definitions/dto.VersionInfo"
                                         }
                                     }
                                 }
                             ]
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
             }
         }
     },
     "definitions": {
-        "github_com_gotunnel_internal_server_db.ClientPlugin": {
+        "db.TrafficRecord": {
             "type": "object",
             "properties": {
-                "config": {
-                    "description": "插件配置",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
+                "inbound": {
+                    "description": "入站流量（字节）",
+                    "type": "integer"
                 },
-                "enabled": {
-                    "type": "boolean"
+                "outbound": {
+                    "description": "出站流量（字节）",
+                    "type": "integer"
                 },
-                "name": {
-                    "type": "string"
-                },
-                "version": {
-                    "type": "string"
+                "timestamp": {
+                    "description": "Unix 时间戳（小时级别）",
+                    "type": "integer"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_db.JSPlugin": {
-            "type": "object",
-            "properties": {
-                "author": {
-                    "type": "string"
-                },
-                "auto_push": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "auto_start": {
-                    "type": "boolean"
-                },
-                "config": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "description": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "signature": {
-                    "description": "官方签名 (Base64)",
-                    "type": "string"
-                },
-                "source": {
-                    "type": "string"
-                },
-                "version": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_gotunnel_internal_server_router_dto.ApplyClientUpdateRequest": {
+        "dto.ApplyClientUpdateRequest": {
             "description": "推送更新到客户端",
             "type": "object",
             "required": [
@@ -1691,7 +1179,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.ApplyServerUpdateRequest": {
+        "dto.ApplyServerUpdateRequest": {
             "description": "应用服务端更新",
             "type": "object",
             "required": [
@@ -1706,37 +1194,47 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.CheckUpdateResponse": {
+        "dto.CheckUpdateResponse": {
             "description": "更新检查结果",
             "type": "object",
             "properties": {
-                "current_version": {
+                "asset_name": {
+                    "type": "string"
+                },
+                "asset_size": {
+                    "type": "integer"
+                },
+                "available": {
+                    "type": "boolean"
+                },
+                "current": {
                     "type": "string"
                 },
                 "download_url": {
                     "type": "string"
                 },
-                "has_update": {
-                    "type": "boolean"
-                },
-                "latest_version": {
+                "latest": {
                     "type": "string"
                 },
-                "published_at": {
-                    "type": "string"
-                },
-                "release_notes": {
+                "release_note": {
                     "type": "string"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.ClientListItem": {
+        "dto.ClientListItem": {
             "description": "客户端列表中的单个项目",
             "type": "object",
             "properties": {
+                "arch": {
+                    "type": "string",
+                    "example": "amd64"
+                },
                 "id": {
                     "type": "string",
                     "example": "client-001"
+                },
+                "last_offline_at": {
+                    "type": "integer"
                 },
                 "last_ping": {
                     "type": "string"
@@ -1749,40 +1247,38 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": true
                 },
+                "os": {
+                    "type": "string",
+                    "example": "linux"
+                },
                 "remote_addr": {
                     "type": "string"
                 },
                 "rule_count": {
                     "type": "integer",
                     "example": 3
+                },
+                "version": {
+                    "type": "string",
+                    "example": "1.0.0"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.ClientPluginActionRequest": {
-            "description": "对客户端插件执行操作",
-            "type": "object",
-            "properties": {
-                "config": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "restart": {
-                    "type": "boolean"
-                },
-                "rule_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_gotunnel_internal_server_router_dto.ClientResponse": {
+        "dto.ClientResponse": {
             "description": "客户端详细信息",
             "type": "object",
             "properties": {
+                "arch": {
+                    "type": "string",
+                    "example": "amd64"
+                },
                 "id": {
                     "type": "string",
                     "example": "client-001"
+                },
+                "last_offline_at": {
+                    "type": "integer",
+                    "example": 1735785000
                 },
                 "last_ping": {
                     "type": "string",
@@ -1796,11 +1292,9 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": true
                 },
-                "plugins": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_gotunnel_internal_server_db.ClientPlugin"
-                    }
+                "os": {
+                    "type": "string",
+                    "example": "linux"
                 },
                 "remote_addr": {
                     "type": "string",
@@ -1809,42 +1303,36 @@ const docTemplate = `{
                 "rules": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_gotunnel_pkg_protocol.ProxyRule"
+                        "$ref": "#/definitions/dto.ProxyRule"
                     }
+                },
+                "version": {
+                    "type": "string",
+                    "example": "1.0.0"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.ConfigField": {
-            "description": "配置表单字段",
+        "dto.ConfigUpdateResponse": {
             "type": "object",
             "properties": {
-                "default": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "key": {
-                    "type": "string"
-                },
-                "label": {
-                    "type": "string"
-                },
-                "options": {
+                "applied_runtime_fields": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "required": {
-                    "type": "boolean"
+                "restart_required_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
-                "type": {
+                "status": {
                     "type": "string"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.CreateClientRequest": {
+        "dto.CreateClientRequest": {
             "description": "创建新客户端的请求体",
             "type": "object",
             "required": [
@@ -1860,102 +1348,37 @@ const docTemplate = `{
                 "rules": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_gotunnel_pkg_protocol.ProxyRule"
+                        "$ref": "#/definitions/dto.ProxyRule"
                     }
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.InstallPluginsRequest": {
-            "description": "安装插件到指定客户端",
+        "dto.ExecuteShellRequest": {
             "type": "object",
             "required": [
-                "plugins"
+                "command"
             ],
             "properties": {
-                "plugins": {
+                "command": {
+                    "type": "string"
+                },
+                "timeout": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.HourlyTrafficResponse": {
+            "type": "object",
+            "properties": {
+                "records": {
                     "type": "array",
-                    "minItems": 1,
                     "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "socks5",
-                        "http-proxy"
-                    ]
-                }
-            }
-        },
-        "github_com_gotunnel_internal_server_router_dto.JSPluginCreateRequest": {
-            "description": "创建新的 JS 插件",
-            "type": "object",
-            "required": [
-                "name",
-                "source"
-            ],
-            "properties": {
-                "author": {
-                    "type": "string",
-                    "maxLength": 64
-                },
-                "auto_start": {
-                    "type": "boolean"
-                },
-                "config": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
+                        "$ref": "#/definitions/db.TrafficRecord"
                     }
-                },
-                "description": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 1
-                },
-                "signature": {
-                    "type": "string"
-                },
-                "source": {
-                    "type": "string"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.JSPluginUpdateRequest": {
-            "description": "更新 JS 插件",
-            "type": "object",
-            "properties": {
-                "author": {
-                    "type": "string",
-                    "maxLength": 64
-                },
-                "auto_start": {
-                    "type": "boolean"
-                },
-                "config": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "description": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "signature": {
-                    "type": "string"
-                },
-                "source": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_gotunnel_internal_server_router_dto.LoginRequest": {
+        "dto.LoginRequest": {
             "description": "用户登录",
             "type": "object",
             "required": [
@@ -1971,7 +1394,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.LoginResponse": {
+        "dto.LoginResponse": {
             "description": "登录成功返回",
             "type": "object",
             "properties": {
@@ -1980,88 +1403,62 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.PluginConfigRequest": {
-            "description": "更新客户端插件配置",
-            "type": "object",
-            "required": [
-                "config"
-            ],
-            "properties": {
-                "config": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "github_com_gotunnel_internal_server_router_dto.PluginConfigResponse": {
-            "description": "插件配置详情",
+        "dto.ProxyRule": {
             "type": "object",
             "properties": {
-                "config": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
+                "auth_enabled": {
+                    "type": "boolean"
                 },
-                "plugin_name": {
+                "auth_password": {
                     "type": "string"
                 },
-                "schema": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ConfigField"
-                    }
-                }
-            }
-        },
-        "github_com_gotunnel_internal_server_router_dto.PluginInfo": {
-            "description": "服务端插件信息",
-            "type": "object",
-            "properties": {
-                "description": {
+                "auth_username": {
                     "type": "string"
                 },
                 "enabled": {
                     "type": "boolean"
                 },
-                "icon": {
+                "local_ip": {
                     "type": "string"
+                },
+                "local_port": {
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
                 },
-                "rule_schema": {
-                    "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.RuleSchema"
-                },
-                "source": {
+                "port_status": {
                     "type": "string"
+                },
+                "remote_port": {
+                    "type": "integer"
                 },
                 "type": {
                     "type": "string"
-                },
-                "version": {
-                    "type": "string"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.RuleSchema": {
-            "description": "代理规则的配置模式",
+        "dto.ScreenshotResponse": {
             "type": "object",
             "properties": {
-                "extra_fields": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ConfigField"
-                    }
+                "data": {
+                    "type": "string"
                 },
-                "needs_local_addr": {
-                    "type": "boolean"
+                "error": {
+                    "type": "string"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "type": "integer"
+                },
+                "width": {
+                    "type": "integer"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.ServerConfigInfo": {
+        "dto.ServerConfigInfo": {
             "type": "object",
             "properties": {
                 "bind_addr": {
@@ -2070,20 +1467,24 @@ const docTemplate = `{
                 "bind_port": {
                     "type": "integer"
                 },
+                "client_response_timeout_sec": {
+                    "type": "integer"
+                },
                 "heartbeat_sec": {
                     "type": "integer"
                 },
                 "heartbeat_timeout": {
                     "type": "integer"
                 },
+                "max_client_proxies": {
+                    "type": "integer"
+                },
                 "token": {
-                    "description": "脱敏后的 token",
                     "type": "string"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.ServerConfigPart": {
-            "description": "隧道服务器配置",
+        "dto.ServerConfigPart": {
             "type": "object",
             "properties": {
                 "bind_addr": {
@@ -2094,15 +1495,25 @@ const docTemplate = `{
                     "maximum": 65535,
                     "minimum": 1
                 },
-                "heartbeat_sec": {
+                "client_response_timeout_sec": {
                     "type": "integer",
                     "maximum": 300,
                     "minimum": 1
                 },
+                "heartbeat_sec": {
+                    "type": "integer",
+                    "maximum": 3600,
+                    "minimum": 1
+                },
                 "heartbeat_timeout": {
                     "type": "integer",
-                    "maximum": 600,
+                    "maximum": 3600,
                     "minimum": 1
+                },
+                "max_client_proxies": {
+                    "type": "integer",
+                    "maximum": 10000,
+                    "minimum": 0
                 },
                 "token": {
                     "type": "string",
@@ -2110,19 +1521,18 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.ServerConfigResponse": {
-            "description": "服务器配置信息",
+        "dto.ServerConfigResponse": {
             "type": "object",
             "properties": {
                 "server": {
-                    "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ServerConfigInfo"
+                    "$ref": "#/definitions/dto.ServerConfigInfo"
                 },
                 "web": {
-                    "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.WebConfigInfo"
+                    "$ref": "#/definitions/dto.WebConfigInfo"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.ServerStatus": {
+        "dto.ServerStatus": {
             "type": "object",
             "properties": {
                 "bind_addr": {
@@ -2133,7 +1543,21 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.StatusResponse": {
+        "dto.ShellExecuteResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "exit_code": {
+                    "type": "integer"
+                },
+                "output": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.StatusResponse": {
             "description": "服务器状态信息",
             "type": "object",
             "properties": {
@@ -2141,65 +1565,37 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "server": {
-                    "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ServerStatus"
+                    "$ref": "#/definitions/dto.ServerStatus"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.StoreInstallRequest": {
-            "description": "从插件商店安装插件到客户端",
-            "type": "object",
-            "required": [
-                "client_id",
-                "download_url",
-                "plugin_name",
-                "signature_url"
-            ],
-            "properties": {
-                "client_id": {
-                    "type": "string"
-                },
-                "download_url": {
-                    "type": "string"
-                },
-                "plugin_name": {
-                    "type": "string"
-                },
-                "signature_url": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_gotunnel_internal_server_router_dto.StorePluginInfo": {
-            "description": "插件商店中的插件信息",
+        "dto.SystemStatsResponse": {
             "type": "object",
             "properties": {
-                "author": {
-                    "type": "string"
+                "cpu_usage": {
+                    "type": "number"
                 },
-                "description": {
-                    "type": "string"
+                "disk_total": {
+                    "type": "integer"
                 },
-                "download_url": {
-                    "type": "string"
+                "disk_usage": {
+                    "type": "number"
                 },
-                "icon": {
-                    "type": "string"
+                "disk_used": {
+                    "type": "integer"
                 },
-                "name": {
-                    "type": "string"
+                "memory_total": {
+                    "type": "integer"
                 },
-                "signature_url": {
-                    "type": "string"
+                "memory_usage": {
+                    "type": "number"
                 },
-                "type": {
-                    "type": "string"
-                },
-                "version": {
-                    "type": "string"
+                "memory_used": {
+                    "type": "integer"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.TokenCheckResponse": {
+        "dto.TokenCheckResponse": {
             "description": "Token 验证结果",
             "type": "object",
             "properties": {
@@ -2211,7 +1607,29 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.UpdateClientRequest": {
+        "dto.TrafficStatsResponse": {
+            "type": "object",
+            "properties": {
+                "traffic_24h": {
+                    "$ref": "#/definitions/dto.TrafficTotals"
+                },
+                "traffic_total": {
+                    "$ref": "#/definitions/dto.TrafficTotals"
+                }
+            }
+        },
+        "dto.TrafficTotals": {
+            "type": "object",
+            "properties": {
+                "inbound": {
+                    "type": "integer"
+                },
+                "outbound": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.UpdateClientRequest": {
             "description": "更新客户端配置的请求体",
             "type": "object",
             "properties": {
@@ -2220,36 +1638,32 @@ const docTemplate = `{
                     "maxLength": 128,
                     "example": "My Client"
                 },
-                "plugins": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_gotunnel_internal_server_db.ClientPlugin"
-                    }
-                },
                 "rules": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_gotunnel_pkg_protocol.ProxyRule"
+                        "$ref": "#/definitions/dto.ProxyRule"
                     }
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.UpdateServerConfigRequest": {
-            "description": "更新服务器配置",
+        "dto.UpdateServerConfigRequest": {
             "type": "object",
             "properties": {
                 "server": {
-                    "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.ServerConfigPart"
+                    "$ref": "#/definitions/dto.ServerConfigPart"
                 },
                 "web": {
-                    "$ref": "#/definitions/github_com_gotunnel_internal_server_router_dto.WebConfigPart"
+                    "$ref": "#/definitions/dto.WebConfigPart"
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.VersionInfo": {
+        "dto.VersionInfo": {
             "description": "当前版本信息",
             "type": "object",
             "properties": {
+                "arch": {
+                    "type": "string"
+                },
                 "build_time": {
                     "type": "string"
                 },
@@ -2259,7 +1673,7 @@ const docTemplate = `{
                 "go_version": {
                     "type": "string"
                 },
-                "platform": {
+                "os": {
                     "type": "string"
                 },
                 "version": {
@@ -2267,12 +1681,9 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.WebConfigInfo": {
+        "dto.WebConfigInfo": {
             "type": "object",
             "properties": {
-                "bind_addr": {
-                    "type": "string"
-                },
                 "bind_port": {
                     "type": "integer"
                 },
@@ -2280,7 +1691,6 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "password": {
-                    "description": "显示为 ****",
                     "type": "string"
                 },
                 "username": {
@@ -2288,13 +1698,9 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_internal_server_router_dto.WebConfigPart": {
-            "description": "Web 控制台配置",
+        "dto.WebConfigPart": {
             "type": "object",
             "properties": {
-                "bind_addr": {
-                    "type": "string"
-                },
                 "bind_port": {
                     "type": "integer",
                     "maximum": 65535,
@@ -2315,48 +1721,21 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_gotunnel_pkg_protocol.ProxyRule": {
+        "handler.InstallCommandResponse": {
             "type": "object",
             "properties": {
-                "enabled": {
-                    "description": "是否启用，默认为 true",
-                    "type": "boolean"
-                },
-                "local_ip": {
-                    "description": "tcp/udp 模式使用",
-                    "type": "string"
-                },
-                "local_port": {
-                    "description": "tcp/udp 模式使用",
+                "expires_at": {
                     "type": "integer"
                 },
-                "name": {
+                "token": {
                     "type": "string"
                 },
-                "plugin_config": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "plugin_name": {
-                    "description": "Plugin 支持字段",
-                    "type": "string"
-                },
-                "plugin_version": {
-                    "type": "string"
-                },
-                "remote_port": {
-                    "description": "服务端监听端口",
+                "tunnel_port": {
                     "type": "integer"
-                },
-                "type": {
-                    "description": "内置: tcp, udp, http, https; 插件: socks5 等",
-                    "type": "string"
                 }
             }
         },
-        "internal_server_router_handler.Response": {
+        "handler.Response": {
             "type": "object",
             "properties": {
                 "code": {
