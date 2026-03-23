@@ -20,18 +20,26 @@ data class ActiveTunnel(
     val connectedAt: Long = 0L,
 )
 
+data class TunnelSnapshot(
+    val isRunning: Boolean = false,
+    val status: TunnelStatus = TunnelStatus.STOPPED,
+    val detail: String = "",
+    val lastError: String = "",
+    val recentLogs: String = "",
+    val activeTunnels: List<ActiveTunnel> = emptyList(),
+)
+
 interface TunnelController {
     interface Listener {
-        fun onStatusChanged(status: TunnelStatus, detail: String = "")
-        fun onLog(message: String)
+        fun onSnapshot(snapshot: TunnelSnapshot)
     }
 
     val isRunning: Boolean
 
     fun setListener(listener: Listener?)
+    fun snapshot(): TunnelSnapshot
     fun updateConfig(config: AppConfig)
     fun start(config: AppConfig)
     fun stop(reason: String = "manual")
     fun restart(reason: String = "manual")
-    fun getActiveTunnels(): List<ActiveTunnel>
 }

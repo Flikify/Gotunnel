@@ -7,10 +7,10 @@ import android.os.IBinder
 import androidx.core.app.NotificationManagerCompat
 import com.gotunnel.android.bridge.GoTunnelBridge
 import com.gotunnel.android.bridge.TunnelController
+import com.gotunnel.android.bridge.TunnelSnapshot
 import com.gotunnel.android.bridge.TunnelStatus
 import com.gotunnel.android.config.AppConfig
 import com.gotunnel.android.config.ConfigStore
-import com.gotunnel.android.config.LogStore
 import com.gotunnel.android.config.ServiceStateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +21,6 @@ class TunnelService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var configStore: ConfigStore
     private lateinit var stateStore: ServiceStateStore
-    private lateinit var logStore: LogStore
     private lateinit var controller: TunnelController
     private lateinit var networkMonitor: NetworkMonitor
     private var currentConfig: AppConfig = AppConfig()
@@ -31,19 +30,11 @@ class TunnelService : Service() {
         super.onCreate()
         configStore = ConfigStore(this)
         stateStore = ServiceStateStore(this)
-        logStore = LogStore(this)
         controller = GoTunnelBridge.create(applicationContext)
         controller.setListener(object : TunnelController.Listener {
-            override fun onStatusChanged(status: TunnelStatus, detail: String) {
-                stateStore.save(status, detail)
-                logStore.append("status: ${status.name} ${detail.ifBlank { "" }}".trim())
-                updateNotification(status, detail)
-            }
-
-            override fun onLog(message: String) {
-                val current = stateStore.load()
-                logStore.append(message)
-                updateNotification(current.status, message)
+            override fun onSnapshot(snapshot: TunnelSnapshot) {
+                stateStore.save(snapshot)
+                updateNotification(snapshot.status, snapshot.detail)
             }
         })
         networkMonitor = NetworkMonitor(
@@ -60,8 +51,17 @@ class TunnelService : Service() {
             },
             onLost = {
                 val detail = getString(com.gotunnel.android.R.string.network_lost)
-                stateStore.save(TunnelStatus.RECONNECTING, detail)
-                logStore.append(detail)
+                val state = stateStore.load()
+                stateStore.save(
+                    TunnelSnapshot(
+                        isRunning = controller.isRunning,
+                        status = TunnelStatus.RECONNECTING,
+                        detail = detail,
+                        lastError = state.lastError,
+                        recentLogs = appendLog(state.recentLogs, detail),
+                        activeTunnels = controller.snapshot().activeTunnels,
+                    ),
+                )
                 updateNotification(TunnelStatus.RECONNECTING, detail)
             },
         )
@@ -111,14 +111,27 @@ class TunnelService : Service() {
     private fun startOrRefreshTunnel(reason: String) {
         currentConfig = configStore.load()
         controller.updateConfig(currentConfig)
-        stateStore.save(TunnelStatus.STARTING, reason)
-        logStore.append("start requested: $reason")
+        stateStore.save(
+            TunnelSnapshot(
+                isRunning = controller.isRunning,
+                status = TunnelStatus.STARTING,
+                detail = reason,
+                recentLogs = appendLog(stateStore.load().recentLogs, "start requested: $reason"),
+                activeTunnels = controller.snapshot().activeTunnels,
+            ),
+        )
         updateNotification(TunnelStatus.STARTING, reason)
 
         if (!isConfigReady(currentConfig)) {
             val detail = getString(com.gotunnel.android.R.string.config_missing)
-            stateStore.save(TunnelStatus.STOPPED, detail)
-            logStore.append(detail)
+            stateStore.save(
+                TunnelSnapshot(
+                    isRunning = false,
+                    status = TunnelStatus.STOPPED,
+                    detail = detail,
+                    recentLogs = appendLog(stateStore.load().recentLogs, detail),
+                ),
+            )
             updateNotification(TunnelStatus.STOPPED, detail)
             return
         }
@@ -132,8 +145,14 @@ class TunnelService : Service() {
         runCatching { networkMonitor.stop() }
         networkMonitorPrimed = false
         controller.stop(reason)
-        stateStore.save(TunnelStatus.STOPPED, reason)
-        logStore.append("stop requested: $reason")
+        stateStore.save(
+            TunnelSnapshot(
+                isRunning = false,
+                status = TunnelStatus.STOPPED,
+                detail = reason,
+                recentLogs = appendLog(stateStore.load().recentLogs, "stop requested: $reason"),
+            ),
+        )
         updateNotification(TunnelStatus.STOPPED, reason)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -149,6 +168,15 @@ class TunnelService : Service() {
 
     private fun isConfigReady(config: AppConfig): Boolean {
         return config.serverAddress.isNotBlank() && config.token.isNotBlank()
+    }
+
+    private fun appendLog(existing: String, message: String): String {
+        val lines = existing.lines().filter { it.isNotBlank() }.toMutableList()
+        lines += message
+        while (lines.size > 80) {
+            lines.removeAt(0)
+        }
+        return lines.joinToString("\n")
     }
 
     companion object {

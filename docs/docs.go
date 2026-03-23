@@ -116,7 +116,96 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/client/{id}": {
+        "/api/clients": {
+            "get": {
+                "description": "返回所有注册客户端的列表及其在线状态",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端"
+                ],
+                "summary": "获取所有客户端",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/dto.ClientListItem"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
+            },
+            "post": {
+                "description": "创建一个新的客户端配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端"
+                ],
+                "summary": "创建新客户端",
+                "parameters": [
+                    {
+                        "description": "客户端信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateClientRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
+            }
+        },
+        "/api/clients/{id}": {
             "get": {
                 "description": "获取指定客户端的详细信息",
                 "produces": [
@@ -262,7 +351,7 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/client/{id}/disconnect": {
+        "/api/clients/{id}/actions/disconnect": {
             "post": {
                 "description": "强制断开客户端连接",
                 "produces": [
@@ -296,61 +385,7 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/client/{id}/logs": {
-            "get": {
-                "description": "通过 Server-Sent Events 实时接收客户端日志",
-                "produces": [
-                    "text/event-stream"
-                ],
-                "tags": [
-                    "Logs"
-                ],
-                "summary": "流式传输客户端日志",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "客户端 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "default": 100,
-                        "description": "初始日志行数",
-                        "name": "lines",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "default": true,
-                        "description": "是否持续推送新日志",
-                        "name": "follow",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "日志级别过滤 (info, warn, error)",
-                        "name": "level",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Server-Sent Events stream",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ]
-            }
-        },
-        "/api/client/{id}/push": {
+        "/api/clients/{id}/actions/push-config": {
             "post": {
                 "description": "将配置推送到在线客户端",
                 "produces": [
@@ -390,7 +425,7 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/client/{id}/restart": {
+        "/api/clients/{id}/actions/restart": {
             "post": {
                 "description": "发送重启命令到客户端",
                 "produces": [
@@ -424,65 +459,7 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/client/{id}/screenshot": {
-            "get": {
-                "description": "获取在线客户端当前屏幕截图",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "客户端"
-                ],
-                "summary": "获取客户端截图",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "客户端ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "JPEG 质量，1-100，0 使用默认值",
-                        "name": "quality",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/handler.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/dto.ScreenshotResponse"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/handler.Response"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ]
-            }
-        },
-        "/api/client/{id}/shell": {
+        "/api/clients/{id}/actions/shell": {
             "post": {
                 "description": "在在线客户端执行单条 Shell 命令并返回输出",
                 "consumes": [
@@ -546,7 +523,119 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/client/{id}/system-stats": {
+        "/api/clients/{id}/logs": {
+            "get": {
+                "description": "通过 Server-Sent Events 实时接收客户端日志",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "Logs"
+                ],
+                "summary": "流式传输客户端日志",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "客户端 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 100,
+                        "description": "初始日志行数",
+                        "name": "lines",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "是否持续推送新日志",
+                        "name": "follow",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "日志级别过滤 (info, warn, error)",
+                        "name": "level",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Server-Sent Events stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
+            }
+        },
+        "/api/clients/{id}/screenshot": {
+            "get": {
+                "description": "获取在线客户端当前屏幕截图",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端"
+                ],
+                "summary": "获取客户端截图",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "客户端ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "JPEG 质量，1-100，0 使用默认值",
+                        "name": "quality",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.ScreenshotResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
+            }
+        },
+        "/api/clients/{id}/system-stats": {
             "get": {
                 "description": "获取在线客户端的系统资源使用情况",
                 "produces": [
@@ -598,16 +687,15 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/clients": {
-            "get": {
-                "description": "返回所有注册客户端的列表及其在线状态",
+        "/api/installations/actions/command": {
+            "post": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "客户端"
+                    "install"
                 ],
-                "summary": "获取所有客户端",
+                "summary": "Generate install command payload",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -620,74 +708,17 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/dto.ClientListItem"
-                                            }
+                                            "$ref": "#/definitions/handler.InstallCommandResponse"
                                         }
                                     }
                                 }
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ]
-            },
-            "post": {
-                "description": "创建一个新的客户端配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "客户端"
-                ],
-                "summary": "创建新客户端",
-                "parameters": [
-                    {
-                        "description": "客户端信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dto.CreateClientRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/handler.Response"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/handler.Response"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ]
+                }
             }
         },
-        "/api/config": {
+        "/api/runtime/config": {
             "get": {
                 "description": "返回服务器配置（敏感信息脱敏）",
                 "produces": [
@@ -779,26 +810,7 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/install/generate": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "install"
-                ],
-                "summary": "Generate install command payload",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handler.InstallCommandResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/status": {
+        "/api/runtime/status": {
             "get": {
                 "description": "返回服务器运行状态和客户端数量",
                 "produces": [
@@ -835,7 +847,7 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/traffic/hourly": {
+        "/api/runtime/traffic/hourly": {
             "get": {
                 "description": "获取最近N小时的流量记录",
                 "produces": [
@@ -881,7 +893,7 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/traffic/stats": {
+        "/api/runtime/traffic/stats": {
             "get": {
                 "description": "获取24小时和总流量统计",
                 "produces": [
@@ -918,7 +930,44 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/update/apply/client": {
+        "/api/runtime/version": {
+            "get": {
+                "description": "返回服务器版本信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "状态"
+                ],
+                "summary": "获取版本信息",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.VersionInfo"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ]
+            }
+        },
+        "/api/updates/clients/actions/apply": {
             "post": {
                 "description": "向指定客户端推送更新命令",
                 "consumes": [
@@ -963,52 +1012,7 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/update/apply/server": {
-            "post": {
-                "description": "下载并应用服务端更新，服务器将自动重启",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "更新"
-                ],
-                "summary": "应用服务端更新",
-                "parameters": [
-                    {
-                        "description": "更新请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dto.ApplyServerUpdateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handler.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/handler.Response"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ]
-            }
-        },
-        "/api/update/check/client": {
+        "/api/updates/clients/latest": {
             "get": {
                 "description": "检查是否有新的客户端版本可用",
                 "produces": [
@@ -1070,7 +1074,7 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/update/check/server": {
+        "/api/updates/server": {
             "get": {
                 "description": "检查是否有新的服务端版本可用",
                 "produces": [
@@ -1107,33 +1111,41 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/update/version": {
-            "get": {
-                "description": "返回服务器版本信息",
+        "/api/updates/server/actions/apply": {
+            "post": {
+                "description": "下载并应用服务端更新，服务器将自动重启",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "状态"
+                    "更新"
                 ],
-                "summary": "获取版本信息",
+                "summary": "应用服务端更新",
+                "parameters": [
+                    {
+                        "description": "更新请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.ApplyServerUpdateRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/handler.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/dto.VersionInfo"
-                                        }
-                                    }
-                                }
-                            ]
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
                         }
                     }
                 },
@@ -1146,23 +1158,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "db.TrafficRecord": {
-            "type": "object",
-            "properties": {
-                "inbound": {
-                    "description": "入站流量（字节）",
-                    "type": "integer"
-                },
-                "outbound": {
-                    "description": "出站流量（字节）",
-                    "type": "integer"
-                },
-                "timestamp": {
-                    "description": "Unix 时间戳（小时级别）",
-                    "type": "integer"
-                }
-            }
-        },
         "dto.ApplyClientUpdateRequest": {
             "description": "推送更新到客户端",
             "type": "object",
@@ -1373,7 +1368,7 @@ const docTemplate = `{
                 "records": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/db.TrafficRecord"
+                        "$ref": "#/definitions/sqlite.TrafficRecord"
                     }
                 }
             }
@@ -1744,6 +1739,23 @@ const docTemplate = `{
                 "data": {},
                 "message": {
                     "type": "string"
+                }
+            }
+        },
+        "sqlite.TrafficRecord": {
+            "type": "object",
+            "properties": {
+                "inbound": {
+                    "description": "入站流量（字节）",
+                    "type": "integer"
+                },
+                "outbound": {
+                    "description": "出站流量（字节）",
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "description": "Unix 时间戳（小时级别）",
+                    "type": "integer"
                 }
             }
         }

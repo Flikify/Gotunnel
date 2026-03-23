@@ -210,16 +210,25 @@ GoTunnel/
 │   ├── server/main.go       # 服务端入口
 │   └── client/main.go       # 客户端入口
 ├── internal/
-│   ├── server/
-│   │   ├── config/          # 配置管理
-│   │   ├── db/              # 数据库存储
-│   │   ├── app/             # Web 服务
-│   │   ├── router/          # API 路由
-│   │   ├── service/         # 应用服务
-│   │   ├── tunnel/          # 隧道服务
-│   │   └── update/          # 服务端更新编排
-│   └── client/
-│       └── tunnel/          # 客户端隧道
+│   ├── core/
+│   │   ├── client/          # 共享客户端聚合模型
+│   │   ├── domain/          # 共享领域别名聚合
+│   │   └── rule/            # 共享代理规则模型
+│   ├── client/
+│   │   ├── app/             # 客户端生命周期应用层
+│   │   └── tunnel/          # 客户端运行时
+│   └── server/
+│       ├── app/             # Web 服务
+│       ├── bootstrap/       # 服务端启动装配
+│       ├── config/          # 配置管理
+│       ├── http/            # HTTP 路由与处理器
+│       ├── service/         # 应用服务
+│       ├── storage/sqlite/  # SQLite 存储适配层
+│       ├── runtime/         # 隧道运行时
+│       └── updateapp/       # 服务端更新编排
+├── mobile/
+│   └── gotunnelmobile/      # gomobile 适配层
+├── android/                 # Android 宿主应用
 ├── pkg/
 │   ├── auth/                # JWT 认证
 │   ├── crypto/              # TLS 加密
@@ -230,7 +239,7 @@ GoTunnel/
 │   ├── utils/               # 工具函数
 │   ├── update/              # 共享更新逻辑 (下载、解压)
 │   └── version/             # 版本信息和更新检查
-├── web/                     # Vue 3 + naive-ui 前端
+├── web/                     # Vue 3 前端
 ├── scripts/                 # 构建脚本
 │   ├── build.sh             # Linux/macOS 构建脚本
 │   └── build.ps1            # Windows 构建脚本
@@ -267,46 +276,46 @@ Authorization: Bearer <token>
 
 #### 状态与版本
 
-- `GET /api/status`
-- `GET /api/update/version`
+- `GET /api/runtime/status`
+- `GET /api/runtime/version`
 
 #### 客户端管理
 
 - `GET /api/clients`
 - `POST /api/clients`
-- `GET /api/client/{id}`
-- `PUT /api/client/{id}`
-- `DELETE /api/client/{id}`
+- `GET /api/clients/{id}`
+- `PUT /api/clients/{id}`
+- `DELETE /api/clients/{id}`
 
 #### 客户端控制与远程运维
 
-- `POST /api/client/{id}/push`
-- `POST /api/client/{id}/disconnect`
-- `POST /api/client/{id}/restart`
-- `GET /api/client/{id}/logs`
-- `GET /api/client/{id}/system-stats`
-- `GET /api/client/{id}/screenshot`
-- `POST /api/client/{id}/shell`
+- `POST /api/clients/{id}/actions/push-config`
+- `POST /api/clients/{id}/actions/disconnect`
+- `POST /api/clients/{id}/actions/restart`
+- `GET /api/clients/{id}/logs`
+- `GET /api/clients/{id}/system-stats`
+- `GET /api/clients/{id}/screenshot`
+- `POST /api/clients/{id}/actions/shell`
 
 #### 配置管理
 
-- `GET /api/config`
-- `PUT /api/config`
+- `GET /api/runtime/config`
+- `PUT /api/runtime/config`
 
-`PUT /api/config` 会把配置持久化到 YAML，并返回两类结果：已即时生效的运行时字段，以及需要重启服务后才会生效的字段。当前版本不再暴露独立的热重载入口。
+`PUT /api/runtime/config` 会把配置持久化到 YAML，并返回两类结果：已即时生效的运行时字段，以及需要重启服务后才会生效的字段。当前版本不再暴露独立的热重载入口。
 
 #### 更新管理
 
-- `GET /api/update/check/server`
-- `GET /api/update/check/client`
-- `POST /api/update/apply/server`
-- `POST /api/update/apply/client`
+- `GET /api/updates/server`
+- `GET /api/updates/clients/latest`
+- `POST /api/updates/server/actions/apply`
+- `POST /api/updates/clients/actions/apply`
 
 #### 流量统计与安装
 
-- `GET /api/traffic/stats`
-- `GET /api/traffic/hourly`
-- `POST /api/install/generate`
+- `GET /api/runtime/traffic/stats`
+- `GET /api/runtime/traffic/hourly`
+- `POST /api/installations/actions/command`
 
 #### 安装脚本与客户端下载
 

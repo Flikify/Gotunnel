@@ -19,7 +19,6 @@ import com.gotunnel.android.bridge.ActiveTunnel
 import com.gotunnel.android.bridge.GoTunnelBridge
 import com.gotunnel.android.bridge.TunnelStatus
 import com.gotunnel.android.config.ConfigStore
-import com.gotunnel.android.config.LogStore
 import com.gotunnel.android.config.ServiceStateStore
 import com.gotunnel.android.databinding.ActivityMainBinding
 import com.gotunnel.android.service.TunnelService
@@ -40,7 +39,6 @@ class MainActivity : AppCompatActivity() {
     private var refreshJob: Job? = null
     private lateinit var configStore: ConfigStore
     private lateinit var stateStore: ServiceStateStore
-    private lateinit var logStore: LogStore
     private lateinit var tunnelController: com.gotunnel.android.bridge.TunnelController
 
     private val notificationPermissionLauncher =
@@ -59,7 +57,6 @@ class MainActivity : AppCompatActivity() {
 
         configStore = ConfigStore(this)
         stateStore = ServiceStateStore(this)
-        logStore = LogStore(this)
         tunnelController = GoTunnelBridge.create(applicationContext)
 
         binding.topToolbar.setOnMenuItemClickListener { item ->
@@ -114,6 +111,7 @@ class MainActivity : AppCompatActivity() {
     private fun renderScreen() {
         val config = configStore.load()
         val state = stateStore.load()
+        val runtimeSnapshot = tunnelController.snapshot()
         val timestamp = if (state.updatedAt > 0L) {
             DateFormat.getDateTimeInstance().format(Date(state.updatedAt))
         } else {
@@ -129,8 +127,8 @@ class MainActivity : AppCompatActivity() {
         } else {
             getString(R.string.status_server_configured, config.serverAddress)
         }
-        binding.logValue.text = logStore.render()
-        renderActiveTunnels(tunnelController.getActiveTunnels())
+        binding.logValue.text = state.recentLogs.ifBlank { "No logs yet." }
+        renderActiveTunnels(runtimeSnapshot.activeTunnels)
     }
 
     private fun getStatusLabel(status: TunnelStatus): String {

@@ -1,17 +1,5 @@
 basePath: /
 definitions:
-  db.TrafficRecord:
-    properties:
-      inbound:
-        description: 入站流量（字节）
-        type: integer
-      outbound:
-        description: 出站流量（字节）
-        type: integer
-      timestamp:
-        description: Unix 时间戳（小时级别）
-        type: integer
-    type: object
   dto.ApplyClientUpdateRequest:
     description: 推送更新到客户端
     properties:
@@ -158,7 +146,7 @@ definitions:
     properties:
       records:
         items:
-          $ref: '#/definitions/db.TrafficRecord'
+          $ref: '#/definitions/sqlite.TrafficRecord'
         type: array
     type: object
   dto.LoginRequest:
@@ -409,6 +397,18 @@ definitions:
       message:
         type: string
     type: object
+  sqlite.TrafficRecord:
+    properties:
+      inbound:
+        description: 入站流量（字节）
+        type: integer
+      outbound:
+        description: 出站流量（字节）
+        type: integer
+      timestamp:
+        description: Unix 时间戳（小时级别）
+        type: integer
+    type: object
 host: localhost:7500
 info:
   contact: {}
@@ -475,7 +475,60 @@ paths:
       summary: 用户登录
       tags:
       - 认证
-  /api/client/{id}:
+  /api/clients:
+    get:
+      description: 返回所有注册客户端的列表及其在线状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.ClientListItem'
+                  type: array
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取所有客户端
+      tags:
+      - 客户端
+    post:
+      consumes:
+      - application/json
+      description: 创建一个新的客户端配置
+      parameters:
+      - description: 客户端信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateClientRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/handler.Response'
+      security:
+      - Bearer: []
+      summary: 创建新客户端
+      tags:
+      - 客户端
+  /api/clients/{id}:
     delete:
       description: 删除指定的客户端配置
       parameters:
@@ -565,7 +618,7 @@ paths:
       summary: 更新客户端配置
       tags:
       - 客户端
-  /api/client/{id}/disconnect:
+  /api/clients/{id}/actions/disconnect:
     post:
       description: 强制断开客户端连接
       parameters:
@@ -586,42 +639,7 @@ paths:
       summary: 断开连接
       tags:
       - 客户端
-  /api/client/{id}/logs:
-    get:
-      description: 通过 Server-Sent Events 实时接收客户端日志
-      parameters:
-      - description: 客户端 ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - default: 100
-        description: 初始日志行数
-        in: query
-        name: lines
-        type: integer
-      - default: true
-        description: 是否持续推送新日志
-        in: query
-        name: follow
-        type: boolean
-      - description: 日志级别过滤 (info, warn, error)
-        in: query
-        name: level
-        type: string
-      produces:
-      - text/event-stream
-      responses:
-        "200":
-          description: Server-Sent Events stream
-          schema:
-            type: string
-      security:
-      - Bearer: []
-      summary: 流式传输客户端日志
-      tags:
-      - Logs
-  /api/client/{id}/push:
+  /api/clients/{id}/actions/push-config:
     post:
       description: 将配置推送到在线客户端
       parameters:
@@ -646,7 +664,7 @@ paths:
       summary: 推送配置
       tags:
       - 客户端
-  /api/client/{id}/restart:
+  /api/clients/{id}/actions/restart:
     post:
       description: 发送重启命令到客户端
       parameters:
@@ -667,41 +685,7 @@ paths:
       summary: 重启客户端
       tags:
       - 客户端
-  /api/client/{id}/screenshot:
-    get:
-      description: 获取在线客户端当前屏幕截图
-      parameters:
-      - description: 客户端ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: JPEG 质量，1-100，0 使用默认值
-        in: query
-        name: quality
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/handler.Response'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.ScreenshotResponse'
-              type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/handler.Response'
-      security:
-      - Bearer: []
-      summary: 获取客户端截图
-      tags:
-      - 客户端
-  /api/client/{id}/shell:
+  /api/clients/{id}/actions/shell:
     post:
       consumes:
       - application/json
@@ -739,7 +723,76 @@ paths:
       summary: 执行客户端 Shell 命令
       tags:
       - 客户端
-  /api/client/{id}/system-stats:
+  /api/clients/{id}/logs:
+    get:
+      description: 通过 Server-Sent Events 实时接收客户端日志
+      parameters:
+      - description: 客户端 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - default: 100
+        description: 初始日志行数
+        in: query
+        name: lines
+        type: integer
+      - default: true
+        description: 是否持续推送新日志
+        in: query
+        name: follow
+        type: boolean
+      - description: 日志级别过滤 (info, warn, error)
+        in: query
+        name: level
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: Server-Sent Events stream
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: 流式传输客户端日志
+      tags:
+      - Logs
+  /api/clients/{id}/screenshot:
+    get:
+      description: 获取在线客户端当前屏幕截图
+      parameters:
+      - description: 客户端ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: JPEG 质量，1-100，0 使用默认值
+        in: query
+        name: quality
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.ScreenshotResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.Response'
+      security:
+      - Bearer: []
+      summary: 获取客户端截图
+      tags:
+      - 客户端
+  /api/clients/{id}/system-stats:
     get:
       description: 获取在线客户端的系统资源使用情况
       parameters:
@@ -769,9 +822,8 @@ paths:
       summary: 获取客户端系统状态
       tags:
       - 客户端
-  /api/clients:
-    get:
-      description: 返回所有注册客户端的列表及其在线状态
+  /api/installations/actions/command:
+    post:
       produces:
       - application/json
       responses:
@@ -782,47 +834,12 @@ paths:
             - $ref: '#/definitions/handler.Response'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/dto.ClientListItem'
-                  type: array
+                  $ref: '#/definitions/handler.InstallCommandResponse'
               type: object
-      security:
-      - Bearer: []
-      summary: 获取所有客户端
+      summary: Generate install command payload
       tags:
-      - 客户端
-    post:
-      consumes:
-      - application/json
-      description: 创建一个新的客户端配置
-      parameters:
-      - description: 客户端信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/dto.CreateClientRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handler.Response'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/handler.Response'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/handler.Response'
-      security:
-      - Bearer: []
-      summary: 创建新客户端
-      tags:
-      - 客户端
-  /api/config:
+      - install
+  /api/runtime/config:
     get:
       description: 返回服务器配置（敏感信息脱敏）
       produces:
@@ -874,19 +891,7 @@ paths:
       summary: 更新配置
       tags:
       - 配置
-  /api/install/generate:
-    post:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handler.InstallCommandResponse'
-      summary: Generate install command payload
-      tags:
-      - install
-  /api/status:
+  /api/runtime/status:
     get:
       description: 返回服务器运行状态和客户端数量
       produces:
@@ -906,7 +911,7 @@ paths:
       summary: 获取服务器状态
       tags:
       - 状态
-  /api/traffic/hourly:
+  /api/runtime/traffic/hourly:
     get:
       description: 获取最近N小时的流量记录
       parameters:
@@ -932,7 +937,7 @@ paths:
       summary: 获取每小时流量
       tags:
       - 流量
-  /api/traffic/stats:
+  /api/runtime/traffic/stats:
     get:
       description: 获取24小时和总流量统计
       produces:
@@ -952,7 +957,27 @@ paths:
       summary: 获取流量统计
       tags:
       - 流量
-  /api/update/apply/client:
+  /api/runtime/version:
+    get:
+      description: 返回服务器版本信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.VersionInfo'
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取版本信息
+      tags:
+      - 状态
+  /api/updates/clients/actions/apply:
     post:
       consumes:
       - application/json
@@ -980,35 +1005,7 @@ paths:
       summary: 推送客户端更新
       tags:
       - 更新
-  /api/update/apply/server:
-    post:
-      consumes:
-      - application/json
-      description: 下载并应用服务端更新，服务器将自动重启
-      parameters:
-      - description: 更新请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/dto.ApplyServerUpdateRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handler.Response'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/handler.Response'
-      security:
-      - Bearer: []
-      summary: 应用服务端更新
-      tags:
-      - 更新
-  /api/update/check/client:
+  /api/updates/clients/latest:
     get:
       description: 检查是否有新的客户端版本可用
       parameters:
@@ -1046,7 +1043,7 @@ paths:
       summary: 检查客户端更新
       tags:
       - 更新
-  /api/update/check/server:
+  /api/updates/server:
     get:
       description: 检查是否有新的服务端版本可用
       produces:
@@ -1066,26 +1063,34 @@ paths:
       summary: 检查服务端更新
       tags:
       - 更新
-  /api/update/version:
-    get:
-      description: 返回服务器版本信息
+  /api/updates/server/actions/apply:
+    post:
+      consumes:
+      - application/json
+      description: 下载并应用服务端更新，服务器将自动重启
+      parameters:
+      - description: 更新请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ApplyServerUpdateRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/handler.Response'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.VersionInfo'
-              type: object
+            $ref: '#/definitions/handler.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.Response'
       security:
       - Bearer: []
-      summary: 获取版本信息
+      summary: 应用服务端更新
       tags:
-      - 状态
+      - 更新
 securityDefinitions:
   Bearer:
     description: JWT Bearer token

@@ -1,5 +1,7 @@
 # GoTunnel 架构诊断报告
 
+> 注：这是重构前的历史诊断文档。`internal/server/db`、`internal/server/domain` 等路径已在后续重构中迁移到 `internal/server/storage/sqlite` 与 `internal/core/*`，本文中的旧路径引用仅保留为审计证据。
+
 ## 1. 背景
 
 - 诊断时间：2026-03-23

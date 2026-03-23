@@ -8,7 +8,6 @@ export interface ApiEnvelope<T = unknown> {
 }
 
 export interface Schemas {
-  'db.TrafficRecord': DbTrafficRecord
   'dto.ApplyClientUpdateRequest': DtoApplyClientUpdateRequest
   'dto.ApplyServerUpdateRequest': DtoApplyServerUpdateRequest
   'dto.CheckUpdateResponse': DtoCheckUpdateResponse
@@ -39,12 +38,7 @@ export interface Schemas {
   'dto.WebConfigPart': DtoWebConfigPart
   'handler.InstallCommandResponse': HandlerInstallCommandResponse
   'handler.Response': HandlerResponse
-}
-
-export interface DbTrafficRecord {
-  inbound?: number
-  outbound?: number
-  timestamp?: number
+  'sqlite.TrafficRecord': SqliteTrafficRecord
 }
 
 export interface DtoApplyClientUpdateRequest {
@@ -110,7 +104,7 @@ export interface DtoExecuteShellRequest {
 }
 
 export interface DtoHourlyTrafficResponse {
-  records?: Array<DbTrafficRecord>
+  records?: Array<SqliteTrafficRecord>
 }
 
 export interface DtoLoginRequest {
@@ -254,6 +248,12 @@ export interface HandlerResponse {
   message?: string
 }
 
+export interface SqliteTrafficRecord {
+  inbound?: number
+  outbound?: number
+  timestamp?: number
+}
+
 export interface Operations {
   'GET /api/auth/check': {
     response: HandlerResponse & { data?: DtoTokenCheckResponse }
@@ -264,60 +264,6 @@ export interface Operations {
     response: HandlerResponse & { data?: DtoLoginResponse }
     result: DtoLoginResponse
   }
-  'DELETE /api/client/{id}': {
-    pathParams: { id: string }
-    response: HandlerResponse
-    result: ApiEnvelope<unknown>
-  }
-  'GET /api/client/{id}': {
-    pathParams: { id: string }
-    response: HandlerResponse & { data?: DtoClientResponse }
-    result: DtoClientResponse
-  }
-  'PUT /api/client/{id}': {
-    pathParams: { id: string }
-    requestBody: DtoUpdateClientRequest
-    response: HandlerResponse
-    result: ApiEnvelope<unknown>
-  }
-  'POST /api/client/{id}/disconnect': {
-    pathParams: { id: string }
-    response: HandlerResponse
-    result: ApiEnvelope<unknown>
-  }
-  'GET /api/client/{id}/logs': {
-    pathParams: { id: string }
-    queryParams: { follow?: boolean; level?: string; lines?: number }
-    response: string
-    result: string
-  }
-  'POST /api/client/{id}/push': {
-    pathParams: { id: string }
-    response: HandlerResponse
-    result: ApiEnvelope<unknown>
-  }
-  'POST /api/client/{id}/restart': {
-    pathParams: { id: string }
-    response: HandlerResponse
-    result: ApiEnvelope<unknown>
-  }
-  'GET /api/client/{id}/screenshot': {
-    pathParams: { id: string }
-    queryParams: { quality?: number }
-    response: HandlerResponse & { data?: DtoScreenshotResponse }
-    result: DtoScreenshotResponse
-  }
-  'POST /api/client/{id}/shell': {
-    pathParams: { id: string }
-    requestBody: DtoExecuteShellRequest
-    response: HandlerResponse & { data?: DtoShellExecuteResponse }
-    result: DtoShellExecuteResponse
-  }
-  'GET /api/client/{id}/system-stats': {
-    pathParams: { id: string }
-    response: HandlerResponse & { data?: DtoSystemStatsResponse }
-    result: DtoSystemStatsResponse
-  }
   'GET /api/clients': {
     response: HandlerResponse & { data?: Array<DtoClientListItem> }
     result: Array<DtoClientListItem>
@@ -327,54 +273,108 @@ export interface Operations {
     response: HandlerResponse
     result: ApiEnvelope<unknown>
   }
-  'GET /api/config': {
+  'DELETE /api/clients/{id}': {
+    pathParams: { id: string }
+    response: HandlerResponse
+    result: ApiEnvelope<unknown>
+  }
+  'GET /api/clients/{id}': {
+    pathParams: { id: string }
+    response: HandlerResponse & { data?: DtoClientResponse }
+    result: DtoClientResponse
+  }
+  'PUT /api/clients/{id}': {
+    pathParams: { id: string }
+    requestBody: DtoUpdateClientRequest
+    response: HandlerResponse
+    result: ApiEnvelope<unknown>
+  }
+  'POST /api/clients/{id}/actions/disconnect': {
+    pathParams: { id: string }
+    response: HandlerResponse
+    result: ApiEnvelope<unknown>
+  }
+  'POST /api/clients/{id}/actions/push-config': {
+    pathParams: { id: string }
+    response: HandlerResponse
+    result: ApiEnvelope<unknown>
+  }
+  'POST /api/clients/{id}/actions/restart': {
+    pathParams: { id: string }
+    response: HandlerResponse
+    result: ApiEnvelope<unknown>
+  }
+  'POST /api/clients/{id}/actions/shell': {
+    pathParams: { id: string }
+    requestBody: DtoExecuteShellRequest
+    response: HandlerResponse & { data?: DtoShellExecuteResponse }
+    result: DtoShellExecuteResponse
+  }
+  'GET /api/clients/{id}/logs': {
+    pathParams: { id: string }
+    queryParams: { follow?: boolean; level?: string; lines?: number }
+    response: string
+    result: string
+  }
+  'GET /api/clients/{id}/screenshot': {
+    pathParams: { id: string }
+    queryParams: { quality?: number }
+    response: HandlerResponse & { data?: DtoScreenshotResponse }
+    result: DtoScreenshotResponse
+  }
+  'GET /api/clients/{id}/system-stats': {
+    pathParams: { id: string }
+    response: HandlerResponse & { data?: DtoSystemStatsResponse }
+    result: DtoSystemStatsResponse
+  }
+  'POST /api/installations/actions/command': {
+    response: HandlerResponse & { data?: HandlerInstallCommandResponse }
+    result: HandlerInstallCommandResponse
+  }
+  'GET /api/runtime/config': {
     response: HandlerResponse & { data?: DtoServerConfigResponse }
     result: DtoServerConfigResponse
   }
-  'PUT /api/config': {
+  'PUT /api/runtime/config': {
     requestBody: DtoUpdateServerConfigRequest
     response: HandlerResponse & { data?: DtoConfigUpdateResponse }
     result: DtoConfigUpdateResponse
   }
-  'POST /api/install/generate': {
-    response: HandlerInstallCommandResponse
-    result: HandlerInstallCommandResponse
-  }
-  'GET /api/status': {
+  'GET /api/runtime/status': {
     response: HandlerResponse & { data?: DtoStatusResponse }
     result: DtoStatusResponse
   }
-  'GET /api/traffic/hourly': {
+  'GET /api/runtime/traffic/hourly': {
     queryParams: { hours?: number }
     response: HandlerResponse & { data?: DtoHourlyTrafficResponse }
     result: DtoHourlyTrafficResponse
   }
-  'GET /api/traffic/stats': {
+  'GET /api/runtime/traffic/stats': {
     response: HandlerResponse & { data?: DtoTrafficStatsResponse }
     result: DtoTrafficStatsResponse
   }
-  'POST /api/update/apply/client': {
+  'GET /api/runtime/version': {
+    response: HandlerResponse & { data?: DtoVersionInfo }
+    result: DtoVersionInfo
+  }
+  'POST /api/updates/clients/actions/apply': {
     requestBody: DtoApplyClientUpdateRequest
     response: HandlerResponse
     result: ApiEnvelope<unknown>
   }
-  'POST /api/update/apply/server': {
-    requestBody: DtoApplyServerUpdateRequest
-    response: HandlerResponse
-    result: ApiEnvelope<unknown>
-  }
-  'GET /api/update/check/client': {
+  'GET /api/updates/clients/latest': {
     queryParams: { arch?: string; os?: string }
     response: HandlerResponse & { data?: DtoCheckUpdateResponse }
     result: DtoCheckUpdateResponse
   }
-  'GET /api/update/check/server': {
+  'GET /api/updates/server': {
     response: HandlerResponse & { data?: DtoCheckUpdateResponse }
     result: DtoCheckUpdateResponse
   }
-  'GET /api/update/version': {
-    response: HandlerResponse & { data?: DtoVersionInfo }
-    result: DtoVersionInfo
+  'POST /api/updates/server/actions/apply': {
+    requestBody: DtoApplyServerUpdateRequest
+    response: HandlerResponse
+    result: ApiEnvelope<unknown>
   }
 }
 

@@ -17,12 +17,18 @@ class StubTunnelController(
     private var listener: TunnelController.Listener? = null
     private var config: AppConfig = AppConfig()
     private var job: Job? = null
+    private var currentSnapshot: TunnelSnapshot = TunnelSnapshot()
 
     override val isRunning: Boolean
         get() = job?.isActive == true
 
     override fun setListener(listener: TunnelController.Listener?) {
         this.listener = listener
+        listener?.onSnapshot(currentSnapshot)
+    }
+
+    override fun snapshot(): TunnelSnapshot {
+        return currentSnapshot
     }
 
     override fun updateConfig(config: AppConfig) {
@@ -32,35 +38,74 @@ class StubTunnelController(
     override fun start(config: AppConfig) {
         updateConfig(config)
         if (isRunning) {
-            listener?.onLog("Stub tunnel already running")
+            listener?.onSnapshot(currentSnapshot)
             return
         }
 
         job = scope.launch {
-            listener?.onStatusChanged(TunnelStatus.STARTING, "Preparing tunnel session")
+            emitSnapshot(
+                currentSnapshot.copy(
+                    isRunning = true,
+                    status = TunnelStatus.STARTING,
+                    detail = "Preparing tunnel session",
+                ),
+            )
             delay(400)
-            listener?.onLog("Stub tunnel prepared for ${config.serverAddress}")
-            listener?.onStatusChanged(TunnelStatus.RUNNING, "Waiting for native Go core")
+            emitSnapshot(
+                currentSnapshot.copy(
+                    isRunning = true,
+                    status = TunnelStatus.RUNNING,
+                    detail = "Waiting for native Go core",
+                    recentLogs = appendLog(currentSnapshot.recentLogs, "Stub tunnel prepared for ${config.serverAddress}"),
+                ),
+            )
 
             while (isActive) {
                 delay(30_000)
-                listener?.onLog("Stub keepalive tick for ${this@StubTunnelController.config.serverAddress}")
+                emitSnapshot(
+                    currentSnapshot.copy(
+                        recentLogs = appendLog(currentSnapshot.recentLogs, "Stub keepalive tick for ${this@StubTunnelController.config.serverAddress}"),
+                    ),
+                )
             }
         }
     }
 
     override fun stop(reason: String) {
-        listener?.onLog("Stub tunnel stop requested: $reason")
         job?.cancel()
         job = null
-        listener?.onStatusChanged(TunnelStatus.STOPPED, reason)
+        emitSnapshot(
+            currentSnapshot.copy(
+                isRunning = false,
+                status = TunnelStatus.STOPPED,
+                detail = reason,
+                recentLogs = appendLog(currentSnapshot.recentLogs, "Stub tunnel stop requested: $reason"),
+            ),
+        )
     }
 
     override fun restart(reason: String) {
-        listener?.onStatusChanged(TunnelStatus.RECONNECTING, reason)
+        emitSnapshot(
+            currentSnapshot.copy(
+                status = TunnelStatus.RECONNECTING,
+                detail = reason,
+            ),
+        )
         stop(reason)
         start(config)
     }
 
-    override fun getActiveTunnels(): List<ActiveTunnel> = emptyList()
+    private fun emitSnapshot(snapshot: TunnelSnapshot) {
+        currentSnapshot = snapshot
+        listener?.onSnapshot(snapshot)
+    }
+
+    private fun appendLog(existing: String, message: String): String {
+        val lines = existing.lines().filter { it.isNotBlank() }.toMutableList()
+        lines += message
+        while (lines.size > 80) {
+            lines.removeAt(0)
+        }
+        return lines.joinToString("\n")
+    }
 }

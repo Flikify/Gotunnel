@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/gotunnel/internal/server/tunnel"
+	serverruntime "github.com/gotunnel/internal/server/runtime"
 	"github.com/gotunnel/pkg/protocol"
 )
 
@@ -21,7 +21,7 @@ type RemoteOpsRuntime interface {
 	IsClientOnline(clientID string) bool
 	OpenClientStream(clientID string) (net.Conn, error)
 	ClientResponseTimeout() time.Duration
-	LogSessions() *tunnel.LogSessionManager
+	LogSessions() *serverruntime.LogSessionManager
 }
 
 // RemoteOpsService coordinates log, status, screenshot, and shell operations.
@@ -148,7 +148,7 @@ func (s *remoteOpsService) ExecuteClientShell(clientID, command string, timeout 
 	return &result, nil
 }
 
-func (s *remoteOpsService) readClientLogs(session *tunnel.LogSession) {
+func (s *remoteOpsService) readClientLogs(session *serverruntime.LogSession) {
 	defer s.runtime.LogSessions().RemoveSession(session.ID)
 
 	for {

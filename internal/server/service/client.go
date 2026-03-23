@@ -3,7 +3,7 @@ package service
 import (
 	"fmt"
 
-	"github.com/gotunnel/internal/server/domain"
+	domain "github.com/gotunnel/internal/core/domain"
 )
 
 type ClientRepository interface {

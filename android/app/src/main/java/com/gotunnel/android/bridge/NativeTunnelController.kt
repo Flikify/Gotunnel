@@ -22,15 +22,18 @@ class NativeTunnelController(
     private var config: AppConfig = AppConfig()
     private var bridge: MobileBinding? = null
     private var pollJob: Job? = null
-    private var lastStatus: TunnelStatus? = null
-    private var lastDetail: String = ""
-    private var publishedLogs: List<String> = emptyList()
+    private var currentSnapshot: TunnelSnapshot = TunnelSnapshot()
 
     override val isRunning: Boolean
         get() = bridge?.snapshot()?.isRunning == true
 
     override fun setListener(listener: TunnelController.Listener?) {
         this.listener = listener
+        listener?.onSnapshot(currentSnapshot)
+    }
+
+    override fun snapshot(): TunnelSnapshot {
+        return currentSnapshot
     }
 
     override fun updateConfig(config: AppConfig) {
@@ -42,24 +45,38 @@ class NativeTunnelController(
 
         val binding = runCatching { bridge ?: MobileBinding.load(context).also { bridge = it } }
             .getOrElse { error ->
-                emitStatus(TunnelStatus.ERROR, error.message ?: "Failed to load native Go binding")
-                listener?.onLog("Native Go binding unavailable: ${error.message ?: error::class.java.simpleName}")
+                emitSnapshot(
+                    currentSnapshot.copy(
+                        status = TunnelStatus.ERROR,
+                        detail = error.message ?: "Failed to load native Go binding",
+                        lastError = error.message ?: error::class.java.simpleName,
+                    ),
+                )
                 return
             }
 
         if (binding.snapshot().isRunning) {
-            listener?.onLog("Native tunnel already running")
             startPolling(binding)
             return
         }
 
-        emitStatus(TunnelStatus.STARTING, "Starting native Go core")
-        listener?.onLog("Preparing native tunnel for ${config.serverAddress}")
+        emitSnapshot(
+            currentSnapshot.copy(
+                status = TunnelStatus.STARTING,
+                detail = "Starting native Go core",
+                lastError = "",
+            ),
+        )
 
         val error = binding.configureAndStart(config, dataDir = File(context.filesDir, "gotunnel"))
         if (!error.isNullOrBlank()) {
-            emitStatus(TunnelStatus.ERROR, error)
-            listener?.onLog("Native Go core start failed: $error")
+            emitSnapshot(
+                currentSnapshot.copy(
+                    status = TunnelStatus.ERROR,
+                    detail = error,
+                    lastError = error,
+                ),
+            )
             return
         }
 
@@ -70,18 +87,32 @@ class NativeTunnelController(
         pollJob?.cancel()
         pollJob = null
         bridge?.stop()
-        listener?.onLog("Native tunnel stop requested: $reason")
-        emitStatus(TunnelStatus.STOPPED, reason)
+        emitSnapshot(
+            currentSnapshot.copy(
+                isRunning = false,
+                status = TunnelStatus.STOPPED,
+                detail = reason,
+            ),
+        )
     }
 
     override fun restart(reason: String) {
-        emitStatus(TunnelStatus.RECONNECTING, reason)
-        listener?.onLog("Native tunnel restart requested: $reason")
+        emitSnapshot(
+            currentSnapshot.copy(
+                status = TunnelStatus.RECONNECTING,
+                detail = reason,
+            ),
+        )
 
         val binding = runCatching { bridge ?: MobileBinding.load(context).also { bridge = it } }
             .getOrElse { error ->
-                emitStatus(TunnelStatus.ERROR, error.message ?: "Failed to load native Go binding")
-                listener?.onLog("Native Go binding unavailable: ${error.message ?: error::class.java.simpleName}")
+                emitSnapshot(
+                    currentSnapshot.copy(
+                        status = TunnelStatus.ERROR,
+                        detail = error.message ?: "Failed to load native Go binding",
+                        lastError = error.message ?: error::class.java.simpleName,
+                    ),
+                )
                 return
             }
 
@@ -91,16 +122,17 @@ class NativeTunnelController(
 
         val result = binding.configureAndStart(config, dataDir = File(context.filesDir, "gotunnel"))
         if (!result.isNullOrBlank()) {
-            emitStatus(TunnelStatus.ERROR, result)
-            listener?.onLog("Native Go core restart failed: $result")
+            emitSnapshot(
+                currentSnapshot.copy(
+                    status = TunnelStatus.ERROR,
+                    detail = result,
+                    lastError = result,
+                ),
+            )
             return
         }
 
         startPolling(binding)
-    }
-
-    override fun getActiveTunnels(): List<ActiveTunnel> {
-        return bridge?.activeTunnels().orEmpty()
     }
 
     private fun startPolling(binding: MobileBinding) {
@@ -130,33 +162,24 @@ class NativeTunnelController(
             }
         }
 
-        emitStatus(status, detail)
-        publishNewLogs(snapshot.recentLogs)
+        emitSnapshot(
+            TunnelSnapshot(
+                isRunning = snapshot.isRunning,
+                status = status,
+                detail = detail,
+                lastError = snapshot.lastError,
+                recentLogs = snapshot.recentLogs,
+                activeTunnels = bridge?.activeTunnels().orEmpty(),
+            ),
+        )
     }
 
-    private fun publishNewLogs(renderedLogs: String) {
-        val lines = renderedLogs.lines().map { it.trimEnd() }.filter { it.isNotBlank() }
-        if (lines.isEmpty()) {
-            publishedLogs = emptyList()
+    private fun emitSnapshot(snapshot: TunnelSnapshot) {
+        if (currentSnapshot == snapshot) {
             return
         }
-
-        val newLines = if (lines.size >= publishedLogs.size && lines.take(publishedLogs.size) == publishedLogs) {
-            lines.drop(publishedLogs.size)
-        } else {
-            lines
-        }
-        newLines.forEach { listener?.onLog(it) }
-        publishedLogs = lines
-    }
-
-    private fun emitStatus(status: TunnelStatus, detail: String) {
-        if (lastStatus == status && lastDetail == detail) {
-            return
-        }
-        lastStatus = status
-        lastDetail = detail
-        listener?.onStatusChanged(status, detail)
+        currentSnapshot = snapshot
+        listener?.onSnapshot(snapshot)
     }
 
     private fun mapStatus(status: String, isRunning: Boolean): TunnelStatus {

@@ -14,7 +14,6 @@ declare module 'vue' {
     GlassModal: typeof import('./src/components/GlassModal.vue')['default']
     GlassSwitch: typeof import('./src/components/GlassSwitch.vue')['default']
     GlassTag: typeof import('./src/components/GlassTag.vue')['default']
-    HelloWorld: typeof import('./src/components/HelloWorld.vue')['default']
     InlineLogPanel: typeof import('./src/components/InlineLogPanel.vue')['default']
     LogViewer: typeof import('./src/components/LogViewer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

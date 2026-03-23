@@ -45,11 +45,11 @@ GoTunnel is an intranet penetration tool (similar to frp) with **server-centric 
 cmd/server/          # Server entry point
 cmd/client/          # Client entry point
 internal/server/
-  ├── tunnel/        # Core tunnel server, client session management
+  ├── runtime/       # Core tunnel runtime, client session management
   ├── config/        # YAML configuration loading
-  ├── db/            # SQLite storage (ClientStore, JSPluginStore interfaces)
+  ├── storage/sqlite/# SQLite storage adapters
   ├── app/           # Web server, SPA handler
-  ├── router/        # REST API endpoints (Swagger documented)
+  ├── http/          # REST API endpoints (Swagger documented)
   └── plugin/        # Server-side JS plugin manager
 internal/client/
   └── tunnel/        # Client tunnel logic, auto-reconnect, plugin execution
@@ -61,14 +61,14 @@ pkg/
   ├── utils/         # Port availability checking
   ├── version/       # Version info and update checking (GitHub Releases API)
   └── update/        # Shared update logic (download, extract tar.gz/zip)
-web/                 # Vue 3 + TypeScript frontend (Vite + naive-ui)
+web/                 # Vue 3 + TypeScript frontend (Vite)
 scripts/             # Build scripts (build.sh, build.ps1)
 ```
 
 ### Key Interfaces
 
-- `ClientStore` (internal/server/db/): Database abstraction for client rules storage
-- `ServerInterface` (internal/server/router/handler/): API handler interface
+- `ClientStore` (internal/server/storage/sqlite/): Database abstraction for client rules storage
+- `ServerInterface` (internal/server/http/handler/): API handler interface
 
 ### Proxy Types
 
@@ -84,7 +84,7 @@ External User → Server Port → Yamux Stream → Client → Local Service
 
 ### Configuration
 
-- Server: YAML config + SQLite database for client rules and JS plugins
+- Server: YAML config + SQLite database for client rules
 - Client: Command-line flags only (server address, token)
 - Default ports: 7000 (tunnel), 7500 (web console)
 
@@ -96,13 +96,12 @@ The server provides Swagger-documented REST APIs at `/api/`.
 
 - `POST /api/auth/login` - JWT authentication
 - `GET /api/clients` - List all clients
-- `GET /api/client/{id}` - Get client details
-- `PUT /api/client/{id}` - Update client config
-- `POST /api/client/{id}/push` - Push config to online client
-- `POST /api/client/{id}/plugin/{name}/{action}` - Plugin actions (start/stop/restart/delete)
-- `GET /api/plugins` - List registered plugins
-- `GET /api/update/check/server` - Check server updates
-- `POST /api/update/apply/server` - Apply server update
+- `GET /api/clients/{id}` - Get client details
+- `PUT /api/clients/{id}` - Update client config
+- `POST /api/clients/{id}/actions/push-config` - Push config to online client
+- `GET /api/runtime/status` - Get server runtime status
+- `GET /api/updates/server` - Check server updates
+- `POST /api/updates/server/actions/apply` - Apply server update
 
 ## Update System
 

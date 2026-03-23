@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotunnel/internal/server/config"
-	"github.com/gotunnel/internal/server/domain"
+	domain "github.com/gotunnel/internal/core/domain"
 )
 
 func TestClientServiceCreateClientPersistsRules(t *testing.T) {

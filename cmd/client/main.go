@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
+	"os/signal"
+	"syscall"
 	"time"
 
+	clientapp "github.com/gotunnel/internal/client/app"
 	"github.com/gotunnel/internal/client/config"
-	"github.com/gotunnel/internal/client/tunnel"
-	"github.com/gotunnel/pkg/crypto"
 	"github.com/gotunnel/pkg/version"
 )
 
@@ -69,27 +71,39 @@ func main() {
 		log.Fatal("Usage: client [-c config.yaml] | [-s <server:port> -t <token>]")
 	}
 
-	opts := tunnel.ClientOptions{
+	app := clientapp.NewService()
+	app.Configure(clientapp.Config{
+		Server:     cfg.Server,
+		Token:      cfg.Token,
 		DataDir:    cfg.DataDir,
 		ClientID:   cfg.ClientID,
 		ClientName: cfg.Name,
-	}
-	if cfg.ReconnectMinSec > 0 {
-		opts.ReconnectDelay = time.Duration(cfg.ReconnectMinSec) * time.Second
-	}
-	if cfg.ReconnectMaxSec > 0 {
-		opts.ReconnectMaxDelay = time.Duration(cfg.ReconnectMaxSec) * time.Second
-	}
-
-	client := tunnel.NewClientWithOptions(cfg.Server, cfg.Token, opts)
+		TLSEnabled: !cfg.NoTLS,
+		ReconnectDelay: func() time.Duration {
+			if cfg.ReconnectMinSec <= 0 {
+				return 0
+			}
+			return time.Duration(cfg.ReconnectMinSec) * time.Second
+		}(),
+		ReconnectMaxDelay: func() time.Duration {
+			if cfg.ReconnectMaxSec <= 0 {
+				return 0
+			}
+			return time.Duration(cfg.ReconnectMaxSec) * time.Second
+		}(),
+	})
 
 	if !cfg.NoTLS {
-		client.TLSEnabled = true
-		client.TLSConfig = crypto.ClientTLSConfig()
 		log.Printf("[Client] TLS enabled")
 	}
 
-	if err := client.Run(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := app.RunContext(ctx); err != nil {
 		log.Fatalf("Client stopped: %v", err)
 	}
+
+	<-ctx.Done()
+	log.Printf("[Client] Shutting down")
 }
