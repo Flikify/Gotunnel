@@ -1,11 +1,14 @@
 package com.gotunnel.android
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.net.Uri
 import android.graphics.Typeface
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -44,14 +47,16 @@ class MainActivity : AppCompatActivity() {
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (!granted) {
+            recordNotificationPermissionPrompt()
+            if (granted) {
+                startTunnelService()
+            } else {
                 Toast.makeText(this, R.string.notification_permission_denied, Toast.LENGTH_SHORT).show()
             }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestNotificationPermissionIfNeeded()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -134,18 +139,32 @@ class MainActivity : AppCompatActivity() {
         return getString(messageId)
     }
 
-    private fun requestNotificationPermissionIfNeeded() {
+    private fun requestNotificationPermissionIfNeededForStart(): Boolean {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
-            return
+            return true
         }
 
         val granted = ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.POST_NOTIFICATIONS,
         ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        if (granted) {
+            return true
         }
+
+        if (!hasRequestedNotificationPermission()) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return false
+        }
+
+        if (shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return false
+        }
+
+        Toast.makeText(this, R.string.notification_permission_settings_required, Toast.LENGTH_LONG).show()
+        openAppNotificationSettings()
+        return false
     }
 
     private fun handlePrimaryAction() {
@@ -166,11 +185,38 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        if (!requestNotificationPermissionIfNeededForStart()) {
+            return
+        }
+
+        startTunnelService()
+    }
+
+    private fun startTunnelService() {
         ContextCompat.startForegroundService(
             this,
             TunnelService.createStartIntent(this, "manual-start"),
         )
         Toast.makeText(this, R.string.service_start_requested, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun hasRequestedNotificationPermission(): Boolean {
+        return getSharedPreferences(PERMISSION_PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, false)
+    }
+
+    private fun recordNotificationPermissionPrompt() {
+        getSharedPreferences(PERMISSION_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, true)
+            .apply()
+    }
+
+    private fun openAppNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        startActivity(intent)
     }
 
     private fun startRefreshLoop() {
@@ -322,5 +368,10 @@ class MainActivity : AppCompatActivity() {
         return this == TunnelStatus.RUNNING ||
             this == TunnelStatus.STARTING ||
             this == TunnelStatus.RECONNECTING
+    }
+
+    companion object {
+        private const val PERMISSION_PREFS_NAME = "gotunnel_permissions"
+        private const val KEY_NOTIFICATION_PERMISSION_REQUESTED = "notification_permission_requested"
     }
 }

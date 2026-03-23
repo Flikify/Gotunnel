@@ -60,10 +60,9 @@ const updateBadgeText = computed(() => {
 const loadShellInfo = async () => {
   if (!getToken() || isLoginPage.value) return
   try {
-    const [statusResult, versionResult, updateResult] = await Promise.allSettled([
+    const [statusResult, versionResult] = await Promise.allSettled([
       getServerStatus(),
       getVersionInfo(),
-      checkServerUpdate(),
     ])
 
     if (statusResult.status === 'fulfilled') {
@@ -73,11 +72,14 @@ const loadShellInfo = async () => {
     }
 
     if (versionResult.status === 'fulfilled') {
-      shellInfo.value.version = versionResult.value.data.version || ''
-    }
-
-    if (updateResult.status === 'fulfilled') {
-      updateInfo.value = updateResult.value.data
+      const versionInfo = versionResult.value.data
+      shellInfo.value.version = versionInfo.version || ''
+      try {
+        const { data } = await checkServerUpdate(versionInfo.version, versionInfo.os, versionInfo.arch)
+        updateInfo.value = data
+      } catch (error) {
+        console.error('Failed to check server update directly from GitHub Releases', error)
+      }
     }
   } catch (error) {
     console.error('Failed to load shell info', error)

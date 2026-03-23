@@ -22,8 +22,32 @@ export type ServerStatus = WithRequired<Omit<RawServerStatus, 'server'>, 'client
 }
 
 export type InstallCommandResponse = WithRequired<OperationResult<'POST /api/installations/actions/command'>, 'expires_at' | 'token' | 'tunnel_port'>
-export type UpdateInfo = WithRequired<OperationResult<'GET /api/updates/server'>, 'available' | 'current'>
 export type VersionInfo = WithRequired<OperationResult<'GET /api/runtime/version'>, 'arch' | 'go_version' | 'os' | 'version'>
+export interface UpdateInfo {
+  asset_name: string
+  asset_size: number
+  available: boolean
+  current: string
+  download_url: string
+  latest: string
+  release_note: string
+}
+
+interface GitHubReleaseAsset {
+  browser_download_url?: string
+  name?: string
+  size?: number
+}
+
+interface GitHubRelease {
+  assets?: GitHubReleaseAsset[]
+  body?: string
+  tag_name?: string
+}
+
+const GITHUB_API_BASE = 'https://api.github.com'
+const GITHUB_REPO_OWNER = 'Flikify'
+const GITHUB_REPO_NAME = 'Gotunnel'
 
 type RawTrafficStats = OperationResult<'GET /api/runtime/traffic/stats'>
 type RawTrafficTotals = NonNullable<RawTrafficStats['traffic_24h']>
@@ -85,14 +109,99 @@ export const disconnectClient = (id: string) => post(`/clients/${id}/actions/dis
 export const restartClient = (id: string) => post(`/clients/${id}/actions/restart`)
 
 export const getVersionInfo = () => get<VersionInfo>('/runtime/version')
-export const checkServerUpdate = () => get<UpdateInfo>('/updates/server')
-export const checkClientUpdate = (os?: string, arch?: string) => {
-  const params = new URLSearchParams()
-  if (os) params.append('os', os)
-  if (arch) params.append('arch', arch)
-  const query = params.toString()
-  return get<UpdateInfo>(`/updates/clients/latest${query ? `?${query}` : ''}`)
+
+const parseVersionParts = (version: string): number[] =>
+  version
+    .trim()
+    .replace(/^[vV]/, '')
+    .split(/[^0-9]+/)
+    .filter(Boolean)
+    .map((part) => Number.parseInt(part, 10))
+    .filter((part) => Number.isFinite(part))
+
+const compareVersions = (current: string, latest: string): number => {
+  const currentParts = parseVersionParts(current)
+  const latestParts = parseVersionParts(latest)
+  const maxLength = Math.max(currentParts.length, latestParts.length)
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const left = currentParts[index] ?? 0
+    const right = latestParts[index] ?? 0
+    if (left !== right) {
+      return left < right ? -1 : 1
+    }
+  }
+
+  return 0
 }
+
+const fetchLatestRelease = async (): Promise<GitHubRelease> => {
+  const response = await fetch(
+    `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`,
+    {
+      headers: {
+        Accept: 'application/vnd.github+json',
+      },
+    }
+  )
+
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 200)
+    throw new Error(`GitHub Releases request failed: HTTP ${response.status} ${body}`.trim())
+  }
+
+  return (await response.json()) as GitHubRelease
+}
+
+const findAssetForPlatform = (
+  assets: GitHubReleaseAsset[] | undefined,
+  component: 'server' | 'client',
+  os?: string,
+  arch?: string
+): GitHubReleaseAsset | undefined => {
+  if (!assets?.length || !os || !arch) return undefined
+
+  const prefix = `gotunnel-${component}-`
+  const suffix = `-${os}-${arch}`
+  return assets.find((asset) => {
+    const name = asset.name || ''
+    return name.startsWith(prefix) && name.includes(suffix)
+  })
+}
+
+const buildUpdateInfo = (
+  currentVersion: string,
+  latestRelease: GitHubRelease,
+  asset?: GitHubReleaseAsset
+): UpdateInfo => {
+  const latestVersion = latestRelease.tag_name?.trim()
+  if (!latestVersion) {
+    throw new Error('GitHub release is missing tag_name')
+  }
+
+  return {
+    asset_name: asset?.name || '',
+    asset_size: asset?.size || 0,
+    available: compareVersions(currentVersion, latestVersion) < 0,
+    current: currentVersion,
+    download_url: asset?.browser_download_url || '',
+    latest: latestVersion,
+    release_note: latestRelease.body || '',
+  }
+}
+
+export const checkServerUpdate = async (currentVersion: string, os?: string, arch?: string) => {
+  const release = await fetchLatestRelease()
+  const asset = findAssetForPlatform(release.assets, 'server', os, arch)
+  return { data: buildUpdateInfo(currentVersion, release, asset) }
+}
+
+export const checkClientUpdate = async (currentVersion: string, os?: string, arch?: string) => {
+  const release = await fetchLatestRelease()
+  const asset = findAssetForPlatform(release.assets, 'client', os, arch)
+  return { data: buildUpdateInfo(currentVersion, release, asset) }
+}
+
 export const applyServerUpdate = (downloadUrl: string, restart: boolean = true) =>
   post('/updates/server/actions/apply', { download_url: downloadUrl, restart })
 export const applyClientUpdate = (clientId: string, downloadUrl: string) =>

@@ -209,7 +209,7 @@ const connectionStateText = () => {
 // 自动检测客户端更新（静默）
 const autoCheckClientUpdate = async () => {
   try {
-    const { data } = await checkClientUpdate(clientOs.value, clientArch.value)
+    const { data } = await checkClientUpdate(clientVersion.value, clientOs.value, clientArch.value)
     clientUpdate.value = data
   } catch (e) {
     console.error('Auto check update failed', e)
