@@ -328,12 +328,16 @@ class NativeTunnelController(
 
         companion object {
             private val packageClassCandidates = listOf(
+                "com.gotunnel.mobilebind.gotunnelmobile.Gotunnelmobile",
                 "com.gotunnel.mobilebind.Gotunnelmobile",
                 "com.gotunnel.mobilebind.GoTunnelmobile",
+                "go.gotunnelmobile.gotunnelmobile.Gotunnelmobile",
                 "go.gotunnelmobile.Gotunnelmobile",
             )
             private val serviceClassCandidates = listOf(
+                "com.gotunnel.mobilebind.gotunnelmobile.Service",
                 "com.gotunnel.mobilebind.Service",
+                "go.gotunnelmobile.gotunnelmobile.Service",
                 "go.gotunnelmobile.Service",
             )
 
