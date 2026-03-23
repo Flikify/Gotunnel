@@ -49,7 +49,7 @@ jobs:
           retention-days: 1
 
   android-apk:
-    name: Build Android debug APK
+    name: Build Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -88,21 +88,61 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build debug APK
+      - name: Prepare Android signing
+        id: sign
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GOTUNNEL_ANDROID_KEYSTORE_B64: ${{ secrets.GOTUNNEL_ANDROID_KEYSTORE_B64 }}
+          GOTUNNEL_ANDROID_STORE_PASSWORD: ${{ secrets.GOTUNNEL_ANDROID_STORE_PASSWORD }}
+          GOTUNNEL_ANDROID_KEY_ALIAS: ${{ secrets.GOTUNNEL_ANDROID_KEY_ALIAS }}
+          GOTUNNEL_ANDROID_KEY_PASSWORD: ${{ secrets.GOTUNNEL_ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "${GOTUNNEL_ANDROID_KEYSTORE_B64}" ] && \
+             [ -n "${GOTUNNEL_ANDROID_STORE_PASSWORD}" ] && \
+             [ -n "${GOTUNNEL_ANDROID_KEY_ALIAS}" ] && \
+             [ -n "${GOTUNNEL_ANDROID_KEY_PASSWORD}" ]; then
+            mkdir -p .github/tmp
+            echo "${GOTUNNEL_ANDROID_KEYSTORE_B64}" | base64 --decode > .github/tmp/android-release.keystore
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "store_file=${GITHUB_WORKSPACE}/.github/tmp/android-release.keystore" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Android APK
+        id: apk
         working-directory: android
         shell: bash
+        env:
+          GOTUNNEL_ANDROID_STORE_PASSWORD: ${{ secrets.GOTUNNEL_ANDROID_STORE_PASSWORD }}
+          GOTUNNEL_ANDROID_KEY_ALIAS: ${{ secrets.GOTUNNEL_ANDROID_KEY_ALIAS }}
+          GOTUNNEL_ANDROID_KEY_PASSWORD: ${{ secrets.GOTUNNEL_ANDROID_KEY_PASSWORD }}
         run: |
           VERSION_NAME="${GITHUB_SHA::7}"
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             VERSION_NAME="${GITHUB_REF_NAME}"
           fi
-          gradle --no-daemon assembleDebug -PgotunnelVersionName="${VERSION_NAME}"
+          if [ "${{ steps.sign.outputs.enabled }}" = "true" ]; then
+            gradle --no-daemon assembleRelease \
+              -PgotunnelVersionName="${VERSION_NAME}" \
+              -PgotunnelReleaseStoreFile="${{ steps.sign.outputs.store_file }}" \
+              -PgotunnelReleaseStorePassword="${GOTUNNEL_ANDROID_STORE_PASSWORD}" \
+              -PgotunnelReleaseKeyAlias="${GOTUNNEL_ANDROID_KEY_ALIAS}" \
+              -PgotunnelReleaseKeyPassword="${GOTUNNEL_ANDROID_KEY_PASSWORD}"
+            echo "artifact_path=app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=gotunnel-android-signed-release-apk" >> "$GITHUB_OUTPUT"
+          else
+            gradle --no-daemon assembleDebug -PgotunnelVersionName="${VERSION_NAME}"
+            echo "artifact_path=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=gotunnel-android-debug-apk" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gotunnel-android-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: ${{ steps.apk.outputs.artifact_name }}
+          path: android/${{ steps.apk.outputs.artifact_path }}
           retention-days: 7
 
   build:

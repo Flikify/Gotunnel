@@ -38,4 +38,6 @@ The release workflow reads these GitHub secrets:
 - `GOTUNNEL_ANDROID_KEY_ALIAS`
 - `GOTUNNEL_ANDROID_KEY_PASSWORD`
 
+The same secrets are also used by the general CI workflow. When they are present on a non-`pull_request` run, CI uploads a signed release APK instead of a debug APK.
+
 Keep using the same signing key for every future release, otherwise installed Android clients will not be able to upgrade in place.
