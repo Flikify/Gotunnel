@@ -66,7 +66,6 @@ func (r *GinRouter) SetupRoutes(deps Dependencies) {
 	installHandler := handler.NewInstallHandler(deps.InstallTokenStore, deps.ServerRuntime)
 	engine.GET("/install.sh", installHandler.ServeShellScript)
 	engine.GET("/install.ps1", installHandler.ServePowerShellScript)
-	engine.GET("/install/client", installHandler.DownloadClient)
 
 	// API 路由 (需要 JWT)
 	api := engine.Group("/api")

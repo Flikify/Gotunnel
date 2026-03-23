@@ -317,11 +317,10 @@ Authorization: Bearer <token>
 - `GET /api/runtime/traffic/hourly`
 - `POST /api/installations/actions/command`
 
-#### 安装脚本与客户端下载
+#### 安装脚本
 
 - `GET /install.sh`
 - `GET /install.ps1`
-- `GET /install/client`
 
 ## 使用场景
 

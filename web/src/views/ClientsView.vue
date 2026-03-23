@@ -22,26 +22,52 @@ const quoteShellArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
 const quotePowerShellSingle = (value: string) => value.replace(/'/g, "''")
 
 const resolveTunnelHost = () => window.location.hostname || 'localhost'
-const resolveWebBaseUrl = () => window.location.origin || 'http://localhost:7500'
-
 const formatServerAddr = (host: string, port: number) => {
   const normalizedHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
   return `${normalizedHost}:${port}`
 }
 
+const fallbackCopyText = (value: string) => {
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '-9999px'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
+
+  try {
+    return document.execCommand('copy')
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
+const writeClipboardText = async (value: string) => {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  if (!fallbackCopyText(value)) {
+    throw new Error('copy command rejected')
+  }
+}
+
 const buildInstallCommands = (data: InstallCommandResponse) => {
-  const webBaseUrl = resolveWebBaseUrl()
   const serverAddr = formatServerAddr(resolveTunnelHost(), data.tunnel_port)
-  const installScriptUrl = `${webBaseUrl}/install.sh`
-  const installPs1Url = `${webBaseUrl}/install.ps1`
+  const installScriptUrl = `${window.location.origin || 'http://localhost:7500'}/install.sh`
+  const installPs1Url = `${window.location.origin || 'http://localhost:7500'}/install.ps1`
   const psServerAddr = quotePowerShellSingle(serverAddr)
   const psToken = quotePowerShellSingle(data.token)
-  const psBaseUrl = quotePowerShellSingle(webBaseUrl)
 
   return {
-    linux: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)} -b ${quoteShellArg(webBaseUrl)}`,
-    macos: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)} -b ${quoteShellArg(webBaseUrl)}`,
-    windows: `powershell -c \"irm ${installPs1Url} -Headers @{ 'X-GoTunnel-Install-Token' = '${psToken}' } | iex; Install-GoTunnel -Server '${psServerAddr}' -Token '${psToken}' -BaseUrl '${psBaseUrl}'\"`,
+    linux: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)}`,
+    macos: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)}`,
+    windows: `powershell -c \"irm ${installPs1Url} -Headers @{ 'X-GoTunnel-Install-Token' = '${psToken}' } | iex; Install-GoTunnel -Server '${psServerAddr}' -Token '${psToken}'\"`,
   }
 }
 
@@ -74,7 +100,7 @@ const openInstallModal = async () => {
 
 const copyCommand = async (command: string) => {
   try {
-    await navigator.clipboard.writeText(command)
+    await writeClipboardText(command)
     message.success('命令已复制')
   } catch (error) {
     console.error('Failed to copy command', error)

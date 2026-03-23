@@ -3,15 +3,12 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	db "github.com/gotunnel/internal/server/storage/sqlite"
-	serverupdate "github.com/gotunnel/internal/server/updateapp"
 )
 
 type InstallHandler struct {
@@ -91,60 +88,6 @@ func (h *InstallHandler) ServePowerShellScript(c *gin.Context) {
 	applyInstallSecurityHeaders(c)
 	c.Header("Content-Type", "text/plain; charset=utf-8")
 	c.String(http.StatusOK, powerShellInstallScript)
-}
-
-func (h *InstallHandler) DownloadClient(c *gin.Context) {
-	if !h.validateInstallToken(c) {
-		return
-	}
-
-	osName := c.Query("os")
-	arch := c.Query("arch")
-
-	updateInfo, err := serverupdate.CheckClientForPlatform(osName, arch)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve client package"})
-		return
-	}
-	if updateInfo.DownloadURL == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "no client package found for this platform"})
-		return
-	}
-
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, updateInfo.DownloadURL, nil)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create download request"})
-		return
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to download client package"})
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream returned %s", resp.Status)})
-		return
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-
-	applyInstallSecurityHeaders(c)
-	c.Header("Content-Type", contentType)
-	if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
-		c.Header("Content-Length", contentLength)
-	}
-	if updateInfo.AssetName != "" {
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, updateInfo.AssetName))
-	}
-
-	c.Status(http.StatusOK)
-	_, _ = io.Copy(c.Writer, resp.Body)
 }
 
 func (h *InstallHandler) validateInstallToken(c *gin.Context) bool {
