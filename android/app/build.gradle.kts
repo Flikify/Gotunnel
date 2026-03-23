@@ -81,6 +81,20 @@ dependencies {
     }
 }
 
+val verifyMobileAar by tasks.registering {
+    doLast {
+        check(mobileAar.exists()) {
+            "Missing android/app/libs/gotunnelmobile.aar. Run ./scripts/build.sh android or gomobile bind before building the APK."
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name in setOf("preBuild", "preDebugBuild", "preReleaseBuild", "assembleDebug", "assembleRelease")) {
+        dependsOn(verifyMobileAar)
+    }
+}
+
 fun parseVersionCode(versionName: String): Int {
     val numbers = versionName
         .removePrefix("v")

@@ -66,6 +66,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Resolve release metadata
         id: meta
         shell: bash
@@ -85,6 +91,19 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Install gomobile
+        shell: bash
+        run: |
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          "$(go env GOPATH)/bin/gomobile" init
+
+      - name: Build Android AAR
+        shell: bash
+        run: |
+          mkdir -p android/app/libs
+          gomobile bind -target=android/arm64 -javapkg com.gotunnel.mobilebind -o android/app/libs/gotunnelmobile.aar github.com/gotunnel/mobile/gotunnelmobile
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
