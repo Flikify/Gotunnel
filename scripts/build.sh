@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 export GOCACHE="${GOCACHE:-$BUILD_DIR/.gocache}"
 
-VERSION="${VERSION:-dev}"
+VERSION="${VERSION:-$(bash "$ROOT_DIR/scripts/resolve_version.sh" 2>/dev/null || echo v0.0.0-dev)}"
 BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M:%S')"
 GIT_COMMIT="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 USE_UPX="${USE_UPX:-true}"
@@ -188,7 +188,7 @@ Commands:
   help      Show this help message
 
 Environment variables:
-  VERSION   Set version string (default: dev)
+  VERSION   Set version string (default: auto-resolved from tag or latest tag + commit)
   USE_UPX   Enable UPX compression (default: true)
 
 Examples:

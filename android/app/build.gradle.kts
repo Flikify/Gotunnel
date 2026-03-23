@@ -1,10 +1,14 @@
+import java.io.ByteArrayOutputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
 val mobileAar = file("libs/gotunnelmobile.aar")
-val appVersionName = normalizeVersionName(providers.gradleProperty("gotunnelVersionName").orNull ?: "v0.1.0")
+val appVersionName = normalizeVersionName(
+    providers.gradleProperty("gotunnelVersionName").orNull ?: resolveDefaultVersionName(rootDir),
+)
 val appVersionCode = providers.gradleProperty("gotunnelVersionCode").orNull?.toIntOrNull()
     ?: parseVersionCode(appVersionName)
 
@@ -132,7 +136,7 @@ fun parseVersionCode(versionName: String): Int {
 fun normalizeVersionName(versionName: String): String {
     val trimmed = versionName.trim()
     if (trimmed.isBlank()) {
-        return "v0.1.0"
+        return "v0.0.0-dev"
     }
     if (trimmed.startsWith("v", ignoreCase = true)) {
         return trimmed
@@ -142,4 +146,41 @@ fun normalizeVersionName(versionName: String): String {
     } else {
         trimmed
     }
+}
+
+fun resolveDefaultVersionName(projectDir: File): String {
+    val exactTag = runGitCommand(projectDir, "describe", "--tags", "--exact-match")
+    if (!exactTag.isNullOrBlank()) {
+        return normalizeVersionName(exactTag)
+    }
+
+    val commit = runGitCommand(projectDir, "rev-parse", "--short", "HEAD").orEmpty()
+    val latestTag = runGitCommand(projectDir, "describe", "--tags", "--abbrev=0")
+
+    if (!latestTag.isNullOrBlank()) {
+        val normalizedTag = normalizeVersionName(latestTag)
+        return if (commit.isNotBlank()) {
+            "$normalizedTag-dev+$commit"
+        } else {
+            "$normalizedTag-dev"
+        }
+    }
+
+    return if (commit.isNotBlank()) {
+        "v0.0.0-dev+$commit"
+    } else {
+        "v0.0.0-dev"
+    }
+}
+
+fun runGitCommand(projectDir: File, vararg args: String): String? {
+    return runCatching {
+        val output = ByteArrayOutputStream()
+        project.exec {
+            commandLine("git", "-C", projectDir.absolutePath, *args)
+            standardOutput = output
+            isIgnoreExitValue = true
+        }
+        output.toString().trim().ifBlank { null }
+    }.getOrNull()
 }

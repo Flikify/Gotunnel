@@ -6,7 +6,7 @@ param(
     [Parameter(Position=0)]
     [string]$Command = "all",
 
-    [string]$Version = "dev",
+    [string]$Version = "",
 
     [switch]$NoUPX
 )
@@ -33,6 +33,58 @@ $DesktopPlatforms = @(
     @{ OS = "darwin"; Arch = "amd64" },
     @{ OS = "darwin"; Arch = "arm64" }
 )
+
+function Normalize-Version {
+    param([string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return "v0.0.0-dev"
+    }
+
+    if ($Value.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $Value
+    }
+
+    if ($Value -match '^\d+(\.\d+){1,3}([-.+].*)?$') {
+        return "v$Value"
+    }
+
+    return $Value
+}
+
+function Get-ResolvedVersion {
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+        return Normalize-Version $Version
+    }
+
+    try {
+        $ExactTag = (git -C $RootDir describe --tags --exact-match 2>$null)
+        if ($ExactTag) {
+            return Normalize-Version $ExactTag
+        }
+    } catch {}
+
+    $LatestTag = ""
+    try {
+        $LatestTag = (git -C $RootDir describe --tags --abbrev=0 2>$null)
+    } catch {}
+
+    if ($LatestTag) {
+        $NormalizedTag = Normalize-Version $LatestTag
+        if ($GitCommit -and $GitCommit -ne "unknown") {
+            return "$NormalizedTag-dev+$GitCommit"
+        }
+        return "$NormalizedTag-dev"
+    }
+
+    if ($GitCommit -and $GitCommit -ne "unknown") {
+        return "v0.0.0-dev+$GitCommit"
+    }
+
+    return "v0.0.0-dev"
+}
+
+$Version = Get-ResolvedVersion
 
 function Write-Info {
     param([string]$Message)
@@ -264,7 +316,7 @@ Commands:
   help      Show this help message
 
 Options:
-  -Version  Set version string (default: dev)
+  -Version  Set version string (default: auto-resolved from tag or latest tag + commit)
   -NoUPX    Disable UPX compression
 
 Target platforms:

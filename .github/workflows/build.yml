@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -54,6 +56,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -88,6 +92,12 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Resolve build version
+        id: version
+        shell: bash
+        run: |
+          echo "value=$(bash ./scripts/resolve_version.sh)" >> "$GITHUB_OUTPUT"
+
       - name: Prepare Android signing
         id: sign
         if: github.event_name != 'pull_request'
@@ -119,10 +129,7 @@ jobs:
           GOTUNNEL_ANDROID_KEY_ALIAS: ${{ secrets.GOTUNNEL_ANDROID_KEY_ALIAS }}
           GOTUNNEL_ANDROID_KEY_PASSWORD: ${{ secrets.GOTUNNEL_ANDROID_KEY_PASSWORD }}
         run: |
-          VERSION_NAME="${GITHUB_SHA::7}"
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            VERSION_NAME="${GITHUB_REF_NAME}"
-          fi
+          VERSION_NAME="${{ steps.version.outputs.value }}"
           if [ "${{ steps.sign.outputs.enabled }}" = "true" ]; then
             gradle --no-daemon assembleRelease \
               -PgotunnelVersionName="${VERSION_NAME}" \
@@ -175,6 +182,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -191,24 +200,28 @@ jobs:
       - name: Download Go modules
         run: go mod download
 
+      - name: Resolve build metadata
+        id: version
+        shell: bash
+        run: |
+          echo "value=$(bash ./scripts/resolve_version.sh)" >> "$GITHUB_OUTPUT"
+          echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
       - name: Build server and client
         shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
+          VERSION: ${{ steps.version.outputs.value }}
+          GIT_COMMIT: ${{ steps.version.outputs.commit }}
+          BUILD_TIME: ${{ steps.version.outputs.build_time }}
         run: |
           mkdir -p build/${GOOS}_${GOARCH}
           EXT=""
           if [ "$GOOS" = "windows" ]; then
             EXT=".exe"
-          fi
-
-          BUILD_TIME="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          GIT_COMMIT="${GITHUB_SHA::7}"
-          VERSION="${GITHUB_REF_NAME}"
-          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
-            VERSION="${GITHUB_SHA::7}"
           fi
 
           LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.BuildTime=${BUILD_TIME}' -X 'main.GitCommit=${GIT_COMMIT}'"
