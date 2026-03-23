@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.net.Uri
 import android.graphics.Typeface
 import android.os.Bundle
@@ -12,6 +13,7 @@ import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,6 +23,8 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.button.MaterialButton
 import com.gotunnel.android.bridge.ActiveTunnel
 import com.gotunnel.android.bridge.GoTunnelBridge
+import com.gotunnel.android.bridge.TunnelController
+import com.gotunnel.android.bridge.TunnelSnapshot
 import com.gotunnel.android.bridge.TunnelStatus
 import com.gotunnel.android.config.ConfigStore
 import com.gotunnel.android.config.ServiceStateStore
@@ -43,7 +47,7 @@ class MainActivity : AppCompatActivity() {
     private var refreshJob: Job? = null
     private lateinit var configStore: ConfigStore
     private lateinit var stateStore: ServiceStateStore
-    private lateinit var tunnelController: com.gotunnel.android.bridge.TunnelController
+    private var tunnelController: com.gotunnel.android.bridge.TunnelController? = null
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -58,18 +62,26 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        val initialized = runCatching {
+            binding = ActivityMainBinding.inflate(layoutInflater)
+            setContentView(binding.root)
 
-        configStore = ConfigStore(this)
-        stateStore = ServiceStateStore(this)
-        tunnelController = GoTunnelBridge.create(applicationContext)
+            configStore = ConfigStore(this)
+            stateStore = ServiceStateStore(this)
+            tunnelController = runCatching { GoTunnelBridge.create(applicationContext) }.getOrElse { error ->
+                buildUnavailableTunnelController(error)
+            }
 
-        binding.settingsButton.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
+            binding.settingsButton.setOnClickListener {
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
+            binding.actionButton.setOnClickListener {
+                handlePrimaryAction()
+            }
         }
-        binding.actionButton.setOnClickListener {
-            handlePrimaryAction()
+
+        initialized.onFailure { error ->
+            renderFatalStartupError(error)
         }
     }
 
@@ -95,9 +107,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderScreen() {
+        if (!::binding.isInitialized || !::configStore.isInitialized || !::stateStore.isInitialized) {
+            return
+        }
         val config = configStore.load()
         val state = stateStore.load()
-        val runtimeSnapshot = tunnelController.snapshot()
+        val runtimeSnapshot = tunnelController?.snapshot() ?: TunnelSnapshot()
         val timestamp = if (state.updatedAt > 0L) {
             DateFormat.getDateTimeInstance().format(Date(state.updatedAt))
         } else {
@@ -168,6 +183,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handlePrimaryAction() {
+        if (!::configStore.isInitialized || !::stateStore.isInitialized) {
+            Toast.makeText(this, R.string.startup_error_title, Toast.LENGTH_LONG).show()
+            return
+        }
+
         val state = stateStore.load()
         if (state.status.isActive()) {
             ContextCompat.startForegroundService(
@@ -217,6 +237,55 @@ class MainActivity : AppCompatActivity() {
             data = Uri.parse("package:$packageName")
         }
         startActivity(intent)
+    }
+
+    private fun buildUnavailableTunnelController(error: Throwable): TunnelController {
+        val message = error.message ?: error::class.java.simpleName
+        return object : TunnelController {
+            private val snapshot = TunnelSnapshot(
+                isRunning = false,
+                status = TunnelStatus.ERROR,
+                detail = message,
+                lastError = message,
+                recentLogs = "Startup failed: $message",
+            )
+
+            override val isRunning: Boolean = false
+
+            override fun setListener(listener: TunnelController.Listener?) {
+                listener?.onSnapshot(snapshot)
+            }
+
+            override fun snapshot(): TunnelSnapshot = snapshot
+
+            override fun updateConfig(config: com.gotunnel.android.config.AppConfig) = Unit
+
+            override fun start(config: com.gotunnel.android.config.AppConfig) = Unit
+
+            override fun stop(reason: String) = Unit
+
+            override fun restart(reason: String) = Unit
+        }
+    }
+
+    private fun renderFatalStartupError(error: Throwable) {
+        val container = ScrollView(this).apply {
+            setBackgroundColor(Color.WHITE)
+        }
+        val content = TextView(this).apply {
+            val message = buildString {
+                append(getString(R.string.startup_error_title))
+                append("\n\n")
+                append(error.message ?: error::class.java.name)
+            }
+            text = message
+            setTextColor(ContextCompat.getColor(context, R.color.gotunnel_text))
+            textSize = 16f
+            setPadding(dp(24), dp(32), dp(24), dp(32))
+        }
+        container.addView(content)
+        setContentView(container)
+        Toast.makeText(this, error.message ?: getString(R.string.startup_error_title), Toast.LENGTH_LONG).show()
     }
 
     private fun startRefreshLoop() {

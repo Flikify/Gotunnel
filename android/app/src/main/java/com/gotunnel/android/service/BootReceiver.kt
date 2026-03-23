@@ -14,7 +14,7 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         val config = ConfigStore(context).load()
-        if (!config.autoStart) {
+        if (!config.autoStart || config.serverAddress.isBlank() || config.token.isBlank()) {
             return
         }
 

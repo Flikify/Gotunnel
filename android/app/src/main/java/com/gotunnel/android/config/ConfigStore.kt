@@ -9,7 +9,7 @@ class ConfigStore(context: Context) {
         return AppConfig(
             serverAddress = prefs.getString(KEY_SERVER_ADDRESS, "") ?: "",
             token = prefs.getString(KEY_TOKEN, "") ?: "",
-            autoStart = prefs.getBoolean(KEY_AUTO_START, true),
+            autoStart = prefs.getBoolean(KEY_AUTO_START, false),
             autoReconnect = prefs.getBoolean(KEY_AUTO_RECONNECT, true),
         )
     }

@@ -42,6 +42,7 @@
     <string name="battery_optimization_already_disabled">Battery optimization is already disabled for GoTunnel.</string>
     <string name="notification_permission_denied">Notification permission was denied. Foreground service notifications may be limited.</string>
     <string name="notification_permission_settings_required">Notification permission was previously denied. Enable notifications for GoTunnel in system settings to start the foreground client cleanly.</string>
+    <string name="startup_error_title">GoTunnel failed to finish startup.</string>
     <string name="state_never_updated">Not updated yet</string>
     <string name="state_no_detail">No detail available</string>
     <string name="state_meta_format">Last update: %1$s</string>
