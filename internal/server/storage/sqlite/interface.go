@@ -30,6 +30,7 @@ type Store interface {
 	ClientStore
 	TrafficStore
 	OperationalEventStore
+	ServerMetadataStore
 	Close() error
 }
 
@@ -68,4 +69,9 @@ type InstallTokenStore interface {
 	GetInstallToken(token string) (*InstallToken, error)
 	MarkTokenUsed(token string) error
 	DeleteExpiredTokens(expireTime int64) error
+}
+
+type ServerMetadataStore interface {
+	GetServerMetadata(key string) (string, error)
+	SetServerMetadata(key, value string) error
 }

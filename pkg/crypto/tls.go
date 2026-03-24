@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"math/big"
 	"os"
@@ -20,14 +21,23 @@ import (
 // GenerateTLSConfig 生成内存中的自签名证书并返回 TLS 配置
 // 证书不限定具体 IP 地址，客户端使用 InsecureSkipVerify 跳过主机名验证（类似 frp）
 func GenerateTLSConfig() (*tls.Config, error) {
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	certPEM, keyPEM, err := GenerateTLSCertificatePEM()
 	if err != nil {
 		return nil, err
+	}
+	return TLSConfigFromPEM(certPEM, keyPEM)
+}
+
+// GenerateTLSCertificatePEM 生成自签名证书和私钥的 PEM 编码内容。
+func GenerateTLSCertificatePEM() ([]byte, []byte, error) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	template := x509.Certificate{
@@ -46,12 +56,31 @@ func GenerateTLSConfig() (*tls.Config, error) {
 
 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	cert := tls.Certificate{
-		Certificate: [][]byte{certDER},
-		PrivateKey:  priv,
+	keyDER, err := x509.MarshalECPrivateKey(priv)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certDER,
+	})
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "EC PRIVATE KEY",
+		Bytes: keyDER,
+	})
+
+	return certPEM, keyPEM, nil
+}
+
+// TLSConfigFromPEM 从 PEM 编码的证书和私钥创建 TLS 配置。
+func TLSConfigFromPEM(certPEM, keyPEM []byte) (*tls.Config, error) {
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return nil, err
 	}
 
 	return &tls.Config{

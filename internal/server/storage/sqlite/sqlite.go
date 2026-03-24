@@ -3,6 +3,8 @@ package sqlite
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"os"
 	"sync"
 	"time"
 
@@ -126,12 +128,48 @@ func (s *SQLiteStore) init() error {
 		return err
 	}
 
+	_, err = s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS server_metadata (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL DEFAULT ''
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // Close 关闭数据库连接
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
+}
+
+func (s *SQLiteStore) GetServerMetadata(key string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var value string
+	err := s.db.QueryRow(`SELECT value FROM server_metadata WHERE key = ?`, key).Scan(&value)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", os.ErrNotExist
+		}
+		return "", err
+	}
+	return value, nil
+}
+
+func (s *SQLiteStore) SetServerMetadata(key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`
+		INSERT INTO server_metadata (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, key, value)
+	return err
 }
 
 // GetAllClients 获取所有客户端

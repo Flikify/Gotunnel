@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -66,11 +67,16 @@ func Run(configPath string) error {
 	})))
 
 	var tunnelTLSConfig *tls.Config
-	if !cfg.Server.TLSDisabled {
-		tunnelTLSConfig, err = crypto.GenerateTLSConfig()
+	var webTLSConfig *tls.Config
+	if !cfg.Server.TLSDisabled || cfg.Server.Web.Enabled {
+		tunnelTLSConfig, err = loadOrCreateTLSConfig(store)
 		if err != nil {
-			return fmt.Errorf("generate TLS config: %w", err)
+			return fmt.Errorf("load TLS config: %w", err)
 		}
+		webTLSConfig = tunnelTLSConfig
+	}
+
+	if !cfg.Server.TLSDisabled {
 		server.SetTLSConfig(tunnelTLSConfig)
 		log.Printf("[Server] TLS enabled")
 	}
@@ -92,12 +98,8 @@ func Run(configPath string) error {
 			}
 		}
 
-		webTLSConfig := tunnelTLSConfig
 		if webTLSConfig == nil {
-			webTLSConfig, err = crypto.GenerateTLSConfig()
-			if err != nil {
-				return fmt.Errorf("generate web TLS config: %w", err)
-			}
+			return fmt.Errorf("web TLS config is unavailable")
 		}
 
 		webServer := app.NewWebServer(store, server, cfg, configPath, webTLSConfig)
@@ -120,4 +122,42 @@ func Run(configPath string) error {
 	}()
 
 	return server.Run()
+}
+
+const (
+	serverTLSCertMetadataKey = "server_tls_cert_pem"
+	serverTLSKeyMetadataKey  = "server_tls_key_pem"
+)
+
+func loadOrCreateTLSConfig(store interface {
+	GetServerMetadata(key string) (string, error)
+	SetServerMetadata(key, value string) error
+}) (*tls.Config, error) {
+	certPEM, err := store.GetServerMetadata(serverTLSCertMetadataKey)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	keyPEM, err := store.GetServerMetadata(serverTLSKeyMetadataKey)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	if certPEM != "" && keyPEM != "" {
+		return crypto.TLSConfigFromPEM([]byte(certPEM), []byte(keyPEM))
+	}
+	if certPEM != "" || keyPEM != "" {
+		return nil, fmt.Errorf("incomplete persisted TLS material in SQLite")
+	}
+
+	generatedCertPEM, generatedKeyPEM, err := crypto.GenerateTLSCertificatePEM()
+	if err != nil {
+		return nil, err
+	}
+	if err := store.SetServerMetadata(serverTLSCertMetadataKey, string(generatedCertPEM)); err != nil {
+		return nil, err
+	}
+	if err := store.SetServerMetadata(serverTLSKeyMetadataKey, string(generatedKeyPEM)); err != nil {
+		return nil, err
+	}
+	return crypto.TLSConfigFromPEM(generatedCertPEM, generatedKeyPEM)
 }

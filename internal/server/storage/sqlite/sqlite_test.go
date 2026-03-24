@@ -41,3 +41,23 @@ func TestSQLiteStorePersistsClientMetadata(t *testing.T) {
 		t.Fatalf("expected LastOfflineAt %d, got %d", client.LastOfflineAt, got.LastOfflineAt)
 	}
 }
+
+func TestSQLiteStorePersistsServerMetadata(t *testing.T) {
+	store, err := NewSQLiteStore(filepath.Join(t.TempDir(), "gotunnel.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteStore returned error: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.SetServerMetadata("tls_cert", "cert-pem"); err != nil {
+		t.Fatalf("SetServerMetadata returned error: %v", err)
+	}
+
+	got, err := store.GetServerMetadata("tls_cert")
+	if err != nil {
+		t.Fatalf("GetServerMetadata returned error: %v", err)
+	}
+	if got != "cert-pem" {
+		t.Fatalf("expected persisted metadata value, got %q", got)
+	}
+}
