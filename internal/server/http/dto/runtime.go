@@ -46,16 +46,3 @@ type ScreenshotResponse struct {
 	Timestamp int64  `json:"timestamp"`
 	Error     string `json:"error,omitempty"`
 }
-
-// ShellExecuteResponse describes the result of a remote shell execution.
-type ShellExecuteResponse struct {
-	Output   string `json:"output"`
-	ExitCode int    `json:"exit_code"`
-	Error    string `json:"error,omitempty"`
-}
-
-// ExecuteShellRequest describes a remote shell command execution request.
-type ExecuteShellRequest struct {
-	Command string `json:"command" binding:"required"`
-	Timeout int    `json:"timeout"`
-}

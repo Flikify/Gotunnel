@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import MetricCard from '../components/MetricCard.vue'
-import PageShell from '../components/PageShell.vue'
+import PageFrame from '../components/PageFrame.vue'
 import SectionCard from '../components/SectionCard.vue'
 import {
   getServerConfig,
@@ -116,7 +116,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageShell title="系统设置" eyebrow="Settings" subtitle="统一整理运行版本与服务配置，减少样式重复并保留关键运维操作。">
+  <PageFrame title="系统设置" eyebrow="Settings" subtitle="统一整理运行版本与服务配置，减少样式重复并保留关键运维操作。">
     <template #actions>
       <button class="glass-btn" @click="loadVersionInfo">刷新版本</button>
       <button class="glass-btn primary" :disabled="saving" @click="handleSaveConfig">{{ saving ? '保存中...' : '保存配置' }}</button>
@@ -175,7 +175,7 @@ onMounted(() => {
         </form>
       </SectionCard>
     </div>
-  </PageShell>
+  </PageFrame>
 </template>
 
 <style scoped>

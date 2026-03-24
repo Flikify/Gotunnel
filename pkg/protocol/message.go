@@ -11,8 +11,8 @@ import (
 
 // 协议常量
 const (
-	MaxMessageSize = 1024 * 1024 // 最大消息大小 1MB
-	HeaderSize     = 5           // 消息头大小
+	MaxMessageSize = 4 * 1024 * 1024 // 最大消息大小 4MB
+	HeaderSize     = 5               // 消息头大小
 )
 
 // 消息类型定义
@@ -58,9 +58,16 @@ const (
 	MsgTypeScreenshotRequest  uint8 = 102 // 请求截图
 	MsgTypeScreenshotResponse uint8 = 103 // 截图响应
 
-	// Shell 执行消息
-	MsgTypeShellExecuteRequest  uint8 = 104 // 执行 Shell 命令
-	MsgTypeShellExecuteResponse uint8 = 105 // Shell 执行结果
+	// 远程控制消息
+	MsgTypeRemoteControlStart         uint8 = 110 // 开始远程控制会话
+	MsgTypeRemoteControlReady         uint8 = 111 // 远程控制会话就绪
+	MsgTypeRemoteControlFrame         uint8 = 112 // 远程控制画面帧
+	MsgTypeRemoteControlInput         uint8 = 113 // 远程控制输入事件
+	MsgTypeRemoteControlClipboardGet  uint8 = 114 // 获取客户端剪贴板
+	MsgTypeRemoteControlClipboardSet  uint8 = 115 // 设置客户端剪贴板
+	MsgTypeRemoteControlClipboardData uint8 = 116 // 客户端剪贴板文本
+	MsgTypeRemoteControlStop          uint8 = 117 // 停止远程控制会话
+	MsgTypeRemoteControlError         uint8 = 118 // 远程控制错误
 )
 
 // Message 基础消息结构
@@ -327,15 +334,60 @@ type ScreenshotResponse struct {
 	Error     string `json:"error,omitempty"` // 错误信息
 }
 
-// ShellExecuteRequest Shell 执行请求
-type ShellExecuteRequest struct {
-	Command string `json:"command"` // 要执行的命令
-	Timeout int    `json:"timeout"` // 超时秒数, 0 使用默认值 (30秒)
+// RemoteControlStart starts a remote control session.
+type RemoteControlStart struct {
+	Quality         int `json:"quality,omitempty"`
+	MaxSide         int `json:"max_side,omitempty"`
+	FrameIntervalMS int `json:"frame_interval_ms,omitempty"`
 }
 
-// ShellExecuteResponse Shell 执行响应
-type ShellExecuteResponse struct {
-	Output   string `json:"output"`          // stdout + stderr 组合输出
-	ExitCode int    `json:"exit_code"`       // 进程退出码
-	Error    string `json:"error,omitempty"` // 错误信息
+// RemoteControlReady acknowledges that the session is ready.
+type RemoteControlReady struct {
+	Width           int `json:"width"`
+	Height          int `json:"height"`
+	FrameIntervalMS int `json:"frame_interval_ms"`
+}
+
+// RemoteControlFrame carries a JPEG frame encoded as raw bytes.
+type RemoteControlFrame struct {
+	Data      []byte `json:"data"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+// RemoteControlInput describes a browser-originated control event.
+type RemoteControlInput struct {
+	EventType string   `json:"event_type"`
+	X         float64  `json:"x,omitempty"`
+	Y         float64  `json:"y,omitempty"`
+	Button    string   `json:"button,omitempty"`
+	DeltaX    int      `json:"delta_x,omitempty"`
+	DeltaY    int      `json:"delta_y,omitempty"`
+	Key       string   `json:"key,omitempty"`
+	Keys      []string `json:"keys,omitempty"`
+	Text      string   `json:"text,omitempty"`
+}
+
+// RemoteControlClipboardGet requests the current clipboard text from the client.
+type RemoteControlClipboardGet struct{}
+
+// RemoteControlClipboardSet updates the client clipboard text.
+type RemoteControlClipboardSet struct {
+	Text string `json:"text"`
+}
+
+// RemoteControlClipboardData returns the current clipboard text.
+type RemoteControlClipboardData struct {
+	Text string `json:"text"`
+}
+
+// RemoteControlStop stops the current remote control session.
+type RemoteControlStop struct {
+	Reason string `json:"reason,omitempty"`
+}
+
+// RemoteControlError describes a remote control session failure.
+type RemoteControlError struct {
+	Message string `json:"message"`
 }

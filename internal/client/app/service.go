@@ -219,7 +219,7 @@ func (s *Service) prepareLocked(cancel context.CancelFunc) (*tunnel.Client, erro
 		client.TLSEnabled = true
 		client.TLSConfig = s.config.TLSConfig
 		if client.TLSConfig == nil {
-			client.TLSConfig = crypto.ClientTLSConfig()
+			client.TLSConfig = crypto.ClientTLSConfigWithTOFU(client.ServerAddr, client.DataDir, false)
 		}
 	}
 

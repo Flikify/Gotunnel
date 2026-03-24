@@ -115,7 +115,7 @@ flowchart TD
 - 建议修改方向：
   - 按职责拆分为至少四类组件：连接接入/Auth、客户端会话管理、代理监听管理、远程操作通道。
   - `tunnel.Server` 保留为最薄的 facade 或 orchestration root，不再直接承载全部状态。
-  - 将日志会话、截图、shell、系统状态查询从隧道主对象中剥离到独立 runtime service。
+  - 将日志会话、截图、系统状态查询从隧道主对象中剥离到独立 runtime service。
 
 ### 问题 5：存储模型直接依赖协议层 DTO，领域边界被打穿
 
@@ -193,7 +193,7 @@ flowchart TD
 - 将 `router` 对 `serverRuntime`、`clientStore` 的隐式依赖改成显式组合接口，消除运行时类型断言。
 - 将 `db.Client` 与 `protocol.ProxyRule` 解耦，引入独立的领域规则模型。
 - 将“热更新配置”和“需重启生效配置”明确分开建模，不再继续暴露错误语义的 `/config/reload`。
-- 将远程操作能力（日志、截图、shell、系统状态）从 `tunnel.Server` 中拆成独立应用服务，`tunnel` 只负责连接与通道。
+- 将远程操作能力（日志、截图、系统状态）从 `tunnel.Server` 中拆成独立应用服务，`tunnel` 只负责连接与通道。
 
 ## 5. 改造路线图
 

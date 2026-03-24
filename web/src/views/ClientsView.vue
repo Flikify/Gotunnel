@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import GlassModal from '../components/GlassModal.vue'
 import MetricCard from '../components/MetricCard.vue'
-import PageShell from '../components/PageShell.vue'
+import PageFrame from '../components/PageFrame.vue'
 import SectionCard from '../components/SectionCard.vue'
 import { generateInstallCommand, getClients } from '../api'
 import { useToast } from '../composables/useToast'
@@ -18,7 +18,7 @@ const installData = ref<InstallCommandResponse | null>(null)
 const generatingInstall = ref(false)
 const search = ref('')
 
-const quoteShellArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
+const quoteBashArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
 const quotePowerShellSingle = (value: string) => value.replace(/'/g, "''")
 
 const resolveTunnelHost = () => window.location.hostname || 'localhost'
@@ -65,8 +65,8 @@ const buildInstallCommands = (data: InstallCommandResponse) => {
   const psToken = quotePowerShellSingle(data.token)
 
   return {
-    linux: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)}`,
-    macos: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteShellArg(serverAddr)} -t ${quoteShellArg(data.token)}`,
+    linux: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}`,
+    macos: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}`,
     windows: `powershell -c \"irm ${installPs1Url} -Headers @{ 'X-GoTunnel-Install-Token' = '${psToken}' } | iex; Install-GoTunnel -Server '${psServerAddr}' -Token '${psToken}'\"`,
   }
 }
@@ -126,7 +126,7 @@ onMounted(loadClients)
 </script>
 
 <template>
-  <PageShell title="客户端" eyebrow="Clients" subtitle="统一管理已注册节点、连接状态与快速安装命令，减少操作跳转。">
+  <PageFrame title="客户端" eyebrow="Clients" subtitle="统一管理已注册节点、连接状态与快速安装命令，减少操作跳转。">
     <template #actions>
       <button class="glass-btn" :disabled="generatingInstall" @click="openInstallModal">
         {{ generatingInstall ? '生成中...' : '安装命令' }}
@@ -197,7 +197,7 @@ onMounted(loadClients)
         <span class="install-footnote">命令内含一次性 token，使用后请重新生成。</span>
       </template>
     </GlassModal>
-  </PageShell>
+  </PageFrame>
 </template>
 
 <style scoped>

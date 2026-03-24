@@ -24,7 +24,7 @@ const message = useToast()
 const dialog = useConfirm()
 const { themeMode, setTheme } = useTheme()
 
-const shellInfo = ref({ bind_addr: '', bind_port: 0, client_count: 0, version: '' })
+const runtimeInfo = ref({ bind_addr: '', bind_port: 0, client_count: 0, version: '' })
 const updateInfo = ref<UpdateInfo | null>(null)
 const showThemeMenu = ref(false)
 const showUserMenu = ref(false)
@@ -57,7 +57,7 @@ const updateBadgeText = computed(() => {
   return updateInfo.value.available ? `可升级到 ${updateInfo.value.latest}` : '已是最新版本'
 })
 
-const loadShellInfo = async () => {
+const loadRuntimeInfo = async () => {
   if (!getToken() || isLoginPage.value) return
   try {
     const [statusResult, versionResult] = await Promise.allSettled([
@@ -66,14 +66,14 @@ const loadShellInfo = async () => {
     ])
 
     if (statusResult.status === 'fulfilled') {
-      shellInfo.value.bind_addr = statusResult.value.data.server.bind_addr
-      shellInfo.value.bind_port = statusResult.value.data.server.bind_port
-      shellInfo.value.client_count = statusResult.value.data.client_count
+      runtimeInfo.value.bind_addr = statusResult.value.data.server.bind_addr
+      runtimeInfo.value.bind_port = statusResult.value.data.server.bind_port
+      runtimeInfo.value.client_count = statusResult.value.data.client_count
     }
 
     if (versionResult.status === 'fulfilled') {
       const versionInfo = versionResult.value.data
-      shellInfo.value.version = versionInfo.version || ''
+      runtimeInfo.value.version = versionInfo.version || ''
       try {
         const { data } = await checkServerUpdate(versionInfo.version, versionInfo.os, versionInfo.arch)
         updateInfo.value = data
@@ -82,7 +82,7 @@ const loadShellInfo = async () => {
       }
     }
   } catch (error) {
-    console.error('Failed to load shell info', error)
+    console.error('Failed to load runtime info', error)
   }
 }
 
@@ -138,12 +138,12 @@ const closeMenus = (event: MouseEvent) => {
 watch(() => route.fullPath, () => {
   showThemeMenu.value = false
   showUserMenu.value = false
-  if (!isLoginPage.value) loadShellInfo()
+  if (!isLoginPage.value) loadRuntimeInfo()
 })
 
 onMounted(() => {
   document.addEventListener('click', closeMenus)
-  loadShellInfo()
+  loadRuntimeInfo()
 })
 
 onUnmounted(() => {
@@ -153,7 +153,7 @@ onUnmounted(() => {
 
 <template>
   <RouterView v-if="isLoginPage" />
-  <div v-else class="app-shell">
+  <div v-else class="app-layout">
     <aside class="app-sidebar glass-card">
       <div class="brand-block">
         <span class="brand-mark">GT</span>
@@ -178,14 +178,14 @@ onUnmounted(() => {
 
       <div class="sidebar-card">
         <span class="sidebar-card__label">服务监听</span>
-        <strong>{{ shellInfo.bind_addr || '0.0.0.0' }}:{{ shellInfo.bind_port || '—' }}</strong>
-        <p>在线客户端 {{ shellInfo.client_count }}</p>
+        <strong>{{ runtimeInfo.bind_addr || '0.0.0.0' }}:{{ runtimeInfo.bind_port || '—' }}</strong>
+        <p>在线客户端 {{ runtimeInfo.client_count }}</p>
       </div>
 
       <div class="sidebar-card update-card" @click="showUpdateModal = true">
         <span class="sidebar-card__label">更新状态</span>
         <strong>{{ updateBadgeText }}</strong>
-        <p>{{ shellInfo.version ? `当前 ${shellInfo.version}` : '点击查看详情' }}</p>
+        <p>{{ runtimeInfo.version ? `当前 ${runtimeInfo.version}` : '点击查看详情' }}</p>
       </div>
     </aside>
 
@@ -197,7 +197,7 @@ onUnmounted(() => {
         </div>
 
         <div class="topbar-actions">
-          <button class="topbar-icon-btn" @click="loadShellInfo">
+          <button class="topbar-icon-btn" @click="loadRuntimeInfo">
             <SyncOutline />
           </button>
 
@@ -256,7 +256,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.app-shell {
+.app-layout {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
@@ -536,7 +536,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1080px) {
-  .app-shell {
+  .app-layout {
     grid-template-columns: 1fr;
   }
 
@@ -572,7 +572,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .app-shell {
+  .app-layout {
     padding: 12px;
   }
 

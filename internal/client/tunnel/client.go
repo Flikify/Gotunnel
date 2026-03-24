@@ -52,6 +52,8 @@ type Client struct {
 	rules   []protocol.ProxyRule
 	mu      sync.RWMutex
 	logger  *Logger
+
+	remoteController RemoteController
 }
 
 // NewClient creates a client with default desktop options.
@@ -100,6 +102,7 @@ func NewClientWithOptions(serverAddr, token string, opts ClientOptions) *Client 
 		reconnectDelay:    delay,
 		reconnectMaxDelay: maxDelay,
 		logger:            logger,
+		remoteController:  newRemoteController(),
 	}
 }
 
@@ -502,8 +505,8 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handleSystemStatsRequest(stream, msg)
 	case protocol.MsgTypeScreenshotRequest:
 		c.handleScreenshotRequest(stream, msg)
-	case protocol.MsgTypeShellExecuteRequest:
-		c.handleShellExecuteRequest(stream, msg)
+	case protocol.MsgTypeRemoteControlStart:
+		c.handleRemoteControlStart(stream, msg)
 	default:
 		stream.Close()
 	}
@@ -1035,77 +1038,5 @@ func (c *Client) handleScreenshotRequest(stream net.Conn, msg *protocol.Message)
 	}
 
 	respMsg, _ := protocol.NewMessage(protocol.MsgTypeScreenshotResponse, resp)
-	protocol.WriteMessage(stream, respMsg)
-}
-
-func (c *Client) handleShellExecuteRequest(stream net.Conn, msg *protocol.Message) {
-	defer stream.Close()
-
-	if !c.features.AllowShellExecute {
-		resp := protocol.ShellExecuteResponse{ExitCode: -1, Error: "remote shell execution not supported on this platform"}
-		respMsg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteResponse, resp)
-		protocol.WriteMessage(stream, respMsg)
-		return
-	}
-
-	var req protocol.ShellExecuteRequest
-	if err := msg.ParsePayload(&req); err != nil {
-		resp := protocol.ShellExecuteResponse{Error: err.Error(), ExitCode: -1}
-		respMsg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteResponse, resp)
-		protocol.WriteMessage(stream, respMsg)
-		return
-	}
-
-	timeout := req.Timeout
-	if timeout <= 0 {
-		timeout = 30
-	}
-
-	c.logf("Executing shell command: %s", req.Command)
-
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/C", req.Command)
-	} else {
-		cmd = exec.Command("sh", "-c", req.Command)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-	defer cancel()
-	cmd = exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
-
-	output, err := cmd.CombinedOutput()
-
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else if ctx.Err() == context.DeadlineExceeded {
-			resp := protocol.ShellExecuteResponse{
-				Output:   string(output),
-				ExitCode: -1,
-				Error:    "command timeout",
-			}
-			respMsg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteResponse, resp)
-			protocol.WriteMessage(stream, respMsg)
-			return
-		} else {
-			resp := protocol.ShellExecuteResponse{
-				Output:   string(output),
-				ExitCode: -1,
-				Error:    err.Error(),
-			}
-			respMsg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteResponse, resp)
-			protocol.WriteMessage(stream, respMsg)
-			return
-		}
-	}
-
-	resp := protocol.ShellExecuteResponse{
-		Output:   string(output),
-		ExitCode: exitCode,
-	}
-
-	respMsg, _ := protocol.NewMessage(protocol.MsgTypeShellExecuteResponse, resp)
 	protocol.WriteMessage(stream, respMsg)
 }

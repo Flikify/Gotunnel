@@ -29,10 +29,11 @@ type ServerSettings struct {
 
 // WebSettings Web控制台设置
 type WebSettings struct {
-	Enabled  bool   `yaml:"enabled"`
-	BindPort int    `yaml:"bind_port"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
+	Enabled   bool   `yaml:"enabled"`
+	BindPort  int    `yaml:"bind_port"`
+	Username  string `yaml:"username"`
+	Password  string `yaml:"password"`
+	JWTSecret string `yaml:"jwt_secret"`
 }
 
 // LoadServerConfig 加载服务端配置
@@ -109,11 +110,20 @@ func GenerateWebCredentials(cfg *ServerConfig) bool {
 	return false
 }
 
+// GenerateWebJWTSecret ensures the web console uses an isolated JWT signing key.
+func GenerateWebJWTSecret(cfg *ServerConfig) bool {
+	if cfg.Server.Web.JWTSecret == "" {
+		cfg.Server.Web.JWTSecret = generateToken(32)
+		return true
+	}
+	return false
+}
+
 // SaveServerConfig 保存服务端配置
 func SaveServerConfig(path string, cfg *ServerConfig) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }

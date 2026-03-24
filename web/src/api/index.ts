@@ -65,7 +65,6 @@ export type SystemStats = WithRequired<
   'cpu_usage' | 'disk_total' | 'disk_usage' | 'disk_used' | 'memory_total' | 'memory_usage' | 'memory_used'
 >
 export type ScreenshotData = WithRequired<OperationResult<'GET /api/clients/{id}/screenshot'>, 'data' | 'height' | 'timestamp' | 'width'>
-export type ShellResult = WithRequired<OperationResult<'POST /api/clients/{id}/actions/shell'>, 'exit_code' | 'output'>
 
 type RawServerConfigResponse = OperationResult<'GET /api/runtime/config'>
 type RawServerConfigInfo = NonNullable<RawServerConfigResponse['server']>
@@ -250,8 +249,17 @@ export const getClientSystemStats = (clientId: string) =>
 export const getClientScreenshot = (clientId: string, quality?: number) =>
   get<ScreenshotData>(`/clients/${clientId}/screenshot${quality ? `?quality=${quality}` : ''}`)
 
-export const executeClientShell = (clientId: string, command: string, timeout?: number) =>
-  post<ShellResult>(`/clients/${clientId}/actions/shell`, { command, timeout: timeout || 30 })
+export const createRemoteControlSocket = (clientId: string): WebSocket => {
+  const token = getToken()
+  if (!token) {
+    throw new Error('missing authentication token')
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const url = new URL(`${protocol}//${window.location.host}/api/clients/${clientId}/remote-control/ws`)
+  url.searchParams.set('token', token)
+  return new WebSocket(url)
+}
 
 export const getServerConfig = () => get<ServerConfigResponse>('/runtime/config')
 export const updateServerConfig = (config: UpdateServerConfigRequest) =>

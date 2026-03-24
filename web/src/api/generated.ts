@@ -15,7 +15,6 @@ export interface Schemas {
   'dto.ClientResponse': DtoClientResponse
   'dto.ConfigUpdateResponse': DtoConfigUpdateResponse
   'dto.CreateClientRequest': DtoCreateClientRequest
-  'dto.ExecuteShellRequest': DtoExecuteShellRequest
   'dto.HourlyTrafficResponse': DtoHourlyTrafficResponse
   'dto.LoginRequest': DtoLoginRequest
   'dto.LoginResponse': DtoLoginResponse
@@ -25,7 +24,6 @@ export interface Schemas {
   'dto.ServerConfigPart': DtoServerConfigPart
   'dto.ServerConfigResponse': DtoServerConfigResponse
   'dto.ServerStatus': DtoServerStatus
-  'dto.ShellExecuteResponse': DtoShellExecuteResponse
   'dto.StatusResponse': DtoStatusResponse
   'dto.SystemStatsResponse': DtoSystemStatsResponse
   'dto.TokenCheckResponse': DtoTokenCheckResponse
@@ -98,11 +96,6 @@ export interface DtoCreateClientRequest {
   rules?: Array<DtoProxyRule>
 }
 
-export interface DtoExecuteShellRequest {
-  command: string
-  timeout?: number
-}
-
 export interface DtoHourlyTrafficResponse {
   records?: Array<SqliteTrafficRecord>
 }
@@ -165,12 +158,6 @@ export interface DtoServerConfigResponse {
 export interface DtoServerStatus {
   bind_addr?: string
   bind_port?: number
-}
-
-export interface DtoShellExecuteResponse {
-  error?: string
-  exit_code?: number
-  output?: string
 }
 
 export interface DtoStatusResponse {
@@ -303,12 +290,6 @@ export interface Operations {
     pathParams: { id: string }
     response: HandlerResponse
     result: ApiEnvelope<unknown>
-  }
-  'POST /api/clients/{id}/actions/shell': {
-    pathParams: { id: string }
-    requestBody: DtoExecuteShellRequest
-    response: HandlerResponse & { data?: DtoShellExecuteResponse }
-    result: DtoShellExecuteResponse
   }
   'GET /api/clients/{id}/logs': {
     pathParams: { id: string }

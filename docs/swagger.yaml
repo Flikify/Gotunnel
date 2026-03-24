@@ -133,15 +133,6 @@ definitions:
     required:
     - id
     type: object
-  dto.ExecuteShellRequest:
-    properties:
-      command:
-        type: string
-      timeout:
-        type: integer
-    required:
-    - command
-    type: object
   dto.HourlyTrafficResponse:
     properties:
       records:
@@ -260,15 +251,6 @@ definitions:
         type: string
       bind_port:
         type: integer
-    type: object
-  dto.ShellExecuteResponse:
-    properties:
-      error:
-        type: string
-      exit_code:
-        type: integer
-      output:
-        type: string
     type: object
   dto.StatusResponse:
     description: 服务器状态信息
@@ -683,44 +665,6 @@ paths:
       security:
       - Bearer: []
       summary: 重启客户端
-      tags:
-      - 客户端
-  /api/clients/{id}/actions/shell:
-    post:
-      consumes:
-      - application/json
-      description: 在在线客户端执行单条 Shell 命令并返回输出
-      parameters:
-      - description: 客户端ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Shell 执行参数
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/dto.ExecuteShellRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/handler.Response'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.ShellExecuteResponse'
-              type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/handler.Response'
-      security:
-      - Bearer: []
-      summary: 执行客户端 Shell 命令
       tags:
       - 客户端
   /api/clients/{id}/logs:

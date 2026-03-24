@@ -15,6 +15,29 @@ import (
 	"time"
 )
 
+func safeArchivePath(destDir, entryName string) (string, error) {
+	cleanDest := filepath.Clean(destDir)
+	cleanEntry := filepath.Clean(entryName)
+
+	if cleanEntry == "." || cleanEntry == string(os.PathSeparator) {
+		return "", fmt.Errorf("invalid archive entry path %q", entryName)
+	}
+	if filepath.IsAbs(cleanEntry) {
+		return "", fmt.Errorf("archive entry %q uses absolute path", entryName)
+	}
+
+	targetPath := filepath.Join(cleanDest, cleanEntry)
+	relPath, err := filepath.Rel(cleanDest, targetPath)
+	if err != nil {
+		return "", err
+	}
+	if relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("archive entry %q escapes destination", entryName)
+	}
+
+	return targetPath, nil
+}
+
 func binaryCandidateNames(component, goos string) []string {
 	names := []string{component}
 	if goos == "windows" {
@@ -112,7 +135,10 @@ func ExtractTarGz(archivePath, destDir string) error {
 			return err
 		}
 
-		targetPath := filepath.Join(destDir, header.Name)
+		targetPath, err := safeArchivePath(destDir, header.Name)
+		if err != nil {
+			return err
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -120,6 +146,9 @@ func ExtractTarGz(archivePath, destDir string) error {
 				return err
 			}
 		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return err
+			}
 			outFile, err := os.Create(targetPath)
 			if err != nil {
 				return err
@@ -144,7 +173,10 @@ func ExtractZip(archivePath, destDir string) error {
 	defer reader.Close()
 
 	for _, file := range reader.File {
-		targetPath := filepath.Join(destDir, file.Name)
+		targetPath, err := safeArchivePath(destDir, file.Name)
+		if err != nil {
+			return err
+		}
 
 		if file.FileInfo().IsDir() {
 			if err := os.MkdirAll(targetPath, 0755); err != nil {

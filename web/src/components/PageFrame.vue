@@ -7,39 +7,39 @@ defineProps<{
 </script>
 
 <template>
-  <section class="page-shell">
-    <div class="page-shell__glow page-shell__glow--primary"></div>
-    <div class="page-shell__glow page-shell__glow--secondary"></div>
+  <section class="page-frame">
+    <div class="page-frame__glow page-frame__glow--primary"></div>
+    <div class="page-frame__glow page-frame__glow--secondary"></div>
 
-    <header class="page-shell__header">
-      <div class="page-shell__heading">
-        <span v-if="eyebrow" class="page-shell__eyebrow">{{ eyebrow }}</span>
+    <header class="page-frame__header">
+      <div class="page-frame__heading">
+        <span v-if="eyebrow" class="page-frame__eyebrow">{{ eyebrow }}</span>
         <h1>{{ title }}</h1>
         <p v-if="subtitle">{{ subtitle }}</p>
       </div>
-      <div v-if="$slots.actions" class="page-shell__actions">
+      <div v-if="$slots.actions" class="page-frame__actions">
         <slot name="actions" />
       </div>
     </header>
 
-    <div v-if="$slots.metrics" class="page-shell__metrics">
+    <div v-if="$slots.metrics" class="page-frame__metrics">
       <slot name="metrics" />
     </div>
 
-    <div class="page-shell__content">
+    <div class="page-frame__content">
       <slot />
     </div>
   </section>
 </template>
 
 <style scoped>
-.page-shell {
+.page-frame {
   position: relative;
   padding: 32px;
   overflow: hidden;
 }
 
-.page-shell__glow {
+.page-frame__glow {
   position: absolute;
   border-radius: 999px;
   filter: blur(80px);
@@ -47,7 +47,7 @@ defineProps<{
   pointer-events: none;
 }
 
-.page-shell__glow--primary {
+.page-frame__glow--primary {
   width: 320px;
   height: 320px;
   top: -120px;
@@ -55,7 +55,7 @@ defineProps<{
   background: var(--color-accent);
 }
 
-.page-shell__glow--secondary {
+.page-frame__glow--secondary {
   width: 280px;
   height: 280px;
   bottom: -120px;
@@ -63,14 +63,14 @@ defineProps<{
   background: var(--color-warning);
 }
 
-.page-shell__header,
-.page-shell__metrics,
-.page-shell__content {
+.page-frame__header,
+.page-frame__metrics,
+.page-frame__content {
   position: relative;
   z-index: 1;
 }
 
-.page-shell__header {
+.page-frame__header {
   display: flex;
   justify-content: space-between;
   gap: 20px;
@@ -78,11 +78,11 @@ defineProps<{
   margin-bottom: 24px;
 }
 
-.page-shell__heading {
+.page-frame__heading {
   max-width: 720px;
 }
 
-.page-shell__eyebrow {
+.page-frame__eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -97,7 +97,7 @@ defineProps<{
   letter-spacing: 0.04em;
 }
 
-.page-shell__heading h1 {
+.page-frame__heading h1 {
   margin: 0;
   font-size: clamp(28px, 4vw, 40px);
   font-weight: 700;
@@ -105,7 +105,7 @@ defineProps<{
   color: var(--color-text-primary);
 }
 
-.page-shell__heading p {
+.page-frame__heading p {
   margin: 10px 0 0;
   max-width: 640px;
   color: var(--color-text-secondary);
@@ -113,51 +113,51 @@ defineProps<{
   line-height: 1.7;
 }
 
-.page-shell__actions {
+.page-frame__actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
 }
 
-.page-shell__metrics {
+.page-frame__metrics {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   margin-bottom: 24px;
 }
 
-.page-shell__content {
+.page-frame__content {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
 @media (max-width: 768px) {
-  .page-shell {
+  .page-frame {
     padding: 20px;
   }
 
-  .page-shell__header {
+  .page-frame__header {
     flex-direction: column;
   }
 
-  .page-shell__actions {
+  .page-frame__actions {
     width: 100%;
     justify-content: stretch;
   }
 
-  .page-shell__actions :deep(*) {
+  .page-frame__actions :deep(*) {
     flex: 1;
   }
 }
 
 @media (max-width: 520px) {
-  .page-shell {
+  .page-frame {
     padding: 16px;
   }
 
-  .page-shell__metrics {
+  .page-frame__metrics {
     grid-template-columns: 1fr;
   }
 }

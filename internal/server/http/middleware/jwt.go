@@ -13,8 +13,8 @@ func JWTAuth(jwtAuth *auth.JWTAuth) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 
-		// 支持从 query 参数获取 token (用于 SSE 等不支持自定义 header 的场景)
-		if authHeader == "" {
+		// 仅为浏览器受限场景允许 query token，例如 SSE 和 websocket upgrade。
+		if authHeader == "" && allowsQueryToken(c.Request) {
 			if token := c.Query("token"); token != "" {
 				authHeader = "Bearer " + token
 			}
@@ -54,4 +54,14 @@ func JWTAuth(jwtAuth *auth.JWTAuth) gin.HandlerFunc {
 		c.Set("claims", claims)
 		c.Next()
 	}
+}
+
+func allowsQueryToken(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		return true
+	}
+	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/event-stream")
 }

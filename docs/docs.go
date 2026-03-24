@@ -459,70 +459,6 @@ const docTemplate = `{
                 ]
             }
         },
-        "/api/clients/{id}/actions/shell": {
-            "post": {
-                "description": "在在线客户端执行单条 Shell 命令并返回输出",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "客户端"
-                ],
-                "summary": "执行客户端 Shell 命令",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "客户端ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Shell 执行参数",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dto.ExecuteShellRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/handler.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/dto.ShellExecuteResponse"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/handler.Response"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ]
-            }
-        },
         "/api/clients/{id}/logs": {
             "get": {
                 "description": "通过 Server-Sent Events 实时接收客户端日志",
@@ -1348,20 +1284,6 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.ExecuteShellRequest": {
-            "type": "object",
-            "required": [
-                "command"
-            ],
-            "properties": {
-                "command": {
-                    "type": "string"
-                },
-                "timeout": {
-                    "type": "integer"
-                }
-            }
-        },
         "dto.HourlyTrafficResponse": {
             "type": "object",
             "properties": {
@@ -1535,20 +1457,6 @@ const docTemplate = `{
                 },
                 "bind_port": {
                     "type": "integer"
-                }
-            }
-        },
-        "dto.ShellExecuteResponse": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "type": "string"
-                },
-                "exit_code": {
-                    "type": "integer"
-                },
-                "output": {
-                    "type": "string"
                 }
             }
         },

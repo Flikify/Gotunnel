@@ -295,7 +295,6 @@ Authorization: Bearer <token>
 - `GET /api/clients/{id}/logs`
 - `GET /api/clients/{id}/system-stats`
 - `GET /api/clients/{id}/screenshot`
-- `POST /api/clients/{id}/actions/shell`
 
 #### 配置管理
 

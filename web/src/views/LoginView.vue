@@ -39,7 +39,7 @@ const handleLogin = async () => {
 
 <template>
   <div class="login-page">
-    <div class="login-shell glass-card">
+    <div class="login-frame glass-card">
       <section class="login-hero">
         <span class="login-badge">GoTunnel Console</span>
         <h1>更统一、更轻量的管理界面。</h1>
@@ -85,7 +85,7 @@ const handleLogin = async () => {
   padding: 24px;
 }
 
-.login-shell {
+.login-frame {
   width: min(1080px, 100%);
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 420px);
@@ -200,7 +200,7 @@ const handleLogin = async () => {
 }
 
 @media (max-width: 900px) {
-  .login-shell {
+  .login-frame {
     grid-template-columns: 1fr;
   }
 

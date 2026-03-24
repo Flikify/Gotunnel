@@ -4,10 +4,10 @@ import "time"
 
 // PlatformFeatures controls which platform-specific capabilities the client may use.
 type PlatformFeatures struct {
-	AllowSelfUpdate   bool
-	AllowScreenshot   bool
-	AllowShellExecute bool
-	AllowSystemStats  bool
+	AllowSelfUpdate    bool
+	AllowScreenshot    bool
+	AllowSystemStats   bool
+	AllowRemoteControl bool
 }
 
 // ClientOptions controls optional client runtime settings.
@@ -23,19 +23,19 @@ type ClientOptions struct {
 // DefaultPlatformFeatures enables the desktop feature set.
 func DefaultPlatformFeatures() PlatformFeatures {
 	return PlatformFeatures{
-		AllowSelfUpdate:   true,
-		AllowScreenshot:   true,
-		AllowShellExecute: true,
-		AllowSystemStats:  true,
+		AllowSelfUpdate:    true,
+		AllowScreenshot:    true,
+		AllowSystemStats:   true,
+		AllowRemoteControl: true,
 	}
 }
 
 // MobilePlatformFeatures disables capabilities that are unsuitable for a mobile sandbox.
 func MobilePlatformFeatures() PlatformFeatures {
 	return PlatformFeatures{
-		AllowSelfUpdate:   false,
-		AllowScreenshot:   false,
-		AllowShellExecute: false,
-		AllowSystemStats:  true,
+		AllowSelfUpdate:    false,
+		AllowScreenshot:    false,
+		AllowSystemStats:   true,
+		AllowRemoteControl: false,
 	}
 }

@@ -36,6 +36,7 @@ func TestSetupRoutesRegistersCoreEndpoints(t *testing.T) {
 	want := map[string]bool{
 		"GET /install.sh":                           false,
 		"GET /api/clients/:id/logs":                 false,
+		"GET /api/clients/:id/remote-control/ws":    false,
 		"GET /api/updates/clients/latest":           false,
 		"PUT /api/runtime/config":                   false,
 		"POST /api/clients/:id/actions/push-config": false,

@@ -13,8 +13,6 @@ import (
 const (
 	minSystemStatsTimeout = 10 * time.Second
 	minScreenshotTimeout  = 15 * time.Second
-	defaultShellTimeout   = 30 * time.Second
-	shellTimeoutGrace     = 5 * time.Second
 )
 
 // RemoteOpsRuntime exposes the runtime hooks required by remote operations.
@@ -26,14 +24,13 @@ type RemoteOpsRuntime interface {
 	LocalDiagnosticStore() *observability.DiagnosticStore
 }
 
-// RemoteOpsService coordinates log, status, screenshot, and shell operations.
+// RemoteOpsService coordinates log, status, and screenshot operations.
 type RemoteOpsService interface {
 	IsClientOnline(clientID string) bool
 	StartClientLogStream(clientID, sessionID string, lines int, follow bool, level string) (<-chan protocol.LogEntry, error)
 	StopClientLogStream(sessionID string)
 	GetClientSystemStats(clientID string) (*protocol.SystemStatsResponse, error)
 	GetClientScreenshot(clientID string, quality int) (*protocol.ScreenshotResponse, error)
-	ExecuteClientShell(clientID, command string, timeout int) (*protocol.ShellExecuteResponse, error)
 }
 
 type remoteOpsService struct {
@@ -130,26 +127,6 @@ func (s *remoteOpsService) GetClientScreenshot(clientID string, quality int) (*p
 	return &screenshot, nil
 }
 
-func (s *remoteOpsService) ExecuteClientShell(clientID, command string, timeout int) (*protocol.ShellExecuteResponse, error) {
-	stream, err := s.runtime.OpenClientStream(clientID)
-	if err != nil {
-		return nil, err
-	}
-	defer stream.Close()
-
-	timeoutSec, streamTimeout := s.shellTimeout(timeout)
-	req := protocol.ShellExecuteRequest{
-		Command: command,
-		Timeout: timeoutSec,
-	}
-
-	var result protocol.ShellExecuteResponse
-	if err := requestResponse(stream, streamTimeout, protocol.MsgTypeShellExecuteRequest, req, protocol.MsgTypeShellExecuteResponse, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
 func (s *remoteOpsService) readClientLogs(session *serverruntime.LogSession) {
 	defer s.runtime.LogSessions().RemoveSession(session.ID)
 
@@ -182,18 +159,6 @@ func (s *remoteOpsService) remoteOpTimeout(minTimeout time.Duration) time.Durati
 		return minTimeout
 	}
 	return timeout
-}
-
-func (s *remoteOpsService) shellTimeout(timeout int) (int, time.Duration) {
-	if timeout <= 0 {
-		timeout = int(defaultShellTimeout / time.Second)
-	}
-
-	streamTimeout := time.Duration(timeout)*time.Second + shellTimeoutGrace
-	if base := s.runtime.ClientResponseTimeout(); base > streamTimeout {
-		streamTimeout = base
-	}
-	return timeout, streamTimeout
 }
 
 func requestResponse(stream net.Conn, timeout time.Duration, requestType uint8, requestPayload any, responseType uint8, responsePayload any) error {

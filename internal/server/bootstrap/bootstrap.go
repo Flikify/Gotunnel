@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
@@ -30,8 +31,6 @@ func Run(configPath string) error {
 		return fmt.Errorf("init database: %w", err)
 	}
 	defer store.Close()
-
-	log.Printf("[Server] Token: %s", cfg.Server.Token)
 
 	server := runtime.NewServer(
 		store,
@@ -66,33 +65,49 @@ func Run(configPath string) error {
 		"channel": "server-legacy",
 	})))
 
+	var tunnelTLSConfig *tls.Config
 	if !cfg.Server.TLSDisabled {
-		tlsConfig, err := crypto.GenerateTLSConfig()
+		tunnelTLSConfig, err = crypto.GenerateTLSConfig()
 		if err != nil {
 			return fmt.Errorf("generate TLS config: %w", err)
 		}
-		server.SetTLSConfig(tlsConfig)
+		server.SetTLSConfig(tunnelTLSConfig)
 		log.Printf("[Server] TLS enabled")
 	}
 
 	if cfg.Server.Web.Enabled {
-		if config.GenerateWebCredentials(cfg) {
+		generatedWebCreds := config.GenerateWebCredentials(cfg)
+		generatedWebJWT := config.GenerateWebJWTSecret(cfg)
+		if generatedWebCreds {
 			log.Printf("[Web] Auto-generated credentials - Username: %s, Password: %s",
 				cfg.Server.Web.Username, cfg.Server.Web.Password)
 			log.Printf("[Web] Please save these credentials and update your config file")
+		}
+		if generatedWebJWT {
+			log.Printf("[Web] Generated isolated JWT signing secret for the web console")
+		}
+		if generatedWebCreds || generatedWebJWT {
 			if err := config.SaveServerConfig(configPath, cfg); err != nil {
 				log.Printf("[Web] Warning: failed to save config: %v", err)
 			}
 		}
 
-		webServer := app.NewWebServer(store, server, cfg, configPath)
+		webTLSConfig := tunnelTLSConfig
+		if webTLSConfig == nil {
+			webTLSConfig, err = crypto.GenerateTLSConfig()
+			if err != nil {
+				return fmt.Errorf("generate web TLS config: %w", err)
+			}
+		}
+
+		webServer := app.NewWebServer(store, server, cfg, configPath, webTLSConfig)
 		addr := fmt.Sprintf("%s:%d", cfg.Server.BindAddr, cfg.Server.Web.BindPort)
 		go func() {
-			if err := webServer.Run(addr, cfg.Server.Web.Username, cfg.Server.Web.Password, cfg.Server.Token); err != nil {
+			if err := webServer.Run(addr, cfg.Server.Web.Username, cfg.Server.Web.Password, cfg.Server.Web.JWTSecret); err != nil {
 				log.Printf("[Web] Server error: %v", err)
 			}
 		}()
-		log.Printf("[Web] Console running at http://%s (authentication required)", addr)
+		log.Printf("[Web] Console running at https://%s (authentication required)", addr)
 	}
 
 	quit := make(chan os.Signal, 1)

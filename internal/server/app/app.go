@@ -1,9 +1,12 @@
 package app
 
 import (
+	"crypto/tls"
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
 
 	"github.com/gotunnel/internal/server/config"
 	httpapi "github.com/gotunnel/internal/server/http"
@@ -27,14 +30,16 @@ type WebServer struct {
 	Store     webStore
 	Server    httpapi.ServerInterface
 	ConfigSvc service.ConfigService
+	TLSConfig *tls.Config
 }
 
 // NewWebServer 创建Web服务
-func NewWebServer(store webStore, srv httpapi.ServerInterface, cfg *config.ServerConfig, cfgPath string) *WebServer {
+func NewWebServer(store webStore, srv httpapi.ServerInterface, cfg *config.ServerConfig, cfgPath string, tlsConfig *tls.Config) *WebServer {
 	return &WebServer{
 		Store:     store,
 		Server:    srv,
 		ConfigSvc: service.NewConfigService(cfg, cfgPath, srv),
+		TLSConfig: tlsConfig,
 	}
 }
 
@@ -63,5 +68,18 @@ func (w *WebServer) Run(addr, username, password, jwtSecret string) error {
 	r.SetupStaticFiles(staticFS)
 
 	log.Printf("[Web] Console listening on %s", addr)
-	return r.Engine.Run(addr)
+	if w.TLSConfig == nil {
+		return fmt.Errorf("web TLS config is required")
+	}
+
+	server := &http.Server{
+		Addr:      addr,
+		Handler:   r.Engine,
+		TLSConfig: w.TLSConfig.Clone(),
+	}
+	listener, err := tls.Listen("tcp", addr, server.TLSConfig)
+	if err != nil {
+		return err
+	}
+	return server.Serve(listener)
 }

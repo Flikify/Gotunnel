@@ -70,14 +70,14 @@ func (h *InstallHandler) GenerateInstallCommand(c *gin.Context) {
 	})
 }
 
-func (h *InstallHandler) ServeShellScript(c *gin.Context) {
+func (h *InstallHandler) ServeBashInstallScript(c *gin.Context) {
 	if !h.validateInstallToken(c) {
 		return
 	}
 
 	applyInstallSecurityHeaders(c)
 	c.Header("Content-Type", "text/x-shellscript; charset=utf-8")
-	c.String(http.StatusOK, shellInstallScript)
+	c.String(http.StatusOK, bashInstallScript)
 }
 
 func (h *InstallHandler) ServePowerShellScript(c *gin.Context) {
@@ -87,7 +87,7 @@ func (h *InstallHandler) ServePowerShellScript(c *gin.Context) {
 
 	applyInstallSecurityHeaders(c)
 	c.Header("Content-Type", "text/plain; charset=utf-8")
-	c.String(http.StatusOK, powerShellInstallScript)
+	c.String(http.StatusOK, windowsInstallScript)
 }
 
 func (h *InstallHandler) validateInstallToken(c *gin.Context) bool {

@@ -50,6 +50,7 @@ func (r *GinRouter) Handler() http.Handler {
 func (r *GinRouter) SetupRoutes(deps Dependencies) {
 	engine := r.Engine
 	remoteOps := service.NewRemoteOpsService(deps.ServerRuntime)
+	remoteControl := service.NewRemoteControlService(deps.ServerRuntime)
 	diagnostics := service.NewDiagnosticsService(deps.ServerRuntime)
 	events := service.NewEventService(deps.OperationalEvents)
 
@@ -67,7 +68,7 @@ func (r *GinRouter) SetupRoutes(deps Dependencies) {
 	engine.GET("/api/auth/check", authHandler.Check)
 
 	installHandler := handler.NewInstallHandler(deps.InstallTokenStore, deps.ServerRuntime)
-	engine.GET("/install.sh", installHandler.ServeShellScript)
+	engine.GET("/install.sh", installHandler.ServeBashInstallScript)
 	engine.GET("/install.ps1", installHandler.ServePowerShellScript)
 
 	// API 路由 (需要 JWT)
@@ -80,6 +81,7 @@ func (r *GinRouter) SetupRoutes(deps Dependencies) {
 
 		clientService := service.NewClientService(deps.ClientStore, service.NewClientRuntimeAdapter(deps.ServerRuntime), deps.ConfigService)
 		clientHandler := handler.NewClientHandler(clientService, remoteOps)
+		remoteControlHandler := handler.NewRemoteControlHandler(remoteControl)
 		api.GET("/clients", clientHandler.List)
 		api.POST("/clients", clientHandler.Create)
 		api.GET("/clients/:id", clientHandler.Get)
@@ -90,7 +92,7 @@ func (r *GinRouter) SetupRoutes(deps Dependencies) {
 		api.POST("/clients/:id/actions/restart", clientHandler.Restart)
 		api.GET("/clients/:id/system-stats", clientHandler.GetSystemStats)
 		api.GET("/clients/:id/screenshot", clientHandler.GetScreenshot)
-		api.POST("/clients/:id/actions/shell", clientHandler.ExecuteShell)
+		api.GET("/clients/:id/remote-control/ws", remoteControlHandler.Stream)
 
 		configHandler := handler.NewConfigHandler(deps.ConfigService)
 		api.GET("/runtime/config", configHandler.Get)

@@ -253,35 +253,6 @@ func (h *ClientHandler) GetScreenshot(c *gin.Context) {
 	Success(c, screenshot)
 }
 
-// ExecuteShell 执行 Shell 命令
-// @Summary 执行客户端 Shell 命令
-// @Description 在在线客户端执行单条 Shell 命令并返回输出
-// @Tags 客户端
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param id path string true "客户端ID"
-// @Param request body dto.ExecuteShellRequest true "Shell 执行参数"
-// @Success 200 {object} Response{data=dto.ShellExecuteResponse}
-// @Failure 400 {object} Response
-// @Router /api/clients/{id}/actions/shell [post]
-func (h *ClientHandler) ExecuteShell(c *gin.Context) {
-	clientID := c.Param("id")
-	var req dto.ExecuteShellRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	result, err := h.remoteOps.ExecuteClientShell(clientID, req.Command, req.Timeout)
-	if err != nil {
-		InternalError(c, err.Error())
-		return
-	}
-
-	Success(c, result)
-}
-
 func (h *ClientHandler) handleClientServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrInvalidClientID), errors.Is(err, service.ErrProxyRuleLimitExceeded):

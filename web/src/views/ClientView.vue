@@ -3,10 +3,10 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
-  PushOutline, AddOutline, RefreshOutline,
-  PlayOutline
+  PushOutline, AddOutline, RefreshOutline
 } from '@vicons/ionicons5'
 import GlassModal from '../components/GlassModal.vue'
+import RemoteControlModal from '../components/RemoteControlModal.vue'
 import GlassTag from '../components/GlassTag.vue'
 import GlassSwitch from '../components/GlassSwitch.vue'
 import { useToast } from '../composables/useToast'
@@ -14,7 +14,7 @@ import { useConfirm } from '../composables/useConfirm'
 import {
   getClient, updateClient, deleteClient, pushConfigToClient, disconnectClient, restartClient,
   checkClientUpdate, applyClientUpdate, getClientSystemStats, getVersionInfo, getServerConfig,
-  getClientScreenshot, executeClientShell,
+  getClientScreenshot,
   type UpdateInfo, type SystemStats, type ScreenshotData
 } from '../api'
 import type { ProxyRule } from '../types'
@@ -57,14 +57,8 @@ const serverVersion = ref('')
   const autoRefreshScreenshot = ref(false)
   const screenshotInterval = ref(5) // 默认 5s
   const screenshotTimer = ref<number | null>(null)
+  const showRemoteControlModal = ref(false)
   
-  // Shell 相关
-  const shellCommand = ref('')
-  const shellOutput = ref('')
-  const executingShell = ref(false)
-  const shellHistory = ref<string[]>([])
-  const historyIndex = ref(-1)
-
 // Built-in Types (Added WebSocket)
 const builtinTypes = [
   { label: 'TCP', value: 'tcp' },
@@ -256,62 +250,6 @@ const toggleAutoRefresh = () => {
       screenshotTimer.value = null
     }
   }
-}
-
-// Shell 相关方法
-const executeShell = async () => {
-  if (!shellCommand.value.trim()) return
-  
-  const cmd = shellCommand.value.trim()
-  shellCommand.value = ''
-  executingShell.value = true
-  
-  // 添加到历史记录
-  shellHistory.value.unshift(cmd)
-  if (shellHistory.value.length > 50) shellHistory.value.pop()
-  historyIndex.value = -1
-  
-  shellOutput.value += `\n> ${cmd}\n`
-  
-  try {
-    const { data } = await executeClientShell(clientId, cmd)
-    if (data.error) {
-       shellOutput.value += `Error: ${data.error}\n`
-    } else {
-       shellOutput.value += data.output + '\n'
-    }
-    if (data.exit_code !== 0) {
-       shellOutput.value += `Exit Code: ${data.exit_code}\n`
-    }
-  } catch (e: any) {
-    shellOutput.value += `Error: ${e.message}\n`
-  } finally {
-    executingShell.value = false
-    // 滚动到底部 (需要 nextTick 和 ref)
-    setTimeout(() => {
-        const textarea = document.getElementById('shell-output')
-        if (textarea) textarea.scrollTop = textarea.scrollHeight
-    }, 100)
-  }
-}
-
-const handleShellHistory = (direction: 'up' | 'down') => {
-    if (shellHistory.value.length === 0) return
-
-    if (direction === 'up') {
-        if (historyIndex.value < shellHistory.value.length - 1) {
-            historyIndex.value++
-            shellCommand.value = shellHistory.value[historyIndex.value] || ''
-        }
-    } else {
-        if (historyIndex.value > 0) {
-            historyIndex.value--
-            shellCommand.value = shellHistory.value[historyIndex.value] || ''
-        } else if (historyIndex.value === 0) {
-            historyIndex.value = -1
-            shellCommand.value = ''
-        }
-    }
 }
 
 // 格式化字节大小
@@ -651,62 +589,6 @@ onUnmounted(() => {
         </div>
 
         <div class="content-column">
-          <div v-if="online" class="workspace-grid">
-            <div class="glass-card workspace-card workspace-card--screenshot">
-              <div class="card-header">
-                <h3>屏幕截图</h3>
-                <div class="header-controls">
-                  <GlassSwitch :model-value="autoRefreshScreenshot" @update:model-value="(v: boolean) => { autoRefreshScreenshot = v; toggleAutoRefresh() }" size="small">
-                    自动刷新
-                  </GlassSwitch>
-                  <button class="glass-btn tiny" :disabled="loadingScreenshot" @click="loadScreenshot">
-                    <RefreshOutline class="btn-icon-sm" />
-                  </button>
-                </div>
-              </div>
-              <div class="card-body screenshot-body">
-                <div class="screenshot-container" v-if="screenshotData">
-                  <img :src="`data:image/jpeg;base64,${screenshotData.data}`" alt="Screenshot" class="screenshot-img" />
-                  <div class="screenshot-meta">
-                    {{ new Date(screenshotData.timestamp).toLocaleTimeString() }} ({{ screenshotData.width }}x{{ screenshotData.height }})
-                  </div>
-                </div>
-                <div v-else class="empty-hint" @click="loadScreenshot">
-                  {{ loadingScreenshot ? '截图中...' : '点击获取截图' }}
-                </div>
-              </div>
-            </div>
-
-            <div class="glass-card workspace-card workspace-card--shell">
-              <div class="card-header">
-                <h3>远程 Shell</h3>
-              </div>
-              <div class="card-body shell-body">
-                <textarea
-                  id="shell-output"
-                  class="shell-output"
-                  readonly
-                  v-model="shellOutput"
-                ></textarea>
-                <div class="shell-input-group">
-                  <input
-                    type="text"
-                    class="glass-input shell-input"
-                    v-model="shellCommand"
-                    @keydown.enter="executeShell"
-                    @keydown.up.prevent="handleShellHistory('up')"
-                    @keydown.down.prevent="handleShellHistory('down')"
-                    placeholder="输入命令..."
-                    :disabled="executingShell"
-                  />
-                  <button class="glass-btn primary small" :disabled="executingShell" @click="executeShell">
-                    <PlayOutline class="btn-icon-sm" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <!-- Rules Card -->
           <div class="glass-card">
             <div class="card-header">
@@ -754,7 +636,45 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+
+      <div v-if="online" class="bottom-workspace-grid">
+        <div class="glass-card workspace-card workspace-card--screenshot">
+          <div class="card-header">
+            <h3>屏幕截图</h3>
+            <div class="header-controls">
+              <button class="glass-btn tiny" @click="showRemoteControlModal = true">
+                远程控制
+              </button>
+              <GlassSwitch :model-value="autoRefreshScreenshot" @update:model-value="(v: boolean) => { autoRefreshScreenshot = v; toggleAutoRefresh() }" size="small">
+                自动刷新
+              </GlassSwitch>
+              <button class="glass-btn tiny" :disabled="loadingScreenshot" @click="loadScreenshot">
+                <RefreshOutline class="btn-icon-sm" />
+              </button>
+            </div>
+          </div>
+          <div class="card-body screenshot-body">
+            <div class="screenshot-container" v-if="screenshotData">
+              <img :src="`data:image/jpeg;base64,${screenshotData.data}`" alt="Screenshot" class="screenshot-img" />
+              <div class="screenshot-meta">
+                {{ new Date(screenshotData.timestamp).toLocaleTimeString() }} ({{ screenshotData.width }}x{{ screenshotData.height }})
+              </div>
+            </div>
+            <div v-else class="empty-hint" @click="loadScreenshot">
+              {{ loadingScreenshot ? '截图中...' : '点击获取截图' }}
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
+
+    <RemoteControlModal
+      :show="showRemoteControlModal"
+      :client-id="clientId"
+      :client-os="clientOs"
+      @close="showRemoteControlModal = false"
+    />
 
     <!-- Rule Modal -->
     <GlassModal :show="showRuleModal" :title="ruleModalType==='create'?'添加规则':'编辑规则'" @close="showRuleModal = false">
@@ -997,11 +917,12 @@ onUnmounted(() => {
   gap: 20px;
 }
 
-.workspace-grid {
+.bottom-workspace-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  grid-template-columns: 1fr;
   gap: 20px;
   align-items: stretch;
+  margin-top: 20px;
 }
 
 .workspace-card {
@@ -1432,41 +1353,6 @@ onUnmounted(() => {
   font-family: monospace;
 }
 
-/* Shell Terminal Card */
-.shell-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: 100%;
-}
-
-.shell-output {
-  width: 100%;
-  height: 340px;
-  background: #07131a;
-  color: #83f0c7;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(47, 143, 187, 0.18);
-  resize: vertical;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  flex: 1;
-}
-
-.shell-input-group {
-  display: flex;
-  gap: 8px;
-}
-
-.shell-input {
-  flex: 1;
-  font-family: 'Consolas', 'Monaco', monospace;
-}
-
 .header-controls {
   display: flex;
   align-items: center;
@@ -1531,7 +1417,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1180px) {
-  .workspace-grid {
+  .bottom-workspace-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1578,18 +1464,6 @@ onUnmounted(() => {
     right: 0;
     border-top-left-radius: 0;
     text-align: center;
-  }
-
-  .shell-output {
-    height: 260px;
-  }
-
-  .shell-input-group {
-    flex-direction: column;
-  }
-
-  .shell-input-group .glass-btn {
-    justify-content: center;
   }
 
   .system-stat-item {

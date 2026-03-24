@@ -1,6 +1,6 @@
 package handler
 
-const shellInstallScript = `#!/usr/bin/env bash
+const bashInstallScript = `#!/usr/bin/env bash
 set -euo pipefail
 
 usage() {
@@ -141,7 +141,7 @@ echo "Client started in background with PID $NEW_PID"
 echo "Logs: $LOG_FILE"
 `
 
-const powerShellInstallScript = `function Get-GoTunnelArch {
+const windowsInstallScript = `function Get-GoTunnelArch {
   switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()) {
     'x64' { return 'amd64' }
     'arm64' { return 'arm64' }

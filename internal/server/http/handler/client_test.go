@@ -159,7 +159,3 @@ func (s *fakeRemoteOpsService) GetClientSystemStats(clientID string) (*protocol.
 func (s *fakeRemoteOpsService) GetClientScreenshot(clientID string, quality int) (*protocol.ScreenshotResponse, error) {
 	return nil, errors.New("unused")
 }
-
-func (s *fakeRemoteOpsService) ExecuteClientShell(clientID, command string, timeout int) (*protocol.ShellExecuteResponse, error) {
-	return nil, errors.New("unused")
-}

@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { getClients, getTrafficHourly, getTrafficStats, type TrafficRecord } from '../api'
 import type { ClientStatus } from '../types'
 import MetricCard from '../components/MetricCard.vue'
-import PageShell from '../components/PageShell.vue'
+import PageFrame from '../components/PageFrame.vue'
 import SectionCard from '../components/SectionCard.vue'
 
 const clients = ref<ClientStatus[]>([])
@@ -72,7 +72,7 @@ onMounted(loadDashboard)
 </script>
 
 <template>
-  <PageShell title="控制台" eyebrow="Overview" subtitle="统一查看连接状态、流量趋势与客户端健康情况，减少页面层级并突出关键数据。">
+  <PageFrame title="控制台" eyebrow="Overview" subtitle="统一查看连接状态、流量趋势与客户端健康情况，减少页面层级并突出关键数据。">
     <template #actions>
       <button class="glass-btn" @click="loadDashboard">{{ loading ? '刷新中...' : '刷新数据' }}</button>
     </template>
@@ -141,7 +141,7 @@ onMounted(loadDashboard)
         <div v-else class="empty-state">暂无客户端数据。</div>
       </SectionCard>
     </div>
-  </PageShell>
+  </PageFrame>
 </template>
 
 <style scoped>

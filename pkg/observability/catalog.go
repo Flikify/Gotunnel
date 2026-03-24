@@ -17,7 +17,6 @@ const (
 	EventClientAuthAccepted       = "client.auth.accepted"
 	EventClientUpdateFailed       = "client.update.failed"
 	EventClientUpdateStarted      = "client.update.started"
-	EventClientShellExecuted      = "client.shell.executed"
 	EventClientScreenshotFailed   = "client.screenshot.failed"
 
 	EventAndroidNetworkLost    = "android.network.lost"
