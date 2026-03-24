@@ -2,9 +2,11 @@ package bootstrap
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	runtime "github.com/gotunnel/internal/server/runtime"
 	db "github.com/gotunnel/internal/server/storage/sqlite"
 	"github.com/gotunnel/pkg/crypto"
+	"github.com/gotunnel/pkg/observability"
 )
 
 // Run assembles and starts the server process from a config path.
@@ -38,6 +41,7 @@ func Run(configPath string) error {
 		cfg.Server.HeartbeatSec,
 		cfg.Server.HeartbeatTimeout,
 	)
+	server.SetOperationalEventStore(store)
 	server.ApplyRuntimeConfig(
 		cfg.Server.HeartbeatSec,
 		cfg.Server.HeartbeatTimeout,
@@ -45,6 +49,22 @@ func Run(configPath string) error {
 		cfg.Server.ClientResponseTimeoutSec,
 	)
 	server.SetTrafficStore(store)
+
+	diagRoot := filepath.Join(filepath.Dir(cfg.Server.DBPath), "server-diagnostics")
+	diagStore, err := observability.NewDiagnosticStore(observability.StoreOptions{
+		RootDir:       diagRoot,
+		RetentionDays: 14,
+		NodeID:        "server",
+		NodeRole:      observability.NodeRoleServer,
+	})
+	if err != nil {
+		return fmt.Errorf("init diagnostic store: %w", err)
+	}
+	server.SetDiagnosticStore(diagStore)
+	log.SetFlags(0)
+	log.SetOutput(io.MultiWriter(os.Stderr, observability.NewStdLogWriter(diagStore, "server", map[string]string{
+		"channel": "server-legacy",
+	})))
 
 	if !cfg.Server.TLSDisabled {
 		tlsConfig, err := crypto.GenerateTLSConfig()

@@ -99,6 +99,33 @@ func (s *SQLiteStore) init() error {
 		return err
 	}
 
+	_, err = s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS operational_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			ts INTEGER NOT NULL,
+			severity TEXT NOT NULL,
+			node_id TEXT NOT NULL,
+			node_role TEXT NOT NULL,
+			category TEXT NOT NULL,
+			event_code TEXT NOT NULL,
+			summary TEXT NOT NULL,
+			fields TEXT NOT NULL DEFAULT '{}',
+			corr TEXT NOT NULL DEFAULT '{}'
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_operational_events_ts ON operational_events(ts DESC)`)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_operational_events_node_code ON operational_events(node_id, event_code, ts DESC)`)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

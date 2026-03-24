@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+
+	"github.com/gotunnel/pkg/observability"
 )
 
 // 协议常量
@@ -41,9 +43,12 @@ const (
 	MsgTypeUpdateResult   uint8 = 75 // 更新结果
 
 	// 日志相关消息
-	MsgTypeLogRequest uint8 = 80 // 请求客户端日志
-	MsgTypeLogData    uint8 = 81 // 日志数据
-	MsgTypeLogStop    uint8 = 82 // 停止日志流
+	MsgTypeLogRequest        uint8 = 80 // 请求客户端日志
+	MsgTypeLogData           uint8 = 81 // 日志数据
+	MsgTypeLogStop           uint8 = 82 // 停止日志流
+	MsgTypeDiagnosticsQuery  uint8 = 83 // 远程诊断查询
+	MsgTypeDiagnosticsChunk  uint8 = 84 // 远程诊断结果块
+	MsgTypeOperationalEvents uint8 = 85 // 高价值运维事件批量上报
 
 	// 系统状态消息
 	MsgTypeSystemStatsRequest  uint8 = 100 // 请求系统状态
@@ -200,10 +205,15 @@ type LogRequest struct {
 
 // LogEntry 日志条目
 type LogEntry struct {
-	Timestamp int64  `json:"ts"`    // Unix 时间戳 (毫秒)
-	Level     string `json:"level"` // 日志级别: debug, info, warn, error
-	Message   string `json:"msg"`   // 日志消息
-	Source    string `json:"src"`   // 来源: client
+	Timestamp int64                            `json:"ts"`    // Unix 时间戳 (毫秒)
+	Level     string                           `json:"level"` // 日志级别: debug, info, warn, error
+	Message   string                           `json:"msg"`   // 日志消息
+	Source    string                           `json:"src"`   // 来源组件
+	EventCode string                           `json:"event_code,omitempty"`
+	NodeRole  string                           `json:"node_role,omitempty"`
+	NodeID    string                           `json:"node_id,omitempty"`
+	Fields    map[string]string                `json:"fields,omitempty"`
+	Corr      observability.CorrelationContext `json:"corr,omitempty"`
 }
 
 // LogData 日志数据
@@ -216,6 +226,22 @@ type LogData struct {
 // LogStopRequest 停止日志流请求
 type LogStopRequest struct {
 	SessionID string `json:"session_id"` // 会话 ID
+}
+
+type DiagnosticsQueryRequest struct {
+	SessionID string                 `json:"session_id"`
+	Query     observability.LogQuery `json:"query"`
+}
+
+type DiagnosticsQueryChunk struct {
+	SessionID  string                           `json:"session_id"`
+	Records    []observability.DiagnosticRecord `json:"records"`
+	NextCursor string                           `json:"next_cursor,omitempty"`
+	EOF        bool                             `json:"eof"`
+}
+
+type OperationalEventBatch struct {
+	Events []observability.OperationalEvent `json:"events"`
 }
 
 // WriteMessage 写入消息到 writer

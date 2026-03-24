@@ -12,6 +12,7 @@ import (
 	"github.com/gotunnel/internal/server/service"
 	db "github.com/gotunnel/internal/server/storage/sqlite"
 	"github.com/gotunnel/pkg/auth"
+	"github.com/gotunnel/pkg/observability"
 )
 
 var _ db.ClientStore = (*fakeClientStore)(nil)
@@ -26,6 +27,7 @@ func TestSetupRoutesRegistersCoreEndpoints(t *testing.T) {
 		ServerRuntime:     &fakeServerRuntime{},
 		ConfigService:     &fakeConfigService{},
 		TrafficStore:      &fakeTrafficStore{},
+		OperationalEvents: &fakeTrafficStore{},
 		JWTAuth:           auth.NewJWTAuth("test-secret", 1),
 		Username:          "admin",
 		Password:          "admin",
@@ -132,6 +134,8 @@ func (s *fakeServerRuntime) LogSessions() *serverruntime.LogSessionManager {
 	return serverruntime.NewLogSessionManager()
 }
 
+func (s *fakeServerRuntime) LocalDiagnosticStore() *observability.DiagnosticStore { return nil }
+
 type fakeConfigService struct{}
 
 func (s *fakeConfigService) Snapshot() config.ServerConfig { return config.ServerConfig{} }
@@ -155,3 +159,19 @@ func (s *fakeTrafficStore) GetTotalTraffic() (int64, int64, error) { return 0, 0
 func (s *fakeTrafficStore) Get24HourTraffic() (int64, int64, error) { return 0, 0, nil }
 
 func (s *fakeTrafficStore) GetHourlyTraffic(hours int) ([]db.TrafficRecord, error) { return nil, nil }
+
+func (s *fakeTrafficStore) AppendOperationalEvents(events []observability.OperationalEvent) error {
+	return nil
+}
+
+func (s *fakeTrafficStore) ListOperationalEvents(filter observability.EventFilter) ([]observability.OperationalEvent, error) {
+	return nil, nil
+}
+
+func (s *fakeTrafficStore) ListNodeHealth(limit int) ([]observability.NodeHealth, error) {
+	return nil, nil
+}
+
+func (s *fakeTrafficStore) CountOperationalEventsSince(nodeID, eventCode string, since int64) (int, error) {
+	return 0, nil
+}

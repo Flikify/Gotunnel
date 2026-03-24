@@ -6,18 +6,18 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/gotunnel/internal/server/service"
+	"github.com/gotunnel/pkg/observability"
 )
 
 // LogHandler 日志处理器
 type LogHandler struct {
-	remoteOps service.RemoteOpsService
+	diagnostics service.DiagnosticsService
 }
 
 // NewLogHandler 创建日志处理器
-func NewLogHandler(remoteOps service.RemoteOpsService) *LogHandler {
-	return &LogHandler{remoteOps: remoteOps}
+func NewLogHandler(diagnostics service.DiagnosticsService) *LogHandler {
+	return &LogHandler{diagnostics: diagnostics}
 }
 
 // StreamLogs 流式传输客户端日志
@@ -35,12 +35,6 @@ func NewLogHandler(remoteOps service.RemoteOpsService) *LogHandler {
 func (h *LogHandler) StreamLogs(c *gin.Context) {
 	clientID := c.Param("id")
 
-	// 检查客户端是否在线
-	if !h.remoteOps.IsClientOnline(clientID) {
-		ClientNotOnline(c)
-		return
-	}
-
 	// 解析查询参数
 	lines := 100
 	if v := c.Query("lines"); v != "" {
@@ -56,15 +50,16 @@ func (h *LogHandler) StreamLogs(c *gin.Context) {
 
 	level := c.Query("level")
 
-	// 生成会话 ID
-	sessionID := uuid.New().String()
-
-	// 启动日志流
-	logCh, err := h.remoteOps.StartClientLogStream(clientID, sessionID, lines, follow, level)
+	logCh, cancel, err := h.diagnostics.StreamNodeDiagnostics(clientID, observability.LogQuery{
+		Limit:  lines,
+		Level:  level,
+		Follow: follow,
+	})
 	if err != nil {
-		InternalError(c, err.Error())
+		ClientNotOnline(c)
 		return
 	}
+	defer cancel()
 
 	// 设置 SSE 响应头
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
@@ -79,11 +74,21 @@ func (h *LogHandler) StreamLogs(c *gin.Context) {
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case <-clientGone:
-			h.remoteOps.StopClientLogStream(sessionID)
 			return false
-		case entry, ok := <-logCh:
+		case record, ok := <-logCh:
 			if !ok {
 				return false
+			}
+			entry := map[string]interface{}{
+				"ts":         record.Timestamp,
+				"level":      record.Level,
+				"msg":        record.Message,
+				"src":        record.Component,
+				"event_code": record.EventCode,
+				"node_role":  record.NodeRole,
+				"node_id":    record.NodeID,
+				"fields":     record.Fields,
+				"corr":       record.Corr,
 			}
 			c.SSEvent("log", entry)
 			return true

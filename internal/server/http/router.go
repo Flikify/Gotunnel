@@ -23,6 +23,7 @@ type Dependencies struct {
 	ServerRuntime     handler.ServerInterface
 	ConfigService     service.ConfigService
 	TrafficStore      db.TrafficStore
+	OperationalEvents db.OperationalEventStore
 	JWTAuth           *auth.JWTAuth
 	Username          string
 	Password          string
@@ -49,6 +50,8 @@ func (r *GinRouter) Handler() http.Handler {
 func (r *GinRouter) SetupRoutes(deps Dependencies) {
 	engine := r.Engine
 	remoteOps := service.NewRemoteOpsService(deps.ServerRuntime)
+	diagnostics := service.NewDiagnosticsService(deps.ServerRuntime)
+	events := service.NewEventService(deps.OperationalEvents)
 
 	// 全局中间件
 	engine.Use(middleware.Recovery())
@@ -99,8 +102,14 @@ func (r *GinRouter) SetupRoutes(deps Dependencies) {
 		api.POST("/updates/server/actions/apply", updateHandler.ApplyServer)
 		api.POST("/updates/clients/actions/apply", updateHandler.ApplyClient)
 
-		logHandler := handler.NewLogHandler(remoteOps)
+		logHandler := handler.NewLogHandler(diagnostics)
 		api.GET("/clients/:id/logs", logHandler.StreamLogs)
+
+		obsHandler := handler.NewObservabilityHandler(events, diagnostics)
+		api.GET("/events", obsHandler.ListEvents)
+		api.GET("/events/health", obsHandler.Health)
+		api.POST("/nodes/:id/diagnostics/query", obsHandler.QueryDiagnostics)
+		api.GET("/nodes/:id/diagnostics/stream", obsHandler.StreamDiagnostics)
 
 		trafficHandler := handler.NewTrafficHandler(deps.TrafficStore)
 		api.GET("/runtime/traffic/stats", trafficHandler.GetStats)

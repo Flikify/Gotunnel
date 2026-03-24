@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/gotunnel/pkg/observability"
 	"github.com/gotunnel/pkg/security"
 )
 
@@ -19,6 +20,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	if err != nil {
 		var rejection *admissionRejectionError
 		if errors.As(err, &rejection) {
+			s.emitServerEvent(observability.SeverityError, observability.CategorySecurity, observability.EventServerClientRejected, "Client admission rejected", map[string]string{"reason": rejection.message}, observability.CorrelationContext{})
 			_ = s.sendAuthResponse(conn, false, rejection.message, "")
 			return
 		}
@@ -31,5 +33,6 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	security.LogAuthSuccess(conn.RemoteAddr().String(), admitted.ID)
+	s.emitServerEvent(observability.SeverityInfo, observability.CategorySecurity, "server.auth.accepted", "Client authentication accepted", map[string]string{"client_id": admitted.ID, "remote_addr": admitted.RemoteAddr}, observability.CorrelationContext{ClientID: admitted.ID})
 	s.lifecycle.run(conn, admitted)
 }

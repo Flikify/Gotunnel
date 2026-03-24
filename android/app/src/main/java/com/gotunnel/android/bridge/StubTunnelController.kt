@@ -95,6 +95,14 @@ class StubTunnelController(
         start(config)
     }
 
+    override fun appendHostLog(level: String, eventCode: String, source: String, message: String, fieldsJson: String) {
+        emitSnapshot(
+            currentSnapshot.copy(
+                recentLogs = appendLog(currentSnapshot.recentLogs, "[$level][$eventCode][$source] $message"),
+            ),
+        )
+    }
+
     private fun emitSnapshot(snapshot: TunnelSnapshot) {
         currentSnapshot = snapshot
         listener?.onSnapshot(snapshot)

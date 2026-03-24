@@ -60,7 +60,7 @@ defineProps<{
   height: 280px;
   bottom: -120px;
   left: -40px;
-  background: #8b5cf6;
+  background: var(--color-warning);
 }
 
 .page-shell__header,
@@ -89,8 +89,8 @@ defineProps<{
   padding: 6px 10px;
   margin-bottom: 12px;
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.18);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 18%, transparent);
   color: var(--color-accent);
   font-size: 12px;
   font-weight: 600;
@@ -149,6 +149,16 @@ defineProps<{
 
   .page-shell__actions :deep(*) {
     flex: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .page-shell {
+    padding: 16px;
+  }
+
+  .page-shell__metrics {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"github.com/gotunnel/internal/core/client"
 	corerule "github.com/gotunnel/internal/core/rule"
+	"github.com/gotunnel/pkg/observability"
 )
 
 // Client re-exports the server domain client model for storage callers.
@@ -28,6 +29,7 @@ type ClientStore interface {
 type Store interface {
 	ClientStore
 	TrafficStore
+	OperationalEventStore
 	Close() error
 }
 
@@ -44,6 +46,13 @@ type TrafficStore interface {
 	GetTotalTraffic() (inbound, outbound int64, err error)
 	Get24HourTraffic() (inbound, outbound int64, err error)
 	GetHourlyTraffic(hours int) ([]TrafficRecord, error)
+}
+
+type OperationalEventStore interface {
+	AppendOperationalEvents(events []observability.OperationalEvent) error
+	ListOperationalEvents(filter observability.EventFilter) ([]observability.OperationalEvent, error)
+	ListNodeHealth(limit int) ([]observability.NodeHealth, error)
+	CountOperationalEventsSince(nodeID, eventCode string, since int64) (int, error)
 }
 
 // InstallToken 安装token

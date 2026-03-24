@@ -32,6 +32,11 @@ class TunnelService : Service() {
         configStore = ConfigStore(this)
         stateStore = ServiceStateStore(this)
         controller = GoTunnelBridge.create(applicationContext)
+        controller.appendHostLog(
+            eventCode = "android.service.created",
+            source = "android.service",
+            message = "Tunnel service created",
+        )
         controller.setListener(object : TunnelController.Listener {
             override fun onSnapshot(snapshot: TunnelSnapshot) {
                 stateStore.save(snapshot)
@@ -46,11 +51,22 @@ class TunnelService : Service() {
                 } else {
                     val config = configStore.load()
                     if (config.autoReconnect && controller.isRunning) {
+                        controller.appendHostLog(
+                            eventCode = "android.network.available",
+                            source = "android.network",
+                            message = "Network restored, restarting tunnel",
+                        )
                         controller.restart("network-restored")
                     }
                 }
             },
             onLost = {
+                controller.appendHostLog(
+                    level = "warn",
+                    eventCode = "android.network.lost",
+                    source = "android.network",
+                    message = "Network lost",
+                )
                 val detail = getString(com.gotunnel.android.R.string.network_lost)
                 val state = stateStore.load()
                 stateStore.save(
@@ -73,15 +89,30 @@ class TunnelService : Service() {
 
         when (intent?.action) {
             ACTION_STOP -> {
+                controller.appendHostLog(
+                    eventCode = "android.service.stop_requested",
+                    source = "android.service",
+                    message = "Stop requested",
+                )
                 stopServiceInternal(intent.getStringExtra(EXTRA_REASON) ?: "stop")
                 return START_NOT_STICKY
             }
 
             ACTION_RESTART -> {
+                controller.appendHostLog(
+                    eventCode = "android.service.restart_requested",
+                    source = "android.service",
+                    message = "Restart requested",
+                )
                 controller.restart(intent.getStringExtra(EXTRA_REASON) ?: "restart")
             }
 
             else -> {
+                controller.appendHostLog(
+                    eventCode = "android.service.start_requested",
+                    source = "android.service",
+                    message = "Start requested",
+                )
                 startOrRefreshTunnel(intent?.getStringExtra(EXTRA_REASON) ?: "start")
             }
         }

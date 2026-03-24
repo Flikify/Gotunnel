@@ -9,6 +9,7 @@ import (
 	"time"
 
 	domain "github.com/gotunnel/internal/core/domain"
+	"github.com/gotunnel/pkg/observability"
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/proxy"
 	"github.com/gotunnel/pkg/relay"
@@ -40,6 +41,8 @@ func (m *proxyManager) start(cs *ClientSession) {
 
 		if err := m.portManager.Reserve(rule.RemotePort, cs.ID); err != nil {
 			log.Printf("[Server] Port %d error: %v", rule.RemotePort, err)
+			m.emitOperationalEvent(observability.SeverityError, observability.CategoryHealth, observability.EventServerProxyBindFailed, "Server proxy bind failed",
+				map[string]string{"client_id": cs.ID, "remote_port": fmt.Sprintf("%d", rule.RemotePort), "error": err.Error()}, observability.CorrelationContext{ClientID: cs.ID})
 			rule.PortStatus = "failed: " + err.Error()
 			continue
 		}
@@ -47,6 +50,8 @@ func (m *proxyManager) start(cs *ClientSession) {
 		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", rule.RemotePort))
 		if err != nil {
 			log.Printf("[Server] Listen %d error: %v", rule.RemotePort, err)
+			m.emitOperationalEvent(observability.SeverityError, observability.CategoryHealth, observability.EventServerProxyBindFailed, "Server proxy listen failed",
+				map[string]string{"client_id": cs.ID, "remote_port": fmt.Sprintf("%d", rule.RemotePort), "error": err.Error()}, observability.CorrelationContext{ClientID: cs.ID})
 			m.portManager.Release(rule.RemotePort)
 			rule.PortStatus = "failed: " + err.Error()
 			continue
@@ -58,15 +63,23 @@ func (m *proxyManager) start(cs *ClientSession) {
 		switch ruleType {
 		case "socks5":
 			log.Printf("[Server] SOCKS5 proxy %s on :%d", rule.Name, rule.RemotePort)
+			m.emitOperationalEvent(observability.SeverityInfo, observability.CategoryLifecycle, observability.EventServerProxyStarted, "SOCKS5 proxy listening",
+				map[string]string{"client_id": cs.ID, "proxy_name": rule.Name, "remote_port": fmt.Sprintf("%d", rule.RemotePort), "proxy_type": ruleType}, observability.CorrelationContext{ClientID: cs.ID})
 			go m.acceptProxyServerConns(cs, ln, *rule)
 		case "http", "https":
 			log.Printf("[Server] HTTP proxy %s on :%d", rule.Name, rule.RemotePort)
+			m.emitOperationalEvent(observability.SeverityInfo, observability.CategoryLifecycle, observability.EventServerProxyStarted, "HTTP proxy listening",
+				map[string]string{"client_id": cs.ID, "proxy_name": rule.Name, "remote_port": fmt.Sprintf("%d", rule.RemotePort), "proxy_type": ruleType}, observability.CorrelationContext{ClientID: cs.ID})
 			go m.acceptProxyServerConns(cs, ln, *rule)
 		case "websocket":
 			log.Printf("[Server] Websocket proxy %s on :%d", rule.Name, rule.RemotePort)
+			m.emitOperationalEvent(observability.SeverityInfo, observability.CategoryLifecycle, observability.EventServerProxyStarted, "Websocket proxy listening",
+				map[string]string{"client_id": cs.ID, "proxy_name": rule.Name, "remote_port": fmt.Sprintf("%d", rule.RemotePort), "proxy_type": ruleType}, observability.CorrelationContext{ClientID: cs.ID})
 			go m.acceptWebsocketConns(cs, ln, *rule)
 		default:
 			log.Printf("[Server] TCP proxy %s: :%d -> %s:%d", rule.Name, rule.RemotePort, rule.LocalIP, rule.LocalPort)
+			m.emitOperationalEvent(observability.SeverityInfo, observability.CategoryLifecycle, observability.EventServerProxyStarted, "TCP proxy listening",
+				map[string]string{"client_id": cs.ID, "proxy_name": rule.Name, "remote_port": fmt.Sprintf("%d", rule.RemotePort), "proxy_type": ruleType}, observability.CorrelationContext{ClientID: cs.ID})
 			go m.acceptProxyConns(cs, ln, *rule)
 		}
 	}
@@ -128,6 +141,8 @@ func (m *proxyManager) handleProxyConn(cs *ClientSession, conn net.Conn, rule do
 func (m *proxyManager) startUDPListener(cs *ClientSession, rule *domain.ProxyRule) {
 	if err := m.portManager.Reserve(rule.RemotePort, cs.ID); err != nil {
 		log.Printf("[Server] UDP port %d error: %v", rule.RemotePort, err)
+		m.emitOperationalEvent(observability.SeverityError, observability.CategoryHealth, observability.EventServerProxyBindFailed, "UDP proxy bind failed",
+			map[string]string{"client_id": cs.ID, "remote_port": fmt.Sprintf("%d", rule.RemotePort), "error": err.Error()}, observability.CorrelationContext{ClientID: cs.ID})
 		rule.PortStatus = "failed: " + err.Error()
 		return
 	}
@@ -143,6 +158,8 @@ func (m *proxyManager) startUDPListener(cs *ClientSession, rule *domain.ProxyRul
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		log.Printf("[Server] UDP listen %d error: %v", rule.RemotePort, err)
+		m.emitOperationalEvent(observability.SeverityError, observability.CategoryHealth, observability.EventServerProxyBindFailed, "UDP proxy listen failed",
+			map[string]string{"client_id": cs.ID, "remote_port": fmt.Sprintf("%d", rule.RemotePort), "error": err.Error()}, observability.CorrelationContext{ClientID: cs.ID})
 		m.portManager.Release(rule.RemotePort)
 		rule.PortStatus = "failed: " + err.Error()
 		return
@@ -152,6 +169,8 @@ func (m *proxyManager) startUDPListener(cs *ClientSession, rule *domain.ProxyRul
 	m.bindUDPConn(cs.ID, rule.RemotePort, conn)
 
 	log.Printf("[Server] UDP proxy %s: :%d -> %s:%d", rule.Name, rule.RemotePort, rule.LocalIP, rule.LocalPort)
+	m.emitOperationalEvent(observability.SeverityInfo, observability.CategoryLifecycle, observability.EventServerProxyStarted, "UDP proxy listening",
+		map[string]string{"client_id": cs.ID, "proxy_name": rule.Name, "remote_port": fmt.Sprintf("%d", rule.RemotePort), "proxy_type": "udp"}, observability.CorrelationContext{ClientID: cs.ID})
 
 	go m.handleUDPConn(cs, conn, *rule)
 }

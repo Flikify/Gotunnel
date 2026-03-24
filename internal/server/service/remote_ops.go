@@ -6,6 +6,7 @@ import (
 	"time"
 
 	serverruntime "github.com/gotunnel/internal/server/runtime"
+	"github.com/gotunnel/pkg/observability"
 	"github.com/gotunnel/pkg/protocol"
 )
 
@@ -22,6 +23,7 @@ type RemoteOpsRuntime interface {
 	OpenClientStream(clientID string) (net.Conn, error)
 	ClientResponseTimeout() time.Duration
 	LogSessions() *serverruntime.LogSessionManager
+	LocalDiagnosticStore() *observability.DiagnosticStore
 }
 
 // RemoteOpsService coordinates log, status, screenshot, and shell operations.

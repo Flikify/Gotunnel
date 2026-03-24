@@ -19,6 +19,7 @@ type webStore interface {
 	db.ClientStore
 	db.InstallTokenStore
 	db.TrafficStore
+	db.OperationalEventStore
 }
 
 // WebServer Web控制台服务
@@ -49,6 +50,7 @@ func (w *WebServer) Run(addr, username, password, jwtSecret string) error {
 		ServerRuntime:     w.Server,
 		ConfigService:     w.ConfigSvc,
 		TrafficStore:      w.Store,
+		OperationalEvents: w.Store,
 		JWTAuth:           jwtAuth,
 		Username:          username,
 		Password:          password,

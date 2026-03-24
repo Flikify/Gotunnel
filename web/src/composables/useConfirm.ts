@@ -72,7 +72,7 @@ function ensureContainer() {
       z-index: 9998;
     }
     .dialog-container {
-      background: rgba(30, 27, 75, 0.95);
+      background: rgba(11, 27, 34, 0.95);
       backdrop-filter: blur(20px);
       border-radius: 16px;
       border: 1px solid rgba(255, 255, 255, 0.12);
@@ -111,7 +111,7 @@ function ensureContainer() {
       background: rgba(255, 255, 255, 0.2);
     }
     .dialog-btn.primary {
-      background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+      background: linear-gradient(135deg, #2f8fbb 0%, #24a67a 100%);
       border: none;
     }
   `

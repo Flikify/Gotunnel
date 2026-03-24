@@ -42,12 +42,25 @@ class NativeTunnelController(
         this.config = config
     }
 
+    override fun appendHostLog(level: String, eventCode: String, source: String, message: String, fieldsJson: String) {
+        appendLocalLog("[$level][$eventCode][$source] $message")
+        runCatching {
+            val binding = bridge ?: MobileBinding.load(context).also { bridge = it }
+            binding.appendHostLog(level, eventCode, source, message, fieldsJson)
+        }.onFailure { error ->
+            appendLocalLog("Failed to append host log through Go bridge: ${error.message ?: error::class.java.simpleName}")
+        }
+        emitSnapshot(currentSnapshot.copy(recentLogs = combinedLogs(latestNativeLogs)))
+    }
+
     override fun start(config: AppConfig) {
         updateConfig(config)
+        appendHostLog("info", "android.service.start_requested", "android.host", "Android start requested")
         appendLocalLog("Android start requested for ${config.serverAddress}")
 
         val binding = runCatching { bridge ?: MobileBinding.load(context).also { bridge = it } }
             .getOrElse { error ->
+                appendHostLog("error", "android.bridge.load_failed", "android.host", "Failed to load native Go binding")
                 appendLocalLog("Failed to load native Go binding: ${error.message ?: error::class.java.simpleName}")
                 emitSnapshot(
                     currentSnapshot.copy(
@@ -79,6 +92,7 @@ class NativeTunnelController(
 
         val error = binding.configureAndStart(config, dataDir = File(context.filesDir, "gotunnel"))
         if (!error.isNullOrBlank()) {
+            appendHostLog("error", "android.bridge.start_failed", "android.host", "Native Go core failed to start")
             appendLocalLog("Native Go core failed to start: $error")
             emitSnapshot(
                 currentSnapshot.copy(
@@ -99,6 +113,7 @@ class NativeTunnelController(
         pollJob?.cancel()
         pollJob = null
         bridge?.stop()
+        appendHostLog("info", "android.service.stop_requested", "android.host", "Android stop requested")
         appendLocalLog("Android stop requested: $reason")
         emitSnapshot(
             currentSnapshot.copy(
@@ -111,6 +126,7 @@ class NativeTunnelController(
     }
 
     override fun restart(reason: String) {
+        appendHostLog("info", "android.service.restart_requested", "android.host", "Android restart requested")
         appendLocalLog("Android restart requested: $reason")
         emitSnapshot(
             currentSnapshot.copy(
@@ -122,6 +138,7 @@ class NativeTunnelController(
 
         val binding = runCatching { bridge ?: MobileBinding.load(context).also { bridge = it } }
             .getOrElse { error ->
+                appendHostLog("error", "android.bridge.load_failed", "android.host", "Failed to load native Go binding")
                 appendLocalLog("Failed to load native Go binding: ${error.message ?: error::class.java.simpleName}")
                 emitSnapshot(
                     currentSnapshot.copy(
@@ -141,6 +158,7 @@ class NativeTunnelController(
         appendLocalLog("Restarting native Go core for ${config.serverAddress}")
         val result = binding.configureAndStart(config, dataDir = File(context.filesDir, "gotunnel"))
         if (!result.isNullOrBlank()) {
+            appendHostLog("error", "android.bridge.restart_failed", "android.host", "Native Go core restart failed")
             appendLocalLog("Native Go core restart failed: $result")
             emitSnapshot(
                 currentSnapshot.copy(
@@ -261,6 +279,7 @@ class NativeTunnelController(
         private val lastErrorMethod: Method,
         private val recentLogsMethod: Method,
         private val activeTunnelsJSONMethod: Method?,
+        private val appendHostLogMethod: Method?,
     ) {
         fun configureAndStart(config: AppConfig, dataDir: File): String? {
             dataDir.mkdirs()
@@ -318,6 +337,10 @@ class NativeTunnelController(
             }.getOrDefault(emptyList())
         }
 
+        fun appendHostLog(level: String, eventCode: String, source: String, message: String, fieldsJson: String) {
+            appendHostLogMethod?.invoke(service, level, eventCode, source, message, fieldsJson)
+        }
+
         data class Snapshot(
             val isRunning: Boolean,
             val status: String,
@@ -363,6 +386,7 @@ class NativeTunnelController(
                     lastErrorMethod = findMethod(klass, "lastError", "LastError"),
                     recentLogsMethod = findMethod(klass, "recentLogs", "RecentLogs"),
                     activeTunnelsJSONMethod = findMethodOrNull(klass, "activeTunnelsJSON", "ActiveTunnelsJSON"),
+                    appendHostLogMethod = findMethodOrNull(klass, "appendHostLog", "AppendHostLog", String::class.java, String::class.java, String::class.java, String::class.java, String::class.java),
                 )
             }
 
@@ -404,9 +428,11 @@ class NativeTunnelController(
                 error("Required gomobile method not found on ${target.name}: ${names.joinToString("/")}")
             }
 
-            private fun findMethodOrNull(target: Class<*>, vararg names: String): Method? {
+            private fun findMethodOrNull(target: Class<*>, vararg namesAndTypes: Any): Method? {
+                val parameterTypes = namesAndTypes.dropWhile { it is String }.map { it as Class<*> }.toTypedArray()
+                val names = namesAndTypes.takeWhile { it is String }.map { it as String }
                 for (name in names) {
-                    val method = runCatching { target.getMethod(name) }.getOrNull()
+                    val method = runCatching { target.getMethod(name, *parameterTypes) }.getOrNull()
                     if (method != null) {
                         return method
                     }

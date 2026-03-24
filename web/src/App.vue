@@ -260,8 +260,8 @@ onUnmounted(() => {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
-  gap: 20px;
-  padding: 20px;
+  gap: clamp(14px, 2vw, 20px);
+  padding: clamp(12px, 2vw, 20px);
 }
 
 .app-sidebar,
@@ -332,7 +332,7 @@ onUnmounted(() => {
 }
 
 .nav-link.active {
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.18);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 26%, transparent);
 }
 
 .nav-link__icon {
@@ -440,7 +440,7 @@ onUnmounted(() => {
 .topbar-icon-btn:hover,
 .profile-button:hover {
   transform: translateY(-1px);
-  border-color: rgba(59, 130, 246, 0.28);
+  border-color: color-mix(in srgb, var(--color-accent) 28%, transparent);
   background: rgba(255, 255, 255, 0.08);
   box-shadow: var(--shadow-sm);
 }
@@ -543,6 +543,31 @@ onUnmounted(() => {
   .app-sidebar {
     position: static;
     height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .brand-block {
+    flex: 1 1 220px;
+  }
+
+  .sidebar-nav {
+    flex: 2 1 320px;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .nav-link {
+    flex: 1 1 140px;
+  }
+
+  .sidebar-card {
+    flex: 1 1 220px;
+  }
+
+  .update-card {
+    margin-top: 0;
   }
 }
 
@@ -565,15 +590,53 @@ onUnmounted(() => {
   .topbar-actions {
     width: 100%;
     flex-wrap: wrap;
+    justify-content: stretch;
   }
 
-  .profile-button {
-    flex: 1;
+  .topbar-actions > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .menu-wrap > button,
+  .profile-button,
+  .topbar-icon-btn {
+    width: 100%;
     justify-content: center;
+  }
+
+  .floating-menu,
+  .floating-menu--right {
+    left: 0;
+    right: 0;
+    min-width: 0;
   }
 
   .update-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-sidebar,
+  .app-topbar {
+    padding: 14px;
+  }
+
+  .brand-block {
+    width: 100%;
+  }
+
+  .sidebar-nav {
+    flex-direction: column;
+  }
+
+  .nav-link {
+    width: 100%;
+  }
+
+  .app-topbar h1 {
+    font-size: 20px;
   }
 }
 </style>

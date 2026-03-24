@@ -71,6 +71,11 @@ func (s *Service) RecentLogs() string {
 	return s.app.Snapshot().RecentLogs
 }
 
+// AppendHostLog records an Android-host diagnostic entry and emits a high-value event when applicable.
+func (s *Service) AppendHostLog(level, eventCode, source, message, fieldsJSON string) string {
+	return s.app.AppendHostLog(level, eventCode, source, message, fieldsJSON)
+}
+
 // ActiveTunnelsJSON returns a JSON array of currently active server-side listeners.
 func (s *Service) ActiveTunnelsJSON() string {
 	payload, err := json.Marshal(s.app.Snapshot().ActiveTunnels)

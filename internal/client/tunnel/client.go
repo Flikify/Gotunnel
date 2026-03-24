@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gotunnel/pkg/observability"
 	"github.com/gotunnel/pkg/protocol"
 	"github.com/gotunnel/pkg/relay"
 	"github.com/gotunnel/pkg/update"
@@ -65,7 +66,8 @@ func NewClientWithOptions(serverAddr, token string, opts ClientOptions) *Client 
 		log.Printf("Failed to create data dir: %v", err)
 	}
 
-	logger, err := NewLogger(dataDir)
+	clientID := resolveClientID(dataDir, opts.ClientID)
+	logger, err := NewLogger(dataDir, clientID)
 	if err != nil {
 		log.Printf("Failed to initialize logger: %v", err)
 	}
@@ -91,7 +93,7 @@ func NewClientWithOptions(serverAddr, token string, opts ClientOptions) *Client 
 	return &Client{
 		ServerAddr:        serverAddr,
 		Token:             token,
-		ID:                resolveClientID(dataDir, opts.ClientID),
+		ID:                clientID,
 		Name:              resolveClientName(opts.ClientName),
 		DataDir:           dataDir,
 		features:          features,
@@ -107,27 +109,15 @@ func (c *Client) InitVersionStore() error {
 }
 
 func (c *Client) logf(format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	log.Print(msg)
-	if c.logger != nil {
-		c.logger.Printf("%s", msg)
-	}
+	c.recordDiagnostic(observability.LevelInfo, "client", observability.EventLegacyLog, fmt.Sprintf(format, args...), nil, observability.CorrelationContext{ClientID: c.ID})
 }
 
 func (c *Client) logErrorf(format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	log.Print(msg)
-	if c.logger != nil {
-		c.logger.Errorf("%s", msg)
-	}
+	c.recordDiagnostic(observability.LevelError, "client", observability.EventLegacyLog, fmt.Sprintf(format, args...), nil, observability.CorrelationContext{ClientID: c.ID})
 }
 
 func (c *Client) logWarnf(format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	log.Print(msg)
-	if c.logger != nil {
-		c.logger.Warnf("%s", msg)
-	}
+	c.recordDiagnostic(observability.LevelWarn, "client", observability.EventLegacyLog, fmt.Sprintf(format, args...), nil, observability.CorrelationContext{ClientID: c.ID})
 }
 
 // ObserveLogs subscribes an in-process callback to future client log entries.
@@ -136,6 +126,110 @@ func (c *Client) ObserveLogs(fn func(protocol.LogEntry)) func() {
 		return func() {}
 	}
 	return c.logger.AddObserver(fn)
+}
+
+func (c *Client) ObserveDiagnostics(fn func(observability.DiagnosticRecord)) func() {
+	if c.logger == nil || fn == nil {
+		return func() {}
+	}
+	return c.logger.AddDiagnosticObserver(fn)
+}
+
+func (c *Client) recordDiagnostic(level, component, eventCode, message string, fields map[string]string, corr observability.CorrelationContext) {
+	if c.logger != nil {
+		c.logger.Record(level, component, eventCode, message, fields, corr)
+	}
+	if event := c.diagnosticToOperational(level, eventCode, message, fields, corr); event != nil {
+		c.emitOperationalEvent(*event)
+	}
+}
+
+func (c *Client) diagnosticToOperational(level, eventCode, message string, fields map[string]string, corr observability.CorrelationContext) *observability.OperationalEvent {
+	switch eventCode {
+	case observability.EventClientSessionEstablished:
+		return &observability.OperationalEvent{
+			Severity:  observability.SeverityInfo,
+			NodeID:    c.ID,
+			NodeRole:  observability.NodeRoleClient,
+			Category:  observability.CategoryLifecycle,
+			EventCode: eventCode,
+			Summary:   message,
+			Fields:    fields,
+			Corr:      corr,
+		}
+	case observability.EventClientDisconnected, observability.EventClientReconnectBackoff:
+		return &observability.OperationalEvent{
+			Severity:  observability.SeverityWarning,
+			NodeID:    c.ID,
+			NodeRole:  observability.NodeRoleClient,
+			Category:  observability.CategoryHealth,
+			EventCode: eventCode,
+			Summary:   message,
+			Fields:    fields,
+			Corr:      corr,
+		}
+	case observability.EventClientAuthRejected:
+		return &observability.OperationalEvent{
+			Severity:  observability.SeverityError,
+			NodeID:    c.ID,
+			NodeRole:  observability.NodeRoleClient,
+			Category:  observability.CategorySecurity,
+			EventCode: eventCode,
+			Summary:   message,
+			Fields:    fields,
+			Corr:      corr,
+		}
+	case observability.EventClientUpdateFailed:
+		return &observability.OperationalEvent{
+			Severity:  observability.SeverityError,
+			NodeID:    c.ID,
+			NodeRole:  observability.NodeRoleClient,
+			Category:  observability.CategoryUpdate,
+			EventCode: eventCode,
+			Summary:   message,
+			Fields:    fields,
+			Corr:      corr,
+		}
+	case observability.EventClientScreenshotFailed:
+		return &observability.OperationalEvent{
+			Severity:  observability.SeverityError,
+			NodeID:    c.ID,
+			NodeRole:  observability.NodeRoleClient,
+			Category:  observability.CategoryHealth,
+			EventCode: eventCode,
+			Summary:   message,
+			Fields:    fields,
+			Corr:      corr,
+		}
+	default:
+		return nil
+	}
+}
+
+func (c *Client) emitOperationalEvent(event observability.OperationalEvent) {
+	session := c.currentSession()
+	if session == nil {
+		return
+	}
+	go func() {
+		stream, err := session.Open()
+		if err != nil {
+			return
+		}
+		defer stream.Close()
+
+		msg, err := protocol.NewMessage(protocol.MsgTypeOperationalEvents, protocol.OperationalEventBatch{
+			Events: []observability.OperationalEvent{event.Normalize(time.Now())},
+		})
+		if err != nil {
+			return
+		}
+		_ = protocol.WriteMessage(stream, msg)
+	}()
+}
+
+func (c *Client) EmitOperationalEvent(event observability.OperationalEvent) {
+	c.emitOperationalEvent(event)
 }
 
 // RulesSnapshot returns a copy of the latest proxy rules pushed by the server.
@@ -171,7 +265,14 @@ func (c *Client) RunContext(ctx context.Context) error {
 				return nil
 			}
 			c.logErrorf("Connect error: %v", err)
-			c.logf("Reconnecting in %v...", backoff)
+			c.recordDiagnostic(
+				observability.LevelWarn,
+				"conn",
+				observability.EventClientReconnectBackoff,
+				fmt.Sprintf("Reconnecting in %v...", backoff),
+				map[string]string{"backoff": backoff.String()},
+				observability.CorrelationContext{ClientID: c.ID},
+			)
 			if !sleepWithContext(ctx, backoff) {
 				return nil
 			}
@@ -187,7 +288,14 @@ func (c *Client) RunContext(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		c.logWarnf("Disconnected, reconnecting...")
+		c.recordDiagnostic(
+			observability.LevelWarn,
+			"session",
+			observability.EventClientDisconnected,
+			"Disconnected, reconnecting...",
+			map[string]string{"server_addr": c.ServerAddr},
+			observability.CorrelationContext{ClientID: c.ID},
+		)
 		if !sleepWithContext(ctx, disconnectDelay) {
 			return nil
 		}
@@ -215,7 +323,14 @@ func (c *Client) connect(ctx context.Context) error {
 		KeepAlive: tcpKeepAlive,
 	}
 
-	c.logf("Dialing server %s (tls=%t)", c.ServerAddr, c.TLSEnabled && c.TLSConfig != nil)
+	c.recordDiagnostic(
+		observability.LevelInfo,
+		"conn",
+		observability.EventClientDialStarted,
+		fmt.Sprintf("Dialing server %s (tls=%t)", c.ServerAddr, c.TLSEnabled && c.TLSConfig != nil),
+		map[string]string{"server_addr": c.ServerAddr},
+		observability.CorrelationContext{ClientID: c.ID},
+	)
 
 	if c.TLSEnabled && c.TLSConfig != nil {
 		rawConn, dialErr := dialer.DialContext(ctx, "tcp", c.ServerAddr)
@@ -274,6 +389,14 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("parse auth response: %w", err)
 	}
 	if !authResp.Success {
+		c.recordDiagnostic(
+			observability.LevelError,
+			"auth",
+			observability.EventClientAuthRejected,
+			fmt.Sprintf("Authentication rejected: %s", authResp.Message),
+			map[string]string{"reason": authResp.Message},
+			observability.CorrelationContext{ClientID: c.ID},
+		)
 		conn.Close()
 		return fmt.Errorf("auth failed: %s", authResp.Message)
 	}
@@ -282,8 +405,14 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("server returned unexpected client id: %s", authResp.ClientID)
 	}
 
-	c.logf("Server authentication accepted for %s", c.ID)
-	c.logf("Authenticated as %s", c.ID)
+	c.recordDiagnostic(
+		observability.LevelInfo,
+		"auth",
+		observability.EventClientAuthAccepted,
+		fmt.Sprintf("Authenticated as %s", c.ID),
+		map[string]string{"server_addr": c.ServerAddr},
+		observability.CorrelationContext{ClientID: c.ID},
+	)
 
 	session, err := yamux.Client(conn, nil)
 	if err != nil {
@@ -295,7 +424,14 @@ func (c *Client) connect(ctx context.Context) error {
 	c.session = session
 	c.mu.Unlock()
 
-	c.logf("Tunnel session established with %s", c.ServerAddr)
+	c.recordDiagnostic(
+		observability.LevelInfo,
+		"session",
+		observability.EventClientSessionEstablished,
+		fmt.Sprintf("Tunnel session established with %s", c.ServerAddr),
+		map[string]string{"server_addr": c.ServerAddr},
+		observability.CorrelationContext{ClientID: c.ID},
+	)
 
 	return nil
 }
@@ -360,6 +496,8 @@ func (c *Client) handleStream(stream net.Conn) {
 		go c.handleLogRequest(stream, msg)
 	case protocol.MsgTypeLogStop:
 		c.handleLogStop(stream, msg)
+	case protocol.MsgTypeDiagnosticsQuery:
+		go c.handleDiagnosticsQuery(stream, msg)
 	case protocol.MsgTypeSystemStatsRequest:
 		c.handleSystemStatsRequest(stream, msg)
 	case protocol.MsgTypeScreenshotRequest:
@@ -552,11 +690,25 @@ func (c *Client) handleUpdateDownload(stream net.Conn, msg *protocol.Message) {
 		return
 	}
 
-	c.logf("Update download requested: %s", req.DownloadURL)
+	c.recordDiagnostic(
+		observability.LevelInfo,
+		"update",
+		observability.EventClientUpdateStarted,
+		fmt.Sprintf("Update download requested: %s", req.DownloadURL),
+		map[string]string{"download_url": req.DownloadURL},
+		observability.CorrelationContext{ClientID: c.ID},
+	)
 
 	go func() {
 		if err := c.performSelfUpdate(req.DownloadURL); err != nil {
-			c.logErrorf("Update failed: %v", err)
+			c.recordDiagnostic(
+				observability.LevelError,
+				"update",
+				observability.EventClientUpdateFailed,
+				fmt.Sprintf("Update failed: %v", err),
+				map[string]string{"download_url": req.DownloadURL},
+				observability.CorrelationContext{ClientID: c.ID},
+			)
 		}
 	}()
 
@@ -724,72 +876,87 @@ func restartClientProcess(path, serverAddr, token string) {
 }
 
 func (c *Client) handleLogRequest(stream net.Conn, msg *protocol.Message) {
-	if c.logger == nil {
-		stream.Close()
-		return
-	}
-
 	var req protocol.LogRequest
 	if err := msg.ParsePayload(&req); err != nil {
 		stream.Close()
 		return
 	}
 
-	c.logger.Printf("Log request received: session=%s, follow=%v", req.SessionID, req.Follow)
-
-	entries := c.logger.GetRecentLogs(req.Lines, req.Level)
-	if len(entries) > 0 {
-		data := protocol.LogData{
-			SessionID: req.SessionID,
-			Entries:   entries,
-			EOF:       !req.Follow,
-		}
-		respMsg, _ := protocol.NewMessage(protocol.MsgTypeLogData, data)
-		if err := protocol.WriteMessage(stream, respMsg); err != nil {
-			stream.Close()
-			return
-		}
-	}
-
-	if !req.Follow {
-		stream.Close()
-		return
-	}
-
-	ch := c.logger.Subscribe(req.SessionID)
-	defer c.logger.Unsubscribe(req.SessionID)
-	defer stream.Close()
-
-	for entry := range ch {
-		if req.Level != "" && entry.Level != req.Level {
-			continue
-		}
-
-		data := protocol.LogData{
-			SessionID: req.SessionID,
-			Entries:   []protocol.LogEntry{entry},
-			EOF:       false,
-		}
-		respMsg, _ := protocol.NewMessage(protocol.MsgTypeLogData, data)
-		if err := protocol.WriteMessage(stream, respMsg); err != nil {
-			return
-		}
-	}
+	queryMsg, _ := protocol.NewMessage(protocol.MsgTypeDiagnosticsQuery, protocol.DiagnosticsQueryRequest{
+		SessionID: req.SessionID,
+		Query: observability.LogQuery{
+			Level:  req.Level,
+			Limit:  req.Lines,
+			Follow: req.Follow,
+		},
+	})
+	c.handleDiagnosticsQuery(stream, queryMsg)
 }
 
 func (c *Client) handleLogStop(stream net.Conn, msg *protocol.Message) {
+	defer stream.Close()
+}
+
+func (c *Client) handleDiagnosticsQuery(stream net.Conn, msg *protocol.Message) {
 	defer stream.Close()
 
 	if c.logger == nil {
 		return
 	}
 
-	var req protocol.LogStopRequest
+	var req protocol.DiagnosticsQueryRequest
 	if err := msg.ParsePayload(&req); err != nil {
 		return
 	}
 
-	c.logger.Unsubscribe(req.SessionID)
+	query := req.Query
+	if query.Limit <= 0 {
+		query.Limit = 100
+	}
+
+	page, err := c.logger.Query(query)
+	if err != nil {
+		return
+	}
+	for {
+		respMsg, _ := protocol.NewMessage(protocol.MsgTypeDiagnosticsChunk, protocol.DiagnosticsQueryChunk{
+			SessionID:  req.SessionID,
+			Records:    page.Records,
+			NextCursor: page.NextCursor,
+			EOF:        page.EOF && !req.Query.Follow,
+		})
+		if err := protocol.WriteMessage(stream, respMsg); err != nil {
+			return
+		}
+		if !req.Query.Follow || page.EOF || page.NextCursor == "" {
+			break
+		}
+		query.Cursor = page.NextCursor
+		page, err = c.logger.Query(query)
+		if err != nil {
+			return
+		}
+	}
+
+	if !req.Query.Follow {
+		return
+	}
+
+	ch, cancel, err := c.logger.Follow(req.Query)
+	if err != nil {
+		return
+	}
+	defer cancel()
+
+	for record := range ch {
+		respMsg, _ := protocol.NewMessage(protocol.MsgTypeDiagnosticsChunk, protocol.DiagnosticsQueryChunk{
+			SessionID: req.SessionID,
+			Records:   []observability.DiagnosticRecord{record},
+		})
+		if err := protocol.WriteMessage(stream, respMsg); err != nil {
+			return
+		}
+	}
 }
 
 func (c *Client) handleSystemStatsRequest(stream net.Conn, msg *protocol.Message) {
@@ -803,7 +970,14 @@ func (c *Client) handleSystemStatsRequest(stream net.Conn, msg *protocol.Message
 
 	stats, err := utils.GetSystemStats()
 	if err != nil {
-		log.Printf("Failed to get system stats: %v", err)
+		c.recordDiagnostic(
+			observability.LevelError,
+			"system",
+			"client.system.stats_failed",
+			fmt.Sprintf("Failed to get system stats: %v", err),
+			nil,
+			observability.CorrelationContext{ClientID: c.ID},
+		)
 		respMsg, _ := protocol.NewMessage(protocol.MsgTypeSystemStatsResponse, protocol.SystemStatsResponse{})
 		protocol.WriteMessage(stream, respMsg)
 		return
@@ -838,7 +1012,14 @@ func (c *Client) handleScreenshotRequest(stream net.Conn, msg *protocol.Message)
 
 	data, width, height, err := utils.CaptureScreenshot(req.Quality)
 	if err != nil {
-		c.logErrorf("Screenshot capture failed: %v", err)
+		c.recordDiagnostic(
+			observability.LevelError,
+			"screenshot",
+			observability.EventClientScreenshotFailed,
+			fmt.Sprintf("Screenshot capture failed: %v", err),
+			nil,
+			observability.CorrelationContext{ClientID: c.ID},
+		)
 		resp := protocol.ScreenshotResponse{Error: err.Error()}
 		respMsg, _ := protocol.NewMessage(protocol.MsgTypeScreenshotResponse, resp)
 		protocol.WriteMessage(stream, respMsg)

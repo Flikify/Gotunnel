@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gotunnel/pkg/observability"
 	"github.com/gotunnel/pkg/utils"
 )
 
@@ -20,15 +21,17 @@ type proxyManager struct {
 	recordTraffic         func(inbound, outbound int64)
 	clientResponseTimeout func() time.Duration
 	requestProxyOpen      func(stream net.Conn, remotePort int) error
+	emitOperationalEvent  func(string, string, string, string, map[string]string, observability.CorrelationContext)
 }
 
-func newProxyManager(recordTraffic func(inbound, outbound int64), clientResponseTimeout func() time.Duration, requestProxyOpen func(stream net.Conn, remotePort int) error) *proxyManager {
+func newProxyManager(recordTraffic func(inbound, outbound int64), clientResponseTimeout func() time.Duration, requestProxyOpen func(stream net.Conn, remotePort int) error, emitOperationalEvent func(string, string, string, string, map[string]string, observability.CorrelationContext)) *proxyManager {
 	return &proxyManager{
 		bindings:              make(map[string]*clientProxyBindings),
 		portManager:           utils.NewPortManager(),
 		recordTraffic:         recordTraffic,
 		clientResponseTimeout: clientResponseTimeout,
 		requestProxyOpen:      requestProxyOpen,
+		emitOperationalEvent:  emitOperationalEvent,
 	}
 }
 

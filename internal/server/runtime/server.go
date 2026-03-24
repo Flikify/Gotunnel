@@ -7,6 +7,7 @@ import (
 	"time"
 
 	db "github.com/gotunnel/internal/server/storage/sqlite"
+	"github.com/gotunnel/pkg/observability"
 )
 
 // 服务端常量
@@ -43,6 +44,9 @@ type Server struct {
 	listenerLoop *listenerRuntime
 	tlsConfig    *tls.Config
 	logSessions  *LogSessionManager // 日志会话管理器
+	diagStore    *observability.DiagnosticStore
+	eventStore   db.OperationalEventStore
+	ingestor     *eventIngestor
 }
 
 // NewServer 创建服务端
@@ -55,7 +59,7 @@ func NewServer(cs db.ClientStore, bindAddr string, bindPort int, token string, h
 		logSessions:  NewLogSessionManager(),
 	}
 	s.channel = newControlChannel(s.clientResponseTimeout)
-	s.proxies = newProxyManager(s.recordTraffic, s.clientResponseTimeout, s.requestProxyOpen)
+	s.proxies = newProxyManager(s.recordTraffic, s.clientResponseTimeout, s.requestProxyOpen, s.emitServerEvent)
 	s.admission = newClientAdmission(token, cs)
 	s.control = newRuntimeControl(cs, s.sessions, s.proxies, s.logSessions, s.channel, s.validateProxyRuleLimit)
 	s.lifecycle = newSessionLifecycle(
@@ -63,7 +67,9 @@ func NewServer(cs db.ClientStore, bindAddr string, bindPort int, token string, h
 		s.control.registerClient,
 		s.control.unregisterClient,
 		s.startProxyListeners,
+		s.emitServerEvent,
 		s.channel,
+		s.handleClientInitiatedStreams,
 		s.runtimeConfig,
 	)
 	s.ApplyRuntimeConfig(heartbeat, hbTimeout, 0, 15)

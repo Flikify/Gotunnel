@@ -57,17 +57,17 @@ function ensureContainer() {
       max-width: 350px;
     }
     .toast-item.success {
-      background: rgba(52, 211, 153, 0.9);
+      background: rgba(36, 166, 122, 0.92);
     }
     .toast-item.error {
       background: rgba(239, 68, 68, 0.9);
     }
     .toast-item.warning {
-      background: rgba(251, 191, 36, 0.9);
-      color: #1e1b4b;
+      background: rgba(213, 138, 45, 0.92);
+      color: #fff;
     }
     .toast-item.info {
-      background: rgba(96, 165, 250, 0.9);
+      background: rgba(47, 143, 187, 0.92);
     }
     @keyframes toast-in {
       from { opacity: 0; transform: translateX(20px); }

@@ -102,7 +102,9 @@ const handleLogin = async () => {
   flex-direction: column;
   justify-content: center;
   gap: 18px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(139, 92, 246, 0.08));
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-warning) 16%, transparent), transparent 48%),
+    linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 14%, transparent), color-mix(in srgb, var(--color-success) 10%, transparent));
   border-right: 1px solid var(--color-border);
 }
 
@@ -114,8 +116,8 @@ const handleLogin = async () => {
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--color-accent);
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.18);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 
 .login-hero h1 {

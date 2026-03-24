@@ -6,6 +6,7 @@ import (
 	"time"
 
 	domain "github.com/gotunnel/internal/core/domain"
+	"github.com/gotunnel/pkg/observability"
 	"github.com/hashicorp/yamux"
 )
 
@@ -14,7 +15,9 @@ type sessionLifecycle struct {
 	registerClient         func(*ClientSession)
 	unregisterClient       func(*ClientSession)
 	startProxyListeners    func(*ClientSession)
+	emitOperationalEvent   func(string, string, string, string, map[string]string, observability.CorrelationContext)
 	channel                *controlChannel
+	acceptClientStreams    func(*ClientSession)
 	runtimeConfig          func() (heartbeatSec, heartbeatTimeoutSec, maxClientProxies int, responseTimeout time.Duration)
 }
 
@@ -23,7 +26,9 @@ func newSessionLifecycle(
 	registerClient func(*ClientSession),
 	unregisterClient func(*ClientSession),
 	startProxyListeners func(*ClientSession),
+	emitOperationalEvent func(string, string, string, string, map[string]string, observability.CorrelationContext),
 	channel *controlChannel,
+	acceptClientStreams func(*ClientSession),
 	runtimeConfig func() (heartbeatSec, heartbeatTimeoutSec, maxClientProxies int, responseTimeout time.Duration),
 ) *sessionLifecycle {
 	return &sessionLifecycle{
@@ -31,7 +36,9 @@ func newSessionLifecycle(
 		registerClient:         registerClient,
 		unregisterClient:       unregisterClient,
 		startProxyListeners:    startProxyListeners,
+		emitOperationalEvent:   emitOperationalEvent,
 		channel:                channel,
+		acceptClientStreams:    acceptClientStreams,
 		runtimeConfig:          runtimeConfig,
 	}
 }
@@ -51,6 +58,14 @@ func (l *sessionLifecycle) run(conn net.Conn, client *admittedClient) {
 	cs := newClientSession(session, client.ID, client.Name, client.RemoteAddr, client.OS, client.Arch, client.Version, client.Rules)
 	l.registerClient(cs)
 	defer l.unregisterClient(cs)
+	l.emitOperationalEvent(
+		observability.SeverityInfo,
+		observability.CategoryLifecycle,
+		observability.EventServerClientConnected,
+		"Client connected",
+		map[string]string{"client_id": client.ID, "remote_addr": client.RemoteAddr},
+		observability.CorrelationContext{ClientID: client.ID},
+	)
 
 	l.startProxyListeners(cs)
 	if err := l.channel.sendProxyConfig(session, cs.rulesSnapshot()); err != nil {
@@ -59,8 +74,17 @@ func (l *sessionLifecycle) run(conn net.Conn, client *admittedClient) {
 	}
 
 	go l.heartbeatLoop(cs)
+	go l.acceptClientStreams(cs)
 
 	<-session.CloseChan()
+	l.emitOperationalEvent(
+		observability.SeverityWarning,
+		observability.CategoryLifecycle,
+		observability.EventServerClientDisconnected,
+		"Client disconnected",
+		map[string]string{"client_id": client.ID},
+		observability.CorrelationContext{ClientID: client.ID},
+	)
 	log.Printf("[Server] Client %s disconnected", client.ID)
 }
 
@@ -77,6 +101,14 @@ func (l *sessionLifecycle) heartbeatLoop(cs *ClientSession) {
 			timeout := time.Duration(heartbeatTimeoutSec) * time.Second
 
 			if cs.heartbeatExpired(time.Now(), timeout) {
+				l.emitOperationalEvent(
+					observability.SeverityError,
+					observability.CategoryHealth,
+					observability.EventServerHeartbeatTimeout,
+					"Client heartbeat timeout",
+					map[string]string{"client_id": cs.ID},
+					observability.CorrelationContext{ClientID: cs.ID},
+				)
 				log.Printf("[Server] Client %s heartbeat timeout", cs.ID)
 				_ = cs.Session.Close()
 				return

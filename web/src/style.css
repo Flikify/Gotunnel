@@ -8,46 +8,46 @@
 /* 深色主题（默认） - 深邃渐变背景 */
 :root,
 [data-theme="dark"] {
-  /* 背景色 - 深色渐变基底 */
-  --color-bg-primary: #0a0e17;
-  --color-bg-secondary: #0d1220;
-  --color-bg-tertiary: #111827;
-  --color-bg-elevated: #1a2332;
+  /* 背景色 - 深海渐变基底 */
+  --color-bg-primary: #07131a;
+  --color-bg-secondary: #0b1b22;
+  --color-bg-tertiary: #10222b;
+  --color-bg-elevated: #17313b;
 
   /* 玻璃态背景 - 半透明 */
-  --glass-bg: rgba(17, 24, 39, 0.6);
-  --glass-bg-hover: rgba(26, 35, 50, 0.7);
+  --glass-bg: rgba(11, 27, 34, 0.66);
+  --glass-bg-hover: rgba(20, 44, 54, 0.76);
   --glass-bg-light: rgba(255, 255, 255, 0.03);
-  --glass-bg-card: rgba(17, 24, 39, 0.5);
+  --glass-bg-card: rgba(13, 31, 39, 0.58);
 
   /* 边框 - 高光描边 */
   --color-border: rgba(255, 255, 255, 0.08);
   --color-border-light: rgba(255, 255, 255, 0.05);
-  --color-border-glow: rgba(99, 179, 237, 0.3);
+  --color-border-glow: rgba(47, 143, 187, 0.26);
   --glass-border: 1px solid rgba(255, 255, 255, 0.1);
   --glass-border-hover: 1px solid rgba(255, 255, 255, 0.15);
 
   /* 文字颜色 */
-  --color-text-primary: #f0f4f8;
-  --color-text-secondary: rgba(240, 244, 248, 0.7);
-  --color-text-muted: rgba(240, 244, 248, 0.45);
+  --color-text-primary: #edf6f7;
+  --color-text-secondary: rgba(237, 246, 247, 0.72);
+  --color-text-muted: rgba(237, 246, 247, 0.46);
 
-  /* 强调色 - 霓虹高光 */
-  --color-accent: #3b82f6;
-  --color-accent-hover: #60a5fa;
-  --color-accent-glow: rgba(59, 130, 246, 0.4);
-  --color-success: #10b981;
-  --color-success-glow: rgba(16, 185, 129, 0.4);
-  --color-warning: #f59e0b;
-  --color-warning-glow: rgba(245, 158, 11, 0.4);
+  /* 强调色 */
+  --color-accent: #2f8fbb;
+  --color-accent-hover: #46a6cf;
+  --color-accent-glow: rgba(47, 143, 187, 0.34);
+  --color-success: #24a67a;
+  --color-success-glow: rgba(36, 166, 122, 0.34);
+  --color-warning: #d58a2d;
+  --color-warning-glow: rgba(213, 138, 45, 0.32);
   --color-error: #ef4444;
   --color-error-glow: rgba(239, 68, 68, 0.4);
-  --color-info: #06b6d4;
-  --color-info-glow: rgba(6, 182, 212, 0.4);
+  --color-info: #1e95a8;
+  --color-info-glow: rgba(30, 149, 168, 0.32);
 
   /* 渐变背景 */
-  --gradient-bg: linear-gradient(135deg, #0a0e17 0%, #1a1f35 50%, #0d1220 100%);
-  --gradient-accent: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --gradient-bg: linear-gradient(135deg, #07131a 0%, #0c2027 48%, #112d36 100%);
+  --gradient-accent: linear-gradient(135deg, #2f8fbb 0%, #24a67a 100%);
   --gradient-card: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
 
   /* 模糊效果 */
@@ -58,52 +58,52 @@
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.15);
+  --shadow-glow: 0 0 20px rgba(47, 143, 187, 0.16);
   --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* 浅色主题 - 柔和渐变背景 */
 [data-theme="light"] {
-  /* 背景色 - 浅色渐变基底 */
-  --color-bg-primary: #f0f4f8;
-  --color-bg-secondary: #e8eef4;
+  /* 背景色 - 沙砾浅色基底 */
+  --color-bg-primary: #f2f3ee;
+  --color-bg-secondary: #e7ece7;
   --color-bg-tertiary: #ffffff;
   --color-bg-elevated: #ffffff;
 
   /* 玻璃态背景 - 半透明白 */
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-bg-hover: rgba(255, 255, 255, 0.85);
+  --glass-bg: rgba(255, 255, 255, 0.76);
+  --glass-bg-hover: rgba(255, 255, 255, 0.9);
   --glass-bg-light: rgba(255, 255, 255, 0.5);
-  --glass-bg-card: rgba(255, 255, 255, 0.6);
+  --glass-bg-card: rgba(255, 255, 255, 0.72);
 
   /* 边框 - 柔和描边 */
   --color-border: rgba(0, 0, 0, 0.08);
   --color-border-light: rgba(0, 0, 0, 0.05);
-  --color-border-glow: rgba(59, 130, 246, 0.3);
+  --color-border-glow: rgba(47, 143, 187, 0.2);
   --glass-border: 1px solid rgba(255, 255, 255, 0.8);
   --glass-border-hover: 1px solid rgba(255, 255, 255, 0.95);
 
   /* 文字颜色 */
-  --color-text-primary: #1a202c;
-  --color-text-secondary: rgba(26, 32, 44, 0.7);
-  --color-text-muted: rgba(26, 32, 44, 0.5);
+  --color-text-primary: #18272c;
+  --color-text-secondary: rgba(24, 39, 44, 0.7);
+  --color-text-muted: rgba(24, 39, 44, 0.5);
 
   /* 强调色 */
-  --color-accent: #3b82f6;
-  --color-accent-hover: #2563eb;
-  --color-accent-glow: rgba(59, 130, 246, 0.3);
-  --color-success: #10b981;
-  --color-success-glow: rgba(16, 185, 129, 0.3);
-  --color-warning: #f59e0b;
-  --color-warning-glow: rgba(245, 158, 11, 0.3);
+  --color-accent: #277ea6;
+  --color-accent-hover: #206b8d;
+  --color-accent-glow: rgba(39, 126, 166, 0.2);
+  --color-success: #1f8c68;
+  --color-success-glow: rgba(31, 140, 104, 0.22);
+  --color-warning: #bc7421;
+  --color-warning-glow: rgba(188, 116, 33, 0.22);
   --color-error: #ef4444;
   --color-error-glow: rgba(239, 68, 68, 0.3);
-  --color-info: #06b6d4;
-  --color-info-glow: rgba(6, 182, 212, 0.3);
+  --color-info: #197f90;
+  --color-info-glow: rgba(25, 127, 144, 0.22);
 
   /* 渐变背景 */
-  --gradient-bg: linear-gradient(135deg, #e8eef4 0%, #f0f4f8 50%, #e0e8f0 100%);
-  --gradient-accent: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --gradient-bg: linear-gradient(135deg, #eef0ea 0%, #f8f7f2 54%, #e6ece5 100%);
+  --gradient-accent: linear-gradient(135deg, #277ea6 0%, #1f8c68 100%);
   --gradient-card: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.7) 100%);
 
   /* 模糊效果 */
@@ -114,7 +114,7 @@
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
-  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.1);
+  --shadow-glow: 0 0 20px rgba(39, 126, 166, 0.1);
   --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
@@ -125,7 +125,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'IBM Plex Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--gradient-bg);
@@ -283,7 +283,7 @@ body {
 .particle-2 {
   width: 300px;
   height: 300px;
-  background: #8b5cf6;
+  background: var(--color-warning);
   bottom: -50px;
   left: -50px;
   animation-delay: -5s;
@@ -310,7 +310,7 @@ body {
 .particle-5 {
   width: 350px;
   height: 350px;
-  background: #ec4899;
+  background: var(--color-accent-hover);
   top: 30%;
   left: 10%;
   animation-delay: -7s;

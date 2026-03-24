@@ -245,7 +245,7 @@ onUnmounted(() => {
 }
 
 .log-select option {
-  background: #1e1b4b;
+  background: #10222b;
   color: white;
 }
 
@@ -266,7 +266,7 @@ onUnmounted(() => {
 }
 
 .log-input:focus {
-  border-color: rgba(167, 139, 250, 0.5);
+  border-color: var(--color-accent);
 }
 
 /* Toggle */
@@ -283,7 +283,7 @@ onUnmounted(() => {
 .log-toggle input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #a78bfa;
+  accent-color: var(--color-accent);
 }
 
 /* Icon Button */

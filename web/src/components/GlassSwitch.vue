@@ -50,7 +50,7 @@ const toggle = () => {
 }
 
 .glass-switch.active {
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  background: var(--gradient-accent);
 }
 
 .glass-switch.disabled {

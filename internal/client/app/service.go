@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/gotunnel/internal/client/tunnel"
 	"github.com/gotunnel/pkg/crypto"
+	"github.com/gotunnel/pkg/observability"
 	"github.com/gotunnel/pkg/protocol"
 )
 
@@ -64,6 +67,7 @@ type Service struct {
 	lastError           string
 	recentLogs          []string
 	tunnelEstablishedAt map[string]int64
+	hostStore           *observability.DiagnosticStore
 }
 
 // NewService creates a reusable client application service.
@@ -155,6 +159,43 @@ func (s *Service) Snapshot() Snapshot {
 	}
 }
 
+func (s *Service) AppendHostLog(level, eventCode, component, message, fieldsJSON string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	fields := map[string]string{}
+	if strings.TrimSpace(fieldsJSON) != "" {
+		if err := json.Unmarshal([]byte(fieldsJSON), &fields); err != nil {
+			return err.Error()
+		}
+	}
+
+	store, err := s.ensureHostStoreLocked()
+	if err != nil {
+		return err.Error()
+	}
+
+	record := observability.DiagnosticRecord{
+		Level:     level,
+		NodeRole:  observability.NodeRoleAndroidHost,
+		NodeID:    s.hostNodeIDLocked(),
+		Component: component,
+		EventCode: eventCode,
+		Message:   message,
+		Fields:    fields,
+		Corr:      observability.CorrelationContext{ClientID: s.hostNodeIDLocked()},
+	}
+	if err := store.Record(record); err != nil {
+		return err.Error()
+	}
+
+	s.appendLogLocked(level, eventCode, message, time.Now().UnixMilli())
+	if event := hostDiagnosticToOperational(record); event != nil && s.client != nil {
+		s.client.EmitOperationalEvent(*event)
+	}
+	return ""
+}
+
 func (s *Service) prepareLocked(cancel context.CancelFunc) (*tunnel.Client, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -187,7 +228,7 @@ func (s *Service) prepareLocked(cancel context.CancelFunc) (*tunnel.Client, erro
 	}
 	s.client = client
 	s.cancel = cancel
-	s.cancelLogs = client.ObserveLogs(s.consumeLogEntry)
+	s.cancelLogs = client.ObserveDiagnostics(s.consumeDiagnosticEntry)
 	s.running = true
 	s.status = "starting"
 	s.detail = fmt.Sprintf("Starting client for %s", s.config.Server)
@@ -212,7 +253,7 @@ func (s *Service) finish(err error) {
 		s.status = "error"
 		s.detail = err.Error()
 		s.lastError = err.Error()
-		s.appendLogLocked("ERROR", err.Error(), time.Now().UnixMilli())
+		s.appendLogLocked("ERROR", "client.runtime.exit_error", err.Error(), time.Now().UnixMilli())
 		return
 	}
 
@@ -222,53 +263,49 @@ func (s *Service) finish(err error) {
 	}
 }
 
-func (s *Service) consumeLogEntry(entry protocol.LogEntry) {
+func (s *Service) consumeDiagnosticEntry(entry observability.DiagnosticRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.appendLogLocked(entry.Level, entry.Message, entry.Timestamp)
+	s.appendLogLocked(entry.Level, entry.EventCode, entry.Message, entry.Timestamp)
 
-	lower := strings.ToLower(entry.Message)
-	switch {
-	case strings.HasPrefix(lower, "dialing server"),
-		strings.HasPrefix(lower, "tcp connection established"),
-		strings.HasPrefix(lower, "starting tls handshake"),
-		strings.HasPrefix(lower, "tls handshake completed"),
-		strings.HasPrefix(lower, "sending auth request"),
-		strings.HasPrefix(lower, "server authentication accepted"),
-		strings.HasPrefix(lower, "tunnel session established"):
+	switch entry.EventCode {
+	case observability.EventClientDialStarted, observability.EventClientAuthAccepted:
 		if s.status != "running" {
 			s.status = "starting"
 		}
 		s.detail = entry.Message
-	case strings.HasPrefix(lower, "authenticated as"):
+	case observability.EventClientSessionEstablished:
 		s.status = "running"
 		s.detail = entry.Message
 		s.lastError = ""
-	case strings.HasPrefix(lower, "connect error:"):
+	case observability.EventClientReconnectBackoff:
 		s.status = "reconnecting"
 		s.detail = entry.Message
 		s.lastError = entry.Message
-	case strings.Contains(lower, "auth failed:"):
+	case observability.EventClientAuthRejected:
 		s.status = "error"
 		s.detail = entry.Message
 		s.lastError = entry.Message
-	case strings.Contains(lower, "reconnecting"):
+	case observability.EventClientDisconnected:
 		s.status = "reconnecting"
 		s.detail = entry.Message
-	case strings.Contains(lower, "disconnected"):
-		s.status = "reconnecting"
-		s.detail = entry.Message
-	case entry.Level == "error":
+	case observability.EventClientUpdateFailed, observability.EventClientScreenshotFailed:
 		s.status = "error"
 		s.detail = entry.Message
 		s.lastError = entry.Message
-	case s.status == "starting":
-		s.detail = entry.Message
+	default:
+		if entry.Level == observability.LevelError {
+			s.status = "error"
+			s.detail = entry.Message
+			s.lastError = entry.Message
+		} else if s.status == "starting" {
+			s.detail = entry.Message
+		}
 	}
 }
 
-func (s *Service) appendLogLocked(level, message string, ts int64) {
+func (s *Service) appendLogLocked(level, eventCode, message string, ts int64) {
 	if strings.TrimSpace(message) == "" {
 		return
 	}
@@ -278,7 +315,7 @@ func (s *Service) appendLogLocked(level, message string, ts int64) {
 		stamp = time.Now()
 	}
 
-	line := fmt.Sprintf("%s [%s] %s", stamp.Format("15:04:05"), strings.ToUpper(level), message)
+	line := fmt.Sprintf("%s [%s] [%s] %s", stamp.Format("15:04:05"), strings.ToUpper(level), eventCode, message)
 	s.recentLogs = append(s.recentLogs, line)
 	if len(s.recentLogs) > 80 {
 		s.recentLogs = s.recentLogs[len(s.recentLogs)-80:]
@@ -338,6 +375,77 @@ func (s *Service) activeTunnelsLocked() []ActiveTunnel {
 		return tunnels[i].RemotePort < tunnels[j].RemotePort
 	})
 	return tunnels
+}
+
+func (s *Service) ensureHostStoreLocked() (*observability.DiagnosticStore, error) {
+	if s.hostStore != nil {
+		return s.hostStore, nil
+	}
+	dataDir := s.config.DataDir
+	if strings.TrimSpace(dataDir) == "" {
+		dataDir = filepath.Join(".", "gotunnel-mobile")
+	}
+	store, err := observability.NewDiagnosticStore(observability.StoreOptions{
+		RootDir:       filepath.Join(dataDir, "android-host-diagnostics"),
+		RetentionDays: 7,
+		NodeID:        s.hostNodeIDLocked(),
+		NodeRole:      observability.NodeRoleAndroidHost,
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.hostStore = store
+	return store, nil
+}
+
+func (s *Service) hostNodeIDLocked() string {
+	if s.client != nil && strings.TrimSpace(s.client.ID) != "" {
+		return s.client.ID
+	}
+	if strings.TrimSpace(s.config.ClientID) != "" {
+		return s.config.ClientID
+	}
+	return "android-host"
+}
+
+func hostDiagnosticToOperational(record observability.DiagnosticRecord) *observability.OperationalEvent {
+	switch record.EventCode {
+	case observability.EventAndroidNetworkLost:
+		return &observability.OperationalEvent{
+			Severity:  observability.SeverityWarning,
+			NodeID:    record.NodeID,
+			NodeRole:  observability.NodeRoleAndroidHost,
+			Category:  observability.CategoryNetwork,
+			EventCode: record.EventCode,
+			Summary:   record.Message,
+			Fields:    record.Fields,
+			Corr:      record.Corr,
+		}
+	case observability.EventAndroidBridgeLoadFail:
+		return &observability.OperationalEvent{
+			Severity:  observability.SeverityError,
+			NodeID:    record.NodeID,
+			NodeRole:  observability.NodeRoleAndroidHost,
+			Category:  observability.CategoryHealth,
+			EventCode: record.EventCode,
+			Summary:   record.Message,
+			Fields:    record.Fields,
+			Corr:      record.Corr,
+		}
+	case observability.EventAndroidServiceStart, observability.EventAndroidServiceStop, observability.EventAndroidServiceRestart, observability.EventAndroidNetworkUp:
+		return &observability.OperationalEvent{
+			Severity:  observability.SeverityInfo,
+			NodeID:    record.NodeID,
+			NodeRole:  observability.NodeRoleAndroidHost,
+			Category:  observability.CategoryLifecycle,
+			EventCode: record.EventCode,
+			Summary:   record.Message,
+			Fields:    record.Fields,
+			Corr:      record.Corr,
+		}
+	default:
+		return nil
+	}
 }
 
 func activeTunnelKey(rule protocol.ProxyRule) string {

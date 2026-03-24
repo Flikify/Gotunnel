@@ -42,4 +42,11 @@ interface TunnelController {
     fun start(config: AppConfig)
     fun stop(reason: String = "manual")
     fun restart(reason: String = "manual")
+    fun appendHostLog(
+        level: String = "info",
+        eventCode: String,
+        source: String,
+        message: String,
+        fieldsJson: String = "{}",
+    )
 }

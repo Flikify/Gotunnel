@@ -544,8 +544,7 @@ onUnmounted(() => {
 
       <!-- Main Grid -->
       <div class="main-grid">
-        <!-- Left Column -->
-        <div class="left-column">
+        <div class="side-column">
           <!-- Status Card -->
           <div class="glass-card">
             <div class="card-header">
@@ -603,19 +602,6 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Stats Card -->
-          <div class="glass-card">
-            <div class="card-header">
-              <h3>统计</h3>
-            </div>
-            <div class="card-body stats-row">
-              <div class="mini-stat">
-                <span class="mini-stat-value">{{ rules.length }}</span>
-                <span class="mini-stat-label">规则数</span>
-              </div>
-            </div>
-          </div>
-
           <!-- System Stats Card -->
           <div class="glass-card" v-if="online">
             <div class="card-header">
@@ -662,67 +648,65 @@ onUnmounted(() => {
               </Transition>
             </div>
           </div>
-
-          <!-- Screenshot Card -->
-          <div class="glass-card" v-if="online">
-            <div class="card-header">
-              <h3>屏幕截图</h3>
-              <div class="header-controls">
-                <GlassSwitch :model-value="autoRefreshScreenshot" @update:model-value="(v: boolean) => { autoRefreshScreenshot = v; toggleAutoRefresh() }" size="small">
-                  自动刷新
-                </GlassSwitch>
-                <button class="glass-btn tiny" :disabled="loadingScreenshot" @click="loadScreenshot">
-                  <RefreshOutline class="btn-icon-sm" />
-                </button>
-              </div>
-            </div>
-            <div class="card-body screenshot-body">
-              <div class="screenshot-container" v-if="screenshotData">
-                <img :src="`data:image/jpeg;base64,${screenshotData.data}`" alt="Screenshot" class="screenshot-img" />
-                <div class="screenshot-meta">
-                  {{ new Date(screenshotData.timestamp).toLocaleTimeString() }} ({{ screenshotData.width }}x{{ screenshotData.height }})
-                </div>
-              </div>
-              <div v-else class="empty-hint" @click="loadScreenshot">
-                {{ loadingScreenshot ? '截图中...' : '点击获取截图' }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Shell Terminal Card -->
-          <div class="glass-card" v-if="online">
-            <div class="card-header">
-              <h3>远程 Shell</h3>
-            </div>
-            <div class="card-body shell-body">
-              <textarea 
-                id="shell-output" 
-                class="shell-output" 
-                readonly 
-                v-model="shellOutput"
-              ></textarea>
-              <div class="shell-input-group">
-                <input 
-                  type="text" 
-                  class="glass-input shell-input" 
-                  v-model="shellCommand" 
-                  @keydown.enter="executeShell"
-                  @keydown.up.prevent="handleShellHistory('up')"
-                  @keydown.down.prevent="handleShellHistory('down')"
-                  placeholder="输入命令..."
-                  :disabled="executingShell"
-                />
-                <button class="glass-btn primary small" :disabled="executingShell" @click="executeShell">
-                  <PlayOutline class="btn-icon-sm" />
-                </button>
-              </div>
-            </div>
-          </div>
-
         </div>
 
-        <!-- Right Column -->
-        <div class="right-column">
+        <div class="content-column">
+          <div v-if="online" class="workspace-grid">
+            <div class="glass-card workspace-card workspace-card--screenshot">
+              <div class="card-header">
+                <h3>屏幕截图</h3>
+                <div class="header-controls">
+                  <GlassSwitch :model-value="autoRefreshScreenshot" @update:model-value="(v: boolean) => { autoRefreshScreenshot = v; toggleAutoRefresh() }" size="small">
+                    自动刷新
+                  </GlassSwitch>
+                  <button class="glass-btn tiny" :disabled="loadingScreenshot" @click="loadScreenshot">
+                    <RefreshOutline class="btn-icon-sm" />
+                  </button>
+                </div>
+              </div>
+              <div class="card-body screenshot-body">
+                <div class="screenshot-container" v-if="screenshotData">
+                  <img :src="`data:image/jpeg;base64,${screenshotData.data}`" alt="Screenshot" class="screenshot-img" />
+                  <div class="screenshot-meta">
+                    {{ new Date(screenshotData.timestamp).toLocaleTimeString() }} ({{ screenshotData.width }}x{{ screenshotData.height }})
+                  </div>
+                </div>
+                <div v-else class="empty-hint" @click="loadScreenshot">
+                  {{ loadingScreenshot ? '截图中...' : '点击获取截图' }}
+                </div>
+              </div>
+            </div>
+
+            <div class="glass-card workspace-card workspace-card--shell">
+              <div class="card-header">
+                <h3>远程 Shell</h3>
+              </div>
+              <div class="card-body shell-body">
+                <textarea
+                  id="shell-output"
+                  class="shell-output"
+                  readonly
+                  v-model="shellOutput"
+                ></textarea>
+                <div class="shell-input-group">
+                  <input
+                    type="text"
+                    class="glass-input shell-input"
+                    v-model="shellCommand"
+                    @keydown.enter="executeShell"
+                    @keydown.up.prevent="handleShellHistory('up')"
+                    @keydown.down.prevent="handleShellHistory('down')"
+                    placeholder="输入命令..."
+                    :disabled="executingShell"
+                  />
+                  <button class="glass-btn primary small" :disabled="executingShell" @click="executeShell">
+                    <PlayOutline class="btn-icon-sm" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Rules Card -->
           <div class="glass-card">
             <div class="card-header">
@@ -856,7 +840,7 @@ onUnmounted(() => {
 .particle-2 {
   width: 280px;
   height: 280px;
-  background: #8b5cf6;
+  background: var(--color-warning);
   bottom: -40px;
   left: -40px;
   animation-delay: -5s;
@@ -881,7 +865,7 @@ onUnmounted(() => {
 .client-content {
   position: relative;
   z-index: 10;
-  max-width: 1400px;
+  max-width: 1480px;
   margin: 0 auto;
 }
 
@@ -889,8 +873,8 @@ onUnmounted(() => {
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
+  align-items: flex-start;
+  margin-bottom: 28px;
   flex-wrap: wrap;
   gap: 16px;
 }
@@ -898,7 +882,9 @@ onUnmounted(() => {
 .header-left {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
+  min-width: 0;
 }
 
 .back-btn, .edit-btn {
@@ -919,10 +905,12 @@ onUnmounted(() => {
 }
 
 .page-title {
-  font-size: 24px;
+  font-size: clamp(24px, 3vw, 34px);
   font-weight: 700;
   color: var(--color-text-primary);
   margin: 0;
+  min-width: 0;
+  word-break: break-word;
 }
 
 .status-tag {
@@ -930,18 +918,19 @@ onUnmounted(() => {
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
-  background: rgba(244, 33, 46, 0.15);
+  background: rgba(239, 68, 68, 0.15);
   color: var(--color-error);
 }
 
 .status-tag.online {
-  background: rgba(0, 186, 124, 0.15);
+  background: rgba(36, 166, 122, 0.16);
   color: var(--color-success);
 }
 
 .header-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* Glass Button */
@@ -984,8 +973,8 @@ onUnmounted(() => {
 }
 
 .glass-btn.warning {
-  background: rgba(247, 147, 26, 0.15);
-  border-color: rgba(247, 147, 26, 0.3);
+  background: rgba(213, 138, 45, 0.15);
+  border-color: rgba(213, 138, 45, 0.3);
   color: var(--color-warning);
 }
 
@@ -996,19 +985,27 @@ onUnmounted(() => {
 /* Main Grid */
 .main-grid {
   display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: 24px;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
 }
 
-@media (max-width: 900px) {
-  .main-grid { grid-template-columns: 1fr; }
-}
-
-.left-column, .right-column {
+.side-column,
+.content-column {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.workspace-card {
+  min-height: 100%;
 }
 
 /* Glass Card */
@@ -1025,6 +1022,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .card-header h3 {
@@ -1059,11 +1058,11 @@ onUnmounted(() => {
 
 @keyframes heartbeat-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(0, 186, 124, 0.5);
+    box-shadow: 0 0 0 0 rgba(36, 166, 122, 0.5);
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(0, 186, 124, 0);
+    box-shadow: 0 0 0 6px rgba(36, 166, 122, 0);
     transform: scale(1.1);
   }
 }
@@ -1074,6 +1073,7 @@ onUnmounted(() => {
   border-top: 1px solid var(--color-border-light);
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* Stat Items */
@@ -1106,7 +1106,7 @@ onUnmounted(() => {
   margin-left: 8px;
   padding: 2px 8px;
   font-size: 11px;
-  background: rgba(247, 147, 26, 0.15);
+  background: rgba(213, 138, 45, 0.15);
   color: var(--color-warning);
   border-radius: 10px;
   cursor: pointer;
@@ -1114,7 +1114,7 @@ onUnmounted(() => {
 }
 
 .update-badge:hover {
-  background: rgba(247, 147, 26, 0.25);
+  background: rgba(213, 138, 45, 0.25);
 }
 
 .latest-badge {
@@ -1122,31 +1122,9 @@ onUnmounted(() => {
   margin-left: 8px;
   padding: 2px 8px;
   font-size: 11px;
-  background: rgba(0, 186, 124, 0.15);
+  background: rgba(36, 166, 122, 0.16);
   color: var(--color-success);
   border-radius: 10px;
-}
-
-/* Mini Stats */
-.stats-row {
-  display: flex;
-  justify-content: space-around;
-}
-
-.mini-stat {
-  text-align: center;
-}
-
-.mini-stat-value {
-  display: block;
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-}
-
-.mini-stat-label {
-  font-size: 12px;
-  color: var(--color-text-muted);
 }
 
 /* Update Card */
@@ -1186,6 +1164,7 @@ onUnmounted(() => {
   gap: 12px;
   padding: 10px 0;
   align-items: center;
+  min-width: 680px;
 }
 
 .table-header {
@@ -1203,7 +1182,7 @@ onUnmounted(() => {
 
 .rule-name { font-weight: 500; color: var(--color-text-primary); }
 .rule-mapping { font-family: monospace; font-size: 12px; }
-.rule-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.rule-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* Icon Button */
 .icon-btn {
@@ -1240,7 +1219,7 @@ onUnmounted(() => {
 }
 
 .icon-btn.success:hover:not(:disabled) {
-  background: rgba(0, 186, 124, 0.15);
+  background: rgba(36, 166, 122, 0.16);
 }
 
 /* Form Styles */
@@ -1417,9 +1396,11 @@ onUnmounted(() => {
   padding: 0;
   display: flex;
   justify-content: center;
-  align-items: center;
-  min-height: 200px;
-  background: rgba(0, 0, 0, 0.2);
+  align-items: stretch;
+  min-height: 320px;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-accent) 14%, transparent), transparent 42%),
+    rgba(0, 0, 0, 0.18);
   border-radius: 0 0 16px 16px;
   overflow: hidden;
   position: relative;
@@ -1433,17 +1414,19 @@ onUnmounted(() => {
 
 .screenshot-img {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.14);
 }
 
 .screenshot-meta {
   position: absolute;
   bottom: 0;
   right: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(7, 19, 26, 0.8);
   color: #fff;
-  padding: 4px 8px;
+  padding: 8px 10px;
   font-size: 12px;
   border-top-left-radius: 8px;
   font-family: monospace;
@@ -1454,22 +1437,24 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 100%;
 }
 
 .shell-output {
   width: 100%;
-  height: 300px;
-  background: #1a1a1a;
-  color: #0f0;
+  height: 340px;
+  background: #07131a;
+  color: #83f0c7;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 13px;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(47, 143, 187, 0.18);
   resize: vertical;
   overflow-y: auto;
   white-space: pre-wrap;
   word-wrap: break-word;
+  flex: 1;
 }
 
 .shell-input-group {
@@ -1486,6 +1471,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 
@@ -1542,5 +1528,77 @@ onUnmounted(() => {
   text-align: right;
   margin-bottom: 12px;
   margin-top: -4px;
+}
+
+@media (max-width: 1180px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .client-page {
+    padding: 16px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .glass-btn {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .card-header,
+  .card-body,
+  .card-actions {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .stat-item {
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .screenshot-body {
+    min-height: 240px;
+  }
+
+  .screenshot-meta {
+    left: 0;
+    right: 0;
+    border-top-left-radius: 0;
+    text-align: center;
+  }
+
+  .shell-output {
+    height: 260px;
+  }
+
+  .shell-input-group {
+    flex-direction: column;
+  }
+
+  .shell-input-group .glass-btn {
+    justify-content: center;
+  }
+
+  .system-stat-item {
+    flex-wrap: wrap;
+  }
+
+  .system-stat-label,
+  .system-stat-value {
+    width: auto;
+  }
 }
 </style>
