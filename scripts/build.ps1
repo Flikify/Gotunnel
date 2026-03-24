@@ -174,10 +174,10 @@ function Get-OutputName {
     )
 
     if ($OS -eq "windows") {
-        return "$Component.exe"
+        return "gotunnel-$Component.exe"
     }
 
-    return $Component
+    return "gotunnel-$Component"
 }
 
 function Build-Binary {

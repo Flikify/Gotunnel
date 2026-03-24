@@ -10,9 +10,56 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 )
+
+func binaryCandidateNames(component, goos string) []string {
+	names := []string{component}
+	if goos == "windows" {
+		names = append(names, component+".exe")
+	}
+	return names
+}
+
+func findExtractedBinary(extractDir, component, goos string) (string, error) {
+	var binaryPath string
+	legacyPrefix := "gotunnel-" + component
+	candidateNames := binaryCandidateNames(component, goos)
+
+	err := filepath.Walk(extractDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		name := info.Name()
+		if strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".zip") {
+			return nil
+		}
+
+		// 优先匹配当前发布归档中的标准二进制名，其次兼容旧的 gotunnel-{component}-* 命名。
+		if slices.Contains(candidateNames, name) || strings.HasPrefix(name, legacyPrefix) {
+			binaryPath = path
+			return filepath.SkipAll
+		}
+
+		return nil
+	})
+
+	if err != nil && err != filepath.SkipAll {
+		return "", err
+	}
+
+	if binaryPath == "" {
+		return "", fmt.Errorf("binary not found in archive")
+	}
+
+	return binaryPath, nil
+}
 
 // GetArchiveExt 根据 URL 获取压缩包扩展名
 func GetArchiveExt(url string) string {
@@ -134,38 +181,7 @@ func ExtractZip(archivePath, destDir string) error {
 
 // FindExtractedBinary 在解压目录中查找可执行文件
 func FindExtractedBinary(extractDir, component string) (string, error) {
-	var binaryPath string
-	prefix := "gotunnel-" + component
-
-	err := filepath.Walk(extractDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-
-		name := info.Name()
-		// 匹配 gotunnel-server-* 或 gotunnel-client-*
-		if strings.HasPrefix(name, prefix) {
-			// 排除压缩包本身
-			if !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".zip") {
-				binaryPath = path
-				return filepath.SkipAll
-			}
-		}
-		return nil
-	})
-
-	if err != nil && err != filepath.SkipAll {
-		return "", err
-	}
-
-	if binaryPath == "" {
-		return "", fmt.Errorf("binary not found in archive")
-	}
-
-	return binaryPath, nil
+	return findExtractedBinary(extractDir, component, runtime.GOOS)
 }
 
 // CopyFile 复制文件

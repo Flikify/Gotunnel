@@ -78,9 +78,9 @@ output_name() {
     local os=$2
 
     if [ "$os" = "windows" ]; then
-        echo "${component}.exe"
+        echo "gotunnel-${component}.exe"
     else
-        echo "${component}"
+        echo "gotunnel-${component}"
     fi
 }
 

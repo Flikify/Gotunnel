@@ -291,7 +291,7 @@ jobs:
             EXT=".exe"
           fi
 
-          OUTPUT_NAME="${{ matrix.component }}${EXT}"
+          OUTPUT_NAME="gotunnel-${{ matrix.component }}${EXT}"
           LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.BuildTime=${BUILD_TIME}' -X 'main.GitCommit=${GIT_COMMIT}'"
           go build -trimpath -ldflags "$LDFLAGS" -o "dist/package/${OUTPUT_NAME}" ./cmd/${{ matrix.component }}
 
