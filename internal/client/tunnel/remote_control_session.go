@@ -3,6 +3,7 @@ package tunnel
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -35,6 +36,8 @@ type remoteControlSession struct {
 	desktopHeight  int
 	pressedKeys    map[string]struct{}
 	pressedButtons map[string]struct{}
+	lastFrameHash  [32]byte
+	hasFrameHash   bool
 }
 
 func (c *Client) handleRemoteControlStart(stream net.Conn, msg *protocol.Message) {
@@ -52,7 +55,7 @@ func (c *Client) handleRemoteControlStart(stream net.Conn, msg *protocol.Message
 	}
 
 	session := newRemoteControlSession(c.remoteController, req)
-	frame, err := session.captureFrame()
+	frame, err := session.captureFrame(true)
 	if err != nil {
 		writeRemoteControlMessage(stream, protocol.MsgTypeRemoteControlError, protocol.RemoteControlError{Message: err.Error()})
 		return
@@ -155,11 +158,14 @@ func (s *remoteControlSession) streamFrames(ctx context.Context, stream net.Conn
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			frame, err := s.captureFrame()
+			frame, err := s.captureFrame(false)
 			if err != nil {
 				_ = s.writeMessage(stream, protocol.MsgTypeRemoteControlError, protocol.RemoteControlError{Message: err.Error()})
 				_ = stream.Close()
 				return
+			}
+			if frame == nil {
+				continue
 			}
 			if err := s.writeMessage(stream, protocol.MsgTypeRemoteControlFrame, frame); err != nil {
 				_ = stream.Close()
@@ -169,7 +175,7 @@ func (s *remoteControlSession) streamFrames(ctx context.Context, stream net.Conn
 	}
 }
 
-func (s *remoteControlSession) captureFrame() (*protocol.RemoteControlFrame, error) {
+func (s *remoteControlSession) captureFrame(force bool) (*protocol.RemoteControlFrame, error) {
 	img, err := s.controller.Capture()
 	if err != nil {
 		return nil, fmt.Errorf("capture frame: %w", err)
@@ -188,6 +194,9 @@ func (s *remoteControlSession) captureFrame() (*protocol.RemoteControlFrame, err
 	if err != nil {
 		return nil, err
 	}
+	if !force && s.isDuplicateFrame(encoded) {
+		return nil, nil
+	}
 
 	return &protocol.RemoteControlFrame{
 		Data:      encoded,
@@ -195,6 +204,21 @@ func (s *remoteControlSession) captureFrame() (*protocol.RemoteControlFrame, err
 		Height:    height,
 		Timestamp: time.Now().UnixMilli(),
 	}, nil
+}
+
+func (s *remoteControlSession) isDuplicateFrame(encoded []byte) bool {
+	hash := sha256.Sum256(encoded)
+
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	if s.hasFrameHash && s.lastFrameHash == hash {
+		return true
+	}
+
+	s.lastFrameHash = hash
+	s.hasFrameHash = true
+	return false
 }
 
 func encodeRemoteControlFrame(img image.Image, maxSide, quality int) ([]byte, error) {

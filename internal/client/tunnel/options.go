@@ -1,6 +1,9 @@
 package tunnel
 
-import "time"
+import (
+	"runtime"
+	"time"
+)
 
 // PlatformFeatures controls which platform-specific capabilities the client may use.
 type PlatformFeatures struct {
@@ -22,11 +25,16 @@ type ClientOptions struct {
 
 // DefaultPlatformFeatures enables the desktop feature set.
 func DefaultPlatformFeatures() PlatformFeatures {
+	allowScreenshot := true
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		allowScreenshot = false
+	}
+
 	return PlatformFeatures{
 		AllowSelfUpdate:    true,
-		AllowScreenshot:    true,
+		AllowScreenshot:    allowScreenshot,
 		AllowSystemStats:   true,
-		AllowRemoteControl: true,
+		AllowRemoteControl: runtime.GOOS == "windows",
 	}
 }
 

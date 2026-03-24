@@ -34,6 +34,7 @@ const themeMenuRef = ref<HTMLElement | null>(null)
 const userMenuRef = ref<HTMLElement | null>(null)
 
 const isLoginPage = computed(() => route.path === '/login')
+const isFullscreenPage = computed(() => route.meta.fullscreen === true)
 const navItems = [
   { key: 'home', label: '控制台', icon: HomeOutline, path: '/' },
   { key: 'clients', label: '客户端', icon: DesktopOutline, path: '/clients' },
@@ -153,6 +154,7 @@ onUnmounted(() => {
 
 <template>
   <RouterView v-if="isLoginPage" />
+  <RouterView v-else-if="isFullscreenPage" />
   <div v-else class="app-layout">
     <aside class="app-sidebar glass-card">
       <div class="brand-block">

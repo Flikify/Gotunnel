@@ -1,4 +1,4 @@
-//go:build !cgo || !(windows || (linux && !android) || (darwin && !ios))
+//go:build !(windows || (linux && !android))
 
 package utils
 

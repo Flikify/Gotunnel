@@ -105,8 +105,10 @@ func TestHandleRemoteControlStartProcessesInputAndClipboard(t *testing.T) {
 		captureImage:  image.NewRGBA(image.Rect(0, 0, 1920, 1080)),
 		clipboardText: "remote clipboard",
 	}
+	features := DefaultPlatformFeatures()
+	features.AllowRemoteControl = true
 	client := &Client{
-		features:         DefaultPlatformFeatures(),
+		features:         features,
 		remoteController: controller,
 	}
 
@@ -169,8 +171,10 @@ func TestHandleRemoteControlStartReleasesPressedKeysOnDisconnect(t *testing.T) {
 	controller := &fakeRemoteController{
 		captureImage: image.NewRGBA(image.Rect(0, 0, 800, 600)),
 	}
+	features := DefaultPlatformFeatures()
+	features.AllowRemoteControl = true
 	client := &Client{
-		features:         DefaultPlatformFeatures(),
+		features:         features,
 		remoteController: controller,
 	}
 

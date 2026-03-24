@@ -1,19 +1,16 @@
-//go:build cgo && (windows || (linux && !android) || (darwin && !ios))
+//go:build windows || (linux && !android)
 
 package utils
 
 import (
-	"bytes"
 	"fmt"
-	"image"
-	"image/jpeg"
 
-	"github.com/go-vgo/robotgo"
+	"github.com/kbinani/screenshot"
 )
 
 // CaptureScreenshot captures the primary display.
 func CaptureScreenshot(quality int) ([]byte, int, int, error) {
-	img, err := robotgo.CaptureImg()
+	img, err := screenshot.CaptureDisplay(0)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("capture screen: %w", err)
 	}
@@ -26,27 +23,22 @@ func CaptureScreenshot(quality int) ([]byte, int, int, error) {
 	return encodeJPEG(img, quality)
 }
 
-// CaptureAllScreens currently uses RobotGo's desktop capture path.
+// CaptureAllScreens captures the full virtual desktop across all connected displays.
 func CaptureAllScreens(quality int) ([]byte, int, int, error) {
-	img, err := robotgo.CaptureImg()
+	displayCount := screenshot.NumActiveDisplays()
+	if displayCount <= 0 {
+		return nil, 0, 0, fmt.Errorf("capture screen: no active displays")
+	}
+
+	virtualBounds := screenshot.GetDisplayBounds(0)
+	for i := 1; i < displayCount; i++ {
+		virtualBounds = virtualBounds.Union(screenshot.GetDisplayBounds(i))
+	}
+
+	img, err := screenshot.CaptureRect(virtualBounds)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("capture screen: %w", err)
 	}
 
 	return encodeJPEG(img, quality)
-}
-
-func encodeJPEG(img image.Image, quality int) ([]byte, int, int, error) {
-	var buf bytes.Buffer
-	if quality <= 0 || quality > 100 {
-		quality = 75
-	}
-
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, img, opts); err != nil {
-		return nil, 0, 0, fmt.Errorf("encode jpeg: %w", err)
-	}
-
-	bounds := img.Bounds()
-	return buf.Bytes(), bounds.Dx(), bounds.Dy(), nil
 }

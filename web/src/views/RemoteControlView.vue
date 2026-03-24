@@ -1,18 +1,9 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
-import GlassModal from './GlassModal.vue'
-import { createRemoteControlSocket } from '../api'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ExpandOutline, ArrowBackOutline, RefreshOutline } from '@vicons/ionicons5'
+import { createRemoteControlSocket, getClient } from '../api'
 import { useToast } from '../composables/useToast'
-
-const props = defineProps<{
-  show: boolean
-  clientId: string
-  clientOs?: string
-}>()
-
-const emit = defineEmits<{
-  (e: 'close'): void
-}>()
 
 type RemoteControlState = 'idle' | 'connecting' | 'connected' | 'closed' | 'error'
 
@@ -42,8 +33,13 @@ interface PointerTarget {
   y: number
 }
 
-const message = useToast()
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
+
+const clientId = computed(() => route.params.id as string)
 const remoteImage = ref<HTMLImageElement | null>(null)
+const fullscreenHost = ref<HTMLElement | null>(null)
 const socket = ref<WebSocket | null>(null)
 const state = ref<RemoteControlState>('idle')
 const errorMessage = ref('')
@@ -53,44 +49,10 @@ const desktopWidth = ref(0)
 const desktopHeight = ref(0)
 const frameIntervalMs = ref(150)
 const fps = ref(0)
-const manualClipboardInput = ref('')
-const manualClipboardOutput = ref('')
 const frameTimes = ref<number[]>([])
-
-const shortcutModifier = computed(() => props.clientOs === 'darwin' ? 'cmd' : 'control')
-const shortcutLabel = computed(() => props.clientOs === 'darwin' ? 'Cmd' : 'Ctrl')
-const statusText = computed(() => {
-  switch (state.value) {
-    case 'connecting':
-      return '连接中'
-    case 'connected':
-      return '控制中'
-    case 'closed':
-      return stopReason.value || '已断开'
-    case 'error':
-      return errorMessage.value || '连接异常'
-    default:
-      return '未连接'
-  }
-})
-
-const shortcutButtons = computed(() => {
-  const modifier = shortcutModifier.value
-  const label = shortcutLabel.value
-  return [
-    { label: `${label}+C`, title: '复制', keys: [modifier, 'c'] },
-    { label: `${label}+V`, title: '粘贴', keys: [modifier, 'v'] },
-    { label: `${label}+X`, title: '剪切', keys: [modifier, 'x'] },
-    { label: `${label}+A`, title: '全选', keys: [modifier, 'a'] },
-    { label: `${label}+Z`, title: '撤销', keys: [modifier, 'z'] },
-    props.clientOs === 'darwin'
-      ? { label: `${label}+Shift+Z`, title: '重做', keys: [modifier, 'shift', 'z'] }
-      : { label: `${label}+Y`, title: '重做', keys: [modifier, 'y'] },
-    { label: `${label}+S`, title: '保存', keys: [modifier, 's'] },
-    { label: 'Enter', title: '回车', keys: ['enter'] },
-    { label: 'Tab', title: 'Tab', keys: ['tab'] },
-  ]
-})
+const clientName = ref('')
+const clientOs = ref('')
+const online = ref(false)
 
 const pressedKeys = new Set<string>()
 let pointerMoveRaf: number | null = null
@@ -101,20 +63,72 @@ let dragging = false
 
 const singleClickDelayMs = 220
 
-watch(() => props.show, (show) => {
-  if (show) {
-    openSession()
-    bindWindowListeners()
-    return
+const statusText = computed(() => {
+  switch (state.value) {
+    case 'connecting':
+      return '正在建立远控会话'
+    case 'connected':
+      return '键盘和鼠标已直连到客户端'
+    case 'closed':
+      return stopReason.value || '会话已结束'
+    case 'error':
+      return errorMessage.value || '远控发生异常'
+    default:
+      return '等待连接'
   }
-  closeSession('modal closed')
-  unbindWindowListeners()
+})
+
+const connectionBadge = computed(() => {
+  if (state.value === 'connected') return 'LIVE'
+  if (state.value === 'connecting') return 'SYNC'
+  if (state.value === 'error') return 'ERR'
+  return 'IDLE'
+})
+
+const isUnsupportedClient = computed(() => clientOs.value !== '' && clientOs.value !== 'windows')
+
+onMounted(() => {
+  bindWindowListeners()
+  void loadClientAndOpenSession()
 })
 
 onUnmounted(() => {
-  closeSession('component unmounted')
+  closeSession('page closed')
   unbindWindowListeners()
 })
+
+async function loadClientAndOpenSession() {
+  closeSession('')
+  errorMessage.value = ''
+  stopReason.value = ''
+  frameSrc.value = ''
+  frameTimes.value = []
+  fps.value = 0
+  state.value = 'idle'
+
+  try {
+    const { data } = await getClient(clientId.value)
+    clientName.value = data.nickname || data.id || clientId.value
+    clientOs.value = data.os || ''
+    online.value = !!data.online
+
+    if (!online.value) {
+      state.value = 'closed'
+      stopReason.value = '客户端离线，无法建立远控会话'
+      return
+    }
+    if (clientOs.value !== 'windows') {
+      state.value = 'error'
+      errorMessage.value = '当前远控页仅支持 Windows 客户端'
+      return
+    }
+
+    openSession()
+  } catch (error: any) {
+    state.value = 'error'
+    errorMessage.value = error?.message || '加载客户端信息失败'
+  }
+}
 
 function openSession() {
   closeSession('')
@@ -126,7 +140,7 @@ function openSession() {
   state.value = 'connecting'
 
   try {
-    const ws = createRemoteControlSocket(props.clientId)
+    const ws = createRemoteControlSocket(clientId.value)
     socket.value = ws
     ws.onmessage = handleSocketMessage
     ws.onerror = () => {
@@ -139,6 +153,7 @@ function openSession() {
       socket.value = null
       if (state.value === 'connecting' || state.value === 'connected') {
         state.value = 'closed'
+        stopReason.value = stopReason.value || '远控连接已关闭'
       }
     }
   } catch (error: any) {
@@ -206,13 +221,6 @@ function handleSocketMessage(event: MessageEvent<string>) {
         state.value = 'connected'
       }
       return
-    case 'clipboard_data':
-      manualClipboardOutput.value = payload.text || ''
-      if (manualClipboardOutput.value) {
-        navigator.clipboard?.writeText(manualClipboardOutput.value).catch(() => {})
-        message.success('已读取客户端剪贴板')
-      }
-      return
     case 'error':
       state.value = 'error'
       errorMessage.value = payload.message || '远控发生错误'
@@ -248,34 +256,8 @@ function sendPasteText(text: string) {
   sendMessage({ type: 'input', event_type: 'paste_text', text })
 }
 
-function handleCopyFromClient() {
-  sendMessage({ type: 'clipboard_get' })
-}
-
-async function handlePasteToClient() {
-  let text = ''
-  try {
-    text = await navigator.clipboard.readText()
-  } catch {
-    text = manualClipboardInput.value.trim()
-  }
-
-  if (!text) {
-    message.error('没有可粘贴的文本')
-    return
-  }
-
-  manualClipboardInput.value = text
-  sendPasteText(text)
-  message.success('已发送粘贴内容')
-}
-
-function handleShortcutButton(keys: string[]) {
-  sendShortcut(keys)
-}
-
 function handleWindowKeyDown(event: KeyboardEvent) {
-  if (!props.show || shouldIgnoreTarget(event.target)) return
+  if (!shouldCaptureInput(event)) return
 
   const shortcut = toShortcut(event)
   if (shortcut) {
@@ -297,7 +279,7 @@ function handleWindowKeyDown(event: KeyboardEvent) {
 }
 
 function handleWindowKeyUp(event: KeyboardEvent) {
-  if (!props.show || shouldIgnoreTarget(event.target)) return
+  if (!shouldCaptureInput(event)) return
 
   const shortcut = toShortcut(event)
   if (shortcut) {
@@ -315,16 +297,16 @@ function handleWindowKeyUp(event: KeyboardEvent) {
 }
 
 function handleWindowPaste(event: ClipboardEvent) {
-  if (!props.show || shouldIgnoreTarget(event.target)) return
+  if (!shouldCaptureInput(event)) return
   const text = event.clipboardData?.getData('text/plain') || ''
   if (!text) return
   event.preventDefault()
-  manualClipboardInput.value = text
   sendPasteText(text)
+  toast.success('已发送粘贴内容')
 }
 
 function handleMouseDown(event: MouseEvent) {
-  if (!remoteImage.value) return
+  if (!remoteImage.value || state.value !== 'connected') return
   event.preventDefault()
   const point = toNormalizedPoint(event)
   if (!point) return
@@ -336,7 +318,7 @@ function handleMouseDown(event: MouseEvent) {
 }
 
 function handleImageClick(event: MouseEvent) {
-  if (!remoteImage.value || dragging) return
+  if (!remoteImage.value || dragging || state.value !== 'connected') return
   event.preventDefault()
   const point = toNormalizedPoint(event)
   if (!point) return
@@ -352,7 +334,7 @@ function handleImageClick(event: MouseEvent) {
 }
 
 function handleImageDoubleClick(event: MouseEvent) {
-  if (!remoteImage.value) return
+  if (!remoteImage.value || state.value !== 'connected') return
   event.preventDefault()
   const point = toNormalizedPoint(event)
   if (!point) return
@@ -366,7 +348,7 @@ function handleImageDoubleClick(event: MouseEvent) {
 }
 
 function handleImageMouseMove(event: MouseEvent) {
-  if (!remoteImage.value) return
+  if (!remoteImage.value || state.value !== 'connected') return
   const point = toNormalizedPoint(event)
   if (!point) return
 
@@ -380,7 +362,7 @@ function handleImageMouseMove(event: MouseEvent) {
 }
 
 function handleWindowMouseMove(event: MouseEvent) {
-  if (!props.show || !remoteImage.value || (!pendingPointer && !dragging)) return
+  if (!remoteImage.value || state.value !== 'connected' || (!pendingPointer && !dragging)) return
   const point = toNormalizedPoint(event)
   if (!point) return
 
@@ -396,7 +378,7 @@ function handleWindowMouseMove(event: MouseEvent) {
 }
 
 function handleWindowMouseUp(event: MouseEvent) {
-  if (!props.show || !remoteImage.value) return
+  if (!remoteImage.value || state.value !== 'connected') return
   if (!dragging) {
     pendingPointer = null
     return
@@ -413,7 +395,7 @@ function handleWindowMouseUp(event: MouseEvent) {
 }
 
 function handleWheel(event: WheelEvent) {
-  if (!remoteImage.value) return
+  if (!remoteImage.value || state.value !== 'connected') return
   event.preventDefault()
   const deltaX = normalizeWheelDelta(event.deltaX)
   const deltaY = normalizeWheelDelta(event.deltaY)
@@ -467,7 +449,7 @@ function normalizeWheelDelta(value: number): number {
 }
 
 function toShortcut(event: KeyboardEvent): string[] | null {
-  const modifier = event.metaKey ? 'cmd' : event.ctrlKey ? 'control' : ''
+  const modifier = event.metaKey || event.ctrlKey ? 'control' : ''
   if (!modifier) return null
 
   const key = toRobotKey(event)
@@ -540,184 +522,233 @@ function shouldIgnoreTarget(target: EventTarget | null): boolean {
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
 
+function shouldCaptureInput(event: Event): boolean {
+  if (state.value !== 'connected') return false
+  return !shouldIgnoreTarget(event.target)
+}
+
 function clamp(value: number): number {
   if (value < 0) return 0
   if (value > 1) return 1
   return value
 }
+
+async function toggleFullscreen() {
+  try {
+    if (!document.fullscreenElement) {
+      await fullscreenHost.value?.requestFullscreen()
+    } else {
+      await document.exitFullscreen()
+    }
+  } catch {
+    toast.error('浏览器拒绝进入全屏')
+  }
+}
+
+function goBack() {
+  router.push({ name: 'client', params: { id: clientId.value } })
+}
 </script>
 
 <template>
-  <GlassModal :show="show" title="远程控制" width="1180px" @close="emit('close')">
-    <div class="remote-control">
-      <section class="remote-stage glass-card">
-        <header class="remote-stage__header">
-          <div>
-            <h4>实时画面</h4>
-            <p>{{ statusText }}</p>
-          </div>
-          <div class="remote-stage__meta">
-            <span>{{ desktopWidth }}x{{ desktopHeight }}</span>
-            <span>{{ fps }} FPS</span>
-            <span>{{ frameIntervalMs }}ms</span>
-          </div>
-        </header>
-        <div class="remote-stage__body">
-          <img
-            v-if="frameSrc"
-            ref="remoteImage"
-            :src="frameSrc"
-            alt="Remote desktop"
-            class="remote-stage__image"
-            draggable="false"
-            @mousedown="handleMouseDown"
-            @mousemove="handleImageMouseMove"
-            @click="handleImageClick"
-            @dblclick="handleImageDoubleClick"
-            @wheel="handleWheel"
-          />
-          <div v-else class="remote-stage__empty">
-            <strong>{{ state === 'connecting' ? '正在建立远控会话…' : '等待首帧画面…' }}</strong>
-            <span>弹窗已进入控制态，键盘与快捷键会直接发送到客户端。</span>
-          </div>
+  <div ref="fullscreenHost" class="remote-page">
+    <header class="remote-page__bar">
+      <button class="remote-page__back" @click="goBack">
+        <ArrowBackOutline />
+        <span>返回客户端</span>
+      </button>
+
+      <div class="remote-page__title">
+        <span class="remote-page__eyebrow">Remote Control</span>
+        <h1>{{ clientName || clientId }}</h1>
+        <p>{{ statusText }}</p>
+      </div>
+
+      <div class="remote-page__stats">
+        <span class="remote-page__badge">{{ connectionBadge }}</span>
+        <span>{{ desktopWidth || '—' }}x{{ desktopHeight || '—' }}</span>
+        <span>{{ fps }} FPS</span>
+        <span>{{ frameIntervalMs }}ms</span>
+      </div>
+
+      <div class="remote-page__actions">
+        <button class="remote-page__action" @click="loadClientAndOpenSession">
+          <RefreshOutline />
+          <span>重连</span>
+        </button>
+        <button class="remote-page__action remote-page__action--primary" @click="toggleFullscreen">
+          <ExpandOutline />
+          <span>全屏</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="remote-page__stage">
+      <div class="remote-stage">
+        <img
+          v-if="frameSrc"
+          ref="remoteImage"
+          :src="frameSrc"
+          alt="Remote desktop"
+          class="remote-stage__image"
+          draggable="false"
+          @mousedown="handleMouseDown"
+          @mousemove="handleImageMouseMove"
+          @click="handleImageClick"
+          @dblclick="handleImageDoubleClick"
+          @wheel="handleWheel"
+        />
+
+        <div v-else class="remote-stage__empty">
+          <strong v-if="isUnsupportedClient">当前远控页仅支持 Windows 客户端</strong>
+          <strong v-else-if="state === 'connecting'">正在等待首帧画面…</strong>
+          <strong v-else-if="state === 'closed'">{{ stopReason || '会话已结束' }}</strong>
+          <strong v-else>{{ errorMessage || '暂时无法建立远控画面' }}</strong>
+          <span>聚焦当前页面后，键盘、鼠标和粘贴内容会直接发送到远端客户端。</span>
         </div>
-      </section>
-
-      <aside class="remote-sidebar glass-card">
-        <section class="remote-panel">
-          <header>
-            <h4>快捷键</h4>
-            <p>浏览器保留快捷键请用按钮发送。</p>
-          </header>
-          <div class="shortcut-grid">
-            <button
-              v-for="item in shortcutButtons"
-              :key="item.label"
-              class="glass-btn small remote-action"
-              @click="handleShortcutButton(item.keys)"
-            >
-              <strong>{{ item.label }}</strong>
-              <span>{{ item.title }}</span>
-            </button>
-          </div>
-        </section>
-
-        <section class="remote-panel">
-          <header>
-            <h4>复制粘贴</h4>
-            <p>支持双向文本剪贴板，权限失败时可手动回退。</p>
-          </header>
-          <div class="clipboard-actions">
-            <button class="glass-btn small" @click="handleCopyFromClient">复制自客户端</button>
-            <button class="glass-btn primary small" @click="handlePasteToClient">粘贴到客户端</button>
-          </div>
-          <label class="clipboard-label">本地待粘贴文本</label>
-          <textarea
-            v-model="manualClipboardInput"
-            class="glass-input clipboard-box"
-            placeholder="浏览器无法读取本地剪贴板时，在这里粘贴文本后再点“粘贴到客户端”。"
-          />
-          <label class="clipboard-label">客户端剪贴板文本</label>
-          <textarea
-            :value="manualClipboardOutput"
-            class="glass-input clipboard-box clipboard-box--readonly"
-            readonly
-            placeholder="点击“复制自客户端”后，文本会显示在这里。"
-          />
-        </section>
-
-        <section v-if="errorMessage || stopReason" class="remote-panel remote-panel--status">
-          <header>
-            <h4>会话状态</h4>
-          </header>
-          <p>{{ errorMessage || stopReason }}</p>
-        </section>
-      </aside>
-    </div>
-
-    <template #footer>
-      <button class="glass-btn" @click="emit('close')">关闭</button>
-    </template>
-  </GlassModal>
+      </div>
+    </main>
+  </div>
 </template>
 
 <style scoped>
-.remote-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
-  gap: 20px;
-}
-
-.remote-stage,
-.remote-sidebar {
-  background: rgba(11, 18, 32, 0.6);
-  border: 1px solid rgba(113, 144, 185, 0.16);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.remote-stage {
+.remote-page {
+  --remote-bg: #07111e;
+  --remote-panel: rgba(10, 18, 32, 0.82);
+  --remote-panel-border: rgba(122, 157, 215, 0.16);
+  --remote-text: #eff6ff;
+  --remote-text-dim: rgba(210, 225, 246, 0.72);
+  --remote-accent: #71a7ff;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(44, 101, 190, 0.22), transparent 36%),
+    radial-gradient(circle at top right, rgba(49, 161, 132, 0.16), transparent 28%),
+    linear-gradient(180deg, #07111e 0%, #030813 100%);
+  color: var(--remote-text);
   padding: 18px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
 }
 
-.remote-stage__header,
-.remote-panel header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+.remote-page__bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border-radius: 24px;
+  background: var(--remote-panel);
+  border: 1px solid var(--remote-panel-border);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(18px);
 }
 
-.remote-stage__header h4,
-.remote-panel h4 {
+.remote-page__back,
+.remote-page__action {
+  border: 1px solid rgba(141, 175, 230, 0.18);
+  background: rgba(18, 30, 51, 0.82);
+  color: var(--remote-text);
+  border-radius: 16px;
+  padding: 12px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.remote-page__back:hover,
+.remote-page__action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(152, 196, 255, 0.38);
+  background: rgba(24, 39, 66, 0.92);
+}
+
+.remote-page__action--primary {
+  background: linear-gradient(135deg, rgba(52, 112, 208, 0.95), rgba(34, 73, 144, 0.96));
+  border-color: rgba(137, 182, 255, 0.36);
+}
+
+.remote-page__title h1 {
+  margin: 4px 0 6px;
+  font-size: 30px;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.remote-page__title p,
+.remote-stage__empty span {
   margin: 0;
-  font-size: 15px;
-  color: var(--color-text-primary);
+  color: var(--remote-text-dim);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-.remote-stage__header p,
-.remote-panel p {
-  margin: 6px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
+.remote-page__eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.26em;
+  color: rgba(148, 187, 244, 0.78);
 }
 
-.remote-stage__meta {
+.remote-page__stats,
+.remote-page__actions {
   display: flex;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
-.remote-stage__meta span {
-  padding: 6px 10px;
+.remote-page__stats span {
   border-radius: 999px;
-  background: rgba(35, 52, 83, 0.62);
-  color: #c8d7f0;
+  padding: 8px 12px;
+  background: rgba(19, 31, 53, 0.88);
+  border: 1px solid rgba(124, 159, 216, 0.14);
+  color: #d9e8ff;
   font-size: 12px;
 }
 
-.remote-stage__body {
-  margin-top: 16px;
-  min-height: 520px;
-  border-radius: 18px;
+.remote-page__badge {
+  background: rgba(21, 69, 120, 0.88) !important;
+  color: #9ed6ff !important;
+  letter-spacing: 0.12em;
+}
+
+.remote-page__stage {
+  min-height: 0;
+}
+
+.remote-stage {
+  height: 100%;
+  min-height: calc(100vh - 138px);
+  border-radius: 30px;
   background:
-    radial-gradient(circle at top, rgba(49, 89, 145, 0.22), transparent 45%),
-    linear-gradient(180deg, rgba(7, 12, 22, 0.98), rgba(10, 15, 26, 0.98));
-  border: 1px solid rgba(133, 166, 218, 0.14);
+    radial-gradient(circle at top, rgba(58, 100, 163, 0.22), transparent 42%),
+    linear-gradient(180deg, rgba(5, 10, 19, 0.98), rgba(3, 8, 15, 0.98));
+  border: 1px solid rgba(126, 161, 219, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 32px 90px rgba(0, 0, 0, 0.38);
+  padding: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 14px;
 }
 
 .remote-stage__image {
   display: block;
   max-width: 100%;
   max-height: 100%;
-  border-radius: 12px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38);
+  width: auto;
+  height: auto;
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
   cursor: crosshair;
   user-select: none;
 }
@@ -725,95 +756,37 @@ function clamp(value: number): number {
 .remote-stage__empty {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   justify-content: center;
   text-align: center;
-  color: #b9c7dc;
-  max-width: 360px;
+  max-width: 420px;
 }
 
-.remote-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 18px;
+.remote-stage__empty strong {
+  font-size: 24px;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
 }
 
-.remote-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
+@media (max-width: 1100px) {
+  .remote-page {
+    padding: 12px;
+    gap: 12px;
+  }
 
-.shortcut-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.remote-action {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-height: 64px;
-}
-
-.remote-action strong {
-  font-size: 13px;
-}
-
-.remote-action span {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
-.clipboard-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.clipboard-label {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
-.clipboard-box {
-  width: 100%;
-  min-height: 96px;
-  resize: vertical;
-}
-
-.clipboard-box--readonly {
-  opacity: 0.92;
-}
-
-.remote-panel--status {
-  padding: 14px;
-  border-radius: 14px;
-  background: rgba(120, 52, 52, 0.16);
-  border: 1px solid rgba(234, 111, 111, 0.18);
-}
-
-@media (max-width: 1080px) {
-  .remote-control {
+  .remote-page__bar {
     grid-template-columns: 1fr;
+    justify-items: stretch;
   }
 
-  .remote-stage__body {
-    min-height: 380px;
-  }
-}
-
-@media (max-width: 720px) {
-  .shortcut-grid {
-    grid-template-columns: 1fr 1fr;
+  .remote-page__stats,
+  .remote-page__actions {
+    justify-content: flex-start;
   }
 
-  .remote-stage__body {
-    min-height: 280px;
+  .remote-stage {
+    min-height: calc(100vh - 188px);
   }
 }
 </style>

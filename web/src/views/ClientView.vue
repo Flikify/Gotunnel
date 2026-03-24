@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowBackOutline, CreateOutline, TrashOutline,
   PushOutline, AddOutline, RefreshOutline
 } from '@vicons/ionicons5'
 import GlassModal from '../components/GlassModal.vue'
-import RemoteControlModal from '../components/RemoteControlModal.vue'
 import GlassTag from '../components/GlassTag.vue'
 import GlassSwitch from '../components/GlassSwitch.vue'
 import { useToast } from '../composables/useToast'
@@ -57,7 +56,6 @@ const serverVersion = ref('')
   const autoRefreshScreenshot = ref(false)
   const screenshotInterval = ref(5) // 默认 5s
   const screenshotTimer = ref<number | null>(null)
-  const showRemoteControlModal = ref(false)
   
 // Built-in Types (Added WebSocket)
 const builtinTypes = [
@@ -86,6 +84,13 @@ const ruleForm = ref<ProxyRule>({ ...defaultRule })
 // Helper: Check if type needs local addr
 const needsLocalAddr = () => {
   return true
+}
+
+const canRemoteControl = computed(() => online.value && clientOs.value === 'windows')
+
+const openRemoteControlPage = () => {
+  if (!canRemoteControl.value) return
+  router.push({ name: 'remote-control', params: { id: clientId } })
 }
 
 // 加载服务端版本
@@ -642,7 +647,7 @@ onUnmounted(() => {
           <div class="card-header">
             <h3>屏幕截图</h3>
             <div class="header-controls">
-              <button class="glass-btn tiny" @click="showRemoteControlModal = true">
+              <button v-if="canRemoteControl" class="glass-btn tiny" @click="openRemoteControlPage">
                 远程控制
               </button>
               <GlassSwitch :model-value="autoRefreshScreenshot" @update:model-value="(v: boolean) => { autoRefreshScreenshot = v; toggleAutoRefresh() }" size="small">
@@ -668,13 +673,6 @@ onUnmounted(() => {
 
       </div>
     </div>
-
-    <RemoteControlModal
-      :show="showRemoteControlModal"
-      :client-id="clientId"
-      :client-os="clientOs"
-      @close="showRemoteControlModal = false"
-    />
 
     <!-- Rule Modal -->
     <GlassModal :show="showRuleModal" :title="ruleModalType==='create'?'添加规则':'编辑规则'" @close="showRuleModal = false">

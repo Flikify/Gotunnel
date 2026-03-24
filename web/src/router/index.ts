@@ -26,6 +26,12 @@ const router = createRouter({
       component: () => import('../views/ClientView.vue'),
     },
     {
+      path: '/client/:id/remote-control',
+      name: 'remote-control',
+      component: () => import('../views/RemoteControlView.vue'),
+      meta: { fullscreen: true },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('../views/SettingsView.vue'),
