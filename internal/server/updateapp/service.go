@@ -78,42 +78,61 @@ func CheckClientForPlatform(osName, arch string) (*Info, error) {
 }
 
 // PerformSelfUpdate downloads and swaps in a new server binary.
-func PerformSelfUpdate(downloadURL string, restart bool) error {
+func PerformSelfUpdate(downloadURL, targetVersion string, restart bool) error {
+	fail := func(err error) error {
+		_ = MarkServerUpdateFailed(targetVersion, err.Error())
+		return err
+	}
+
+	if err := MarkServerUpdateApplying(targetVersion); err != nil {
+		return err
+	}
+
 	binaryPath, cleanup, err := sharedupdate.DownloadAndExtract(downloadURL, "server")
 	if err != nil {
-		return err
+		return fail(err)
 	}
 	defer cleanup()
 
 	currentPath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("get executable: %w", err)
+		return fail(fmt.Errorf("get executable: %w", err))
 	}
 	currentPath, _ = filepath.EvalSymlinks(currentPath)
 
 	if runtime.GOOS == "windows" {
+		if err := MarkServerUpdateRestarting(targetVersion); err != nil {
+			return err
+		}
 		return performWindowsUpdate(binaryPath, currentPath, restart)
 	}
 
 	backupPath := currentPath + ".bak"
 	if err := os.Rename(currentPath, backupPath); err != nil {
-		return fmt.Errorf("backup current: %w", err)
+		return fail(fmt.Errorf("backup current: %w", err))
 	}
 
 	if err := sharedupdate.CopyFile(binaryPath, currentPath); err != nil {
 		_ = os.Rename(backupPath, currentPath)
-		return fmt.Errorf("replace binary: %w", err)
+		return fail(fmt.Errorf("replace binary: %w", err))
 	}
 
 	if err := os.Chmod(currentPath, 0755); err != nil {
 		_ = os.Rename(backupPath, currentPath)
-		return fmt.Errorf("chmod new binary: %w", err)
+		return fail(fmt.Errorf("chmod new binary: %w", err))
 	}
 
 	_ = os.Remove(backupPath)
 
 	if restart {
+		if err := MarkServerUpdateRestarting(targetVersion); err != nil {
+			return err
+		}
 		restartProcess(currentPath)
+	}
+
+	if err := MarkServerUpdateSucceeded(targetVersion, "新版本已写入，重启服务后生效"); err != nil {
+		return err
 	}
 
 	return nil

@@ -68,15 +68,71 @@ func TestUpdateHandlerCheckClientDelegatesToService(t *testing.T) {
 	}
 }
 
+func TestUpdateHandlerCheckServerStatusReturnsStatusPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewUpdateHandler(&fakeUpdateService{
+		serverStatusResult: &updateapp.ServerUpdateStatus{
+			State:         updateapp.ServerUpdateStateRestarting,
+			Message:       "updating",
+			TargetVersion: "v1.2.3",
+		},
+	})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/updates/server/status", nil)
+
+	h.CheckServerStatus(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected HTTP status: got %d want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Code int `json:"code"`
+		Data struct {
+			State         string `json:"state"`
+			Message       string `json:"message"`
+			TargetVersion string `json:"target_version"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Code != CodeSuccess || resp.Data.State != updateapp.ServerUpdateStateRestarting || resp.Data.TargetVersion != "v1.2.3" {
+		t.Fatalf("unexpected response payload: %+v", resp)
+	}
+}
+
+func TestUpdateHandlerApplyServerMapsConflict(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewUpdateHandler(&fakeUpdateService{applyServerErr: updateapp.ErrUpdateInProgress})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/updates/server/actions/apply", strings.NewReader(`{"download_url":"https://example.com/server.tar.gz","target_version":"v1.2.3","restart":true}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	h.ApplyServer(c)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("unexpected HTTP status: got %d want %d", w.Code, http.StatusConflict)
+	}
+}
+
 type fakeUpdateService struct {
-	checkServerResult *updateapp.Info
-	checkClientResult *updateapp.Info
-	applyServerErr    error
-	applyClientErr    error
-	checkedOS         string
-	checkedArch       string
-	clientID          string
-	downloadURL       string
+	checkServerResult  *updateapp.Info
+	checkClientResult  *updateapp.Info
+	serverStatusResult *updateapp.ServerUpdateStatus
+	applyServerErr     error
+	applyClientErr     error
+	checkedOS          string
+	checkedArch        string
+	clientID           string
+	downloadURL        string
+	targetVersion      string
 }
 
 func (s *fakeUpdateService) CheckServer() (*updateapp.Info, error) {
@@ -95,8 +151,16 @@ func (s *fakeUpdateService) CheckClient(osName, arch string) (*updateapp.Info, e
 	return s.checkClientResult, nil
 }
 
-func (s *fakeUpdateService) ApplyServer(downloadURL string, restart bool) error {
+func (s *fakeUpdateService) GetServerUpdateStatus() (*updateapp.ServerUpdateStatus, error) {
+	if s.serverStatusResult == nil {
+		return &updateapp.ServerUpdateStatus{}, nil
+	}
+	return s.serverStatusResult, nil
+}
+
+func (s *fakeUpdateService) ApplyServer(downloadURL, targetVersion string, restart bool) error {
 	s.downloadURL = downloadURL
+	s.targetVersion = targetVersion
 	return s.applyServerErr
 }
 

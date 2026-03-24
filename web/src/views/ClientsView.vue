@@ -65,9 +65,9 @@ const buildInstallCommands = (data: InstallCommandResponse) => {
   const psToken = quotePowerShellSingle(data.token)
 
   return {
-    linux: `tmp="$(mktemp)"; curl -fsSL ${quoteBashArg(githubInstallScriptUrl)} -o "$tmp"; bash "$tmp" -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}; rm -f "$tmp"`,
-    macos: `tmp="$(mktemp)"; curl -fsSL ${quoteBashArg(githubInstallScriptUrl)} -o "$tmp"; bash "$tmp" -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}; rm -f "$tmp"`,
-    windows: `powershell -NoProfile -ExecutionPolicy Bypass -Command \"$script = Join-Path $env:TEMP 'gotunnel-install.ps1'; Invoke-WebRequest '${githubInstallPs1Url}' -OutFile $script; & $script -Server '${psServerAddr}' -Token '${psToken}'\"`,
+    linux: `f=$(mktemp);curl -fsSL ${quoteBashArg(githubInstallScriptUrl)} -o $f&&bash $f -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)};rm -f $f`,
+    macos: `f=$(mktemp);curl -fsSL ${quoteBashArg(githubInstallScriptUrl)} -o $f&&bash $f -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)};rm -f $f`,
+    windows: `powershell -NoProfile -ExecutionPolicy Bypass -Command 'iwr \"${githubInstallPs1Url}\" -OutFile \"$env:TEMP\\gotunnel-install.ps1\"; & \"$env:TEMP\\gotunnel-install.ps1\" -Server ''${psServerAddr}'' -Token ''${psToken}'''`,
   }
 }
 

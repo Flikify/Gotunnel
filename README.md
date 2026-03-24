@@ -326,6 +326,18 @@ Authorization: Bearer <token>
 - `https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.sh`
 - `https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.ps1`
 
+PowerShell 中建议使用单引号包裹 `-Command` 的脚本体。下面这个版本更短，也能避免当前 shell 预先展开 `$env:TEMP`：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command 'iwr "https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.ps1" -OutFile "$env:TEMP\gotunnel-install.ps1"; & "$env:TEMP\gotunnel-install.ps1" -Server "127.0.0.1:7000" -Token "replace-with-token"'
+```
+
+Linux / macOS 也可以使用更短的一键命令：
+
+```bash
+f=$(mktemp);curl -fsSL 'https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.sh' -o $f&&bash $f -s '127.0.0.1:7000' -t 'replace-with-token';rm -f $f
+```
+
 当前安装脚本行为：
 
 - Windows：注册为 Windows Service，开机自启，失败自动重启。

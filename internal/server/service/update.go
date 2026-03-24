@@ -9,7 +9,8 @@ type updateRuntime interface {
 type UpdateService interface {
 	CheckServer() (*updateapp.Info, error)
 	CheckClient(osName, arch string) (*updateapp.Info, error)
-	ApplyServer(downloadURL string, restart bool) error
+	GetServerUpdateStatus() (*updateapp.ServerUpdateStatus, error)
+	ApplyServer(downloadURL, targetVersion string, restart bool) error
 	ApplyClient(clientID, downloadURL string) error
 }
 
@@ -29,8 +30,20 @@ func (s *updateService) CheckClient(osName, arch string) (*updateapp.Info, error
 	return updateapp.CheckClientForPlatform(osName, arch)
 }
 
-func (s *updateService) ApplyServer(downloadURL string, restart bool) error {
-	return updateapp.PerformSelfUpdate(downloadURL, restart)
+func (s *updateService) GetServerUpdateStatus() (*updateapp.ServerUpdateStatus, error) {
+	return updateapp.GetServerUpdateStatus()
+}
+
+func (s *updateService) ApplyServer(downloadURL, targetVersion string, restart bool) error {
+	if err := updateapp.BeginServerUpdate(targetVersion); err != nil {
+		return err
+	}
+
+	go func() {
+		_ = updateapp.PerformSelfUpdate(downloadURL, targetVersion, restart)
+	}()
+
+	return nil
 }
 
 func (s *updateService) ApplyClient(clientID, downloadURL string) error {

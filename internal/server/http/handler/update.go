@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gotunnel/internal/server/http/dto"
 	"github.com/gotunnel/internal/server/service"
+	"github.com/gotunnel/internal/server/updateapp"
 	"github.com/gotunnel/pkg/version"
 )
 
@@ -33,6 +36,32 @@ func (h *UpdateHandler) CheckServer(c *gin.Context) {
 	}
 
 	Success(c, updateInfo)
+}
+
+// CheckServerStatus 查询服务端更新任务状态
+// @Summary 获取服务端更新状态
+// @Description 返回服务端自更新任务的当前状态
+// @Tags 更新
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} Response{data=dto.ServerUpdateStatusResponse}
+// @Router /api/updates/server/status [get]
+func (h *UpdateHandler) CheckServerStatus(c *gin.Context) {
+	status, err := h.updates.GetServerUpdateStatus()
+	if err != nil {
+		InternalError(c, err.Error())
+		return
+	}
+
+	Success(c, dto.ServerUpdateStatusResponse{
+		State:          status.State,
+		Message:        status.Message,
+		CurrentVersion: status.CurrentVersion,
+		TargetVersion:  status.TargetVersion,
+		StartedAt:      status.StartedAt,
+		FinishedAt:     status.FinishedAt,
+		UpdatedAt:      status.UpdatedAt,
+	})
 }
 
 // CheckClient 检查客户端更新
@@ -77,17 +106,16 @@ func (h *UpdateHandler) ApplyServer(c *gin.Context) {
 		return
 	}
 
-	// 异步执行更新
-	go func() {
-		if err := h.updates.ApplyServer(req.DownloadURL, req.Restart); err != nil {
-			println("[Update] Server update failed:", err.Error())
+	if err := h.updates.ApplyServer(req.DownloadURL, req.TargetVersion, req.Restart); err != nil {
+		if errors.Is(err, updateapp.ErrUpdateInProgress) {
+			Conflict(c, "server update already in progress")
+			return
 		}
-	}()
+		InternalError(c, err.Error())
+		return
+	}
 
-	Success(c, gin.H{
-		"success": true,
-		"message": "Update started, server will restart shortly",
-	})
+	SuccessWithMessage(c, gin.H{"status": "ok"}, "Update started, server will restart shortly")
 }
 
 // ApplyClient 应用客户端更新

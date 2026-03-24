@@ -22,8 +22,9 @@ type CheckClientUpdateQuery struct {
 // ApplyServerUpdateRequest 应用服务端更新请求
 // @Description 应用服务端更新
 type ApplyServerUpdateRequest struct {
-	DownloadURL string `json:"download_url" binding:"required,url"`
-	Restart     bool   `json:"restart"`
+	DownloadURL   string `json:"download_url" binding:"required,url"`
+	TargetVersion string `json:"target_version,omitempty"`
+	Restart       bool   `json:"restart"`
 }
 
 // ApplyClientUpdateRequest 应用客户端更新请求
@@ -31,6 +32,18 @@ type ApplyServerUpdateRequest struct {
 type ApplyClientUpdateRequest struct {
 	ClientID    string `json:"client_id" binding:"required"`
 	DownloadURL string `json:"download_url" binding:"required,url"`
+}
+
+// ServerUpdateStatusResponse 服务端自更新状态
+// @Description 服务端自更新任务状态
+type ServerUpdateStatusResponse struct {
+	State          string `json:"state"`
+	Message        string `json:"message,omitempty"`
+	CurrentVersion string `json:"current_version,omitempty"`
+	TargetVersion  string `json:"target_version,omitempty"`
+	StartedAt      int64  `json:"started_at,omitempty"`
+	FinishedAt     int64  `json:"finished_at,omitempty"`
+	UpdatedAt      int64  `json:"updated_at,omitempty"`
 }
 
 // VersionInfo 版本信息
