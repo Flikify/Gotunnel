@@ -40,7 +40,9 @@ func (s *updateService) ApplyServer(downloadURL, targetVersion string, restart b
 	}
 
 	go func() {
-		_ = updateapp.PerformSelfUpdate(downloadURL, targetVersion, restart)
+		if err := updateapp.PerformSelfUpdate(downloadURL, targetVersion, restart); err != nil {
+			_ = updateapp.MarkServerUpdateFailed(targetVersion, err.Error())
+		}
 	}()
 
 	return nil

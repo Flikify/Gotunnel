@@ -102,9 +102,12 @@ func PerformSelfUpdate(downloadURL, targetVersion string, restart bool) error {
 
 	if runtime.GOOS == "windows" {
 		if err := MarkServerUpdateRestarting(targetVersion); err != nil {
-			return err
+			return fail(err)
 		}
-		return performWindowsUpdate(binaryPath, currentPath, restart)
+		if err := performWindowsUpdate(binaryPath, currentPath, restart); err != nil {
+			return fail(err)
+		}
+		return nil
 	}
 
 	backupPath := currentPath + ".bak"
@@ -126,7 +129,7 @@ func PerformSelfUpdate(downloadURL, targetVersion string, restart bool) error {
 
 	if restart {
 		if err := MarkServerUpdateRestarting(targetVersion); err != nil {
-			return err
+			return fail(err)
 		}
 		restartProcess(currentPath)
 	}

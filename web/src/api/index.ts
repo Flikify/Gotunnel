@@ -32,6 +32,15 @@ export interface UpdateInfo {
   latest: string
   release_note: string
 }
+export interface ServerUpdateStatus {
+  current_version: string
+  finished_at: number
+  message: string
+  started_at: number
+  state: 'idle' | 'running' | 'restarting' | 'succeeded' | 'failed'
+  target_version: string
+  updated_at: number
+}
 
 interface GitHubReleaseAsset {
   browser_download_url?: string
@@ -201,8 +210,11 @@ export const checkClientUpdate = async (currentVersion: string, os?: string, arc
   return { data: buildUpdateInfo(currentVersion, release, asset) }
 }
 
-export const applyServerUpdate = (downloadUrl: string, restart: boolean = true) =>
-  post('/updates/server/actions/apply', { download_url: downloadUrl, restart })
+export const getServerUpdateStatus = () =>
+  get<ServerUpdateStatus>('/updates/server/status', { timeout: 3000 })
+
+export const applyServerUpdate = (downloadUrl: string, targetVersion: string, restart: boolean = true) =>
+  post('/updates/server/actions/apply', { download_url: downloadUrl, target_version: targetVersion, restart })
 export const applyClientUpdate = (clientId: string, downloadUrl: string) =>
   post('/updates/clients/actions/apply', { client_id: clientId, download_url: downloadUrl })
 

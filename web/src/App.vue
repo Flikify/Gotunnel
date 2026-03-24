@@ -13,7 +13,17 @@ import {
   SyncOutline,
 } from '@vicons/ionicons5'
 import GlassModal from './components/GlassModal.vue'
-import { applyServerUpdate, checkServerUpdate, getServerStatus, getToken, getVersionInfo, removeToken, type UpdateInfo } from './api'
+import {
+  applyServerUpdate,
+  checkServerUpdate,
+  getServerStatus,
+  getServerUpdateStatus,
+  getToken,
+  getVersionInfo,
+  removeToken,
+  type ServerUpdateStatus,
+  type UpdateInfo,
+} from './api'
 import { useConfirm } from './composables/useConfirm'
 import { useTheme, type ThemeMode } from './composables/useTheme'
 import { useToast } from './composables/useToast'
@@ -26,12 +36,17 @@ const { themeMode, setTheme } = useTheme()
 
 const runtimeInfo = ref({ bind_addr: '', bind_port: 0, client_count: 0, version: '' })
 const updateInfo = ref<UpdateInfo | null>(null)
+const serverUpdateStatus = ref<ServerUpdateStatus | null>(null)
 const showThemeMenu = ref(false)
 const showUserMenu = ref(false)
 const showUpdateModal = ref(false)
 const updatingServer = ref(false)
 const themeMenuRef = ref<HTMLElement | null>(null)
 const userMenuRef = ref<HTMLElement | null>(null)
+const SERVER_UPDATE_POLL_INTERVAL_MS = 2000
+const SERVER_UPDATE_POLL_TIMEOUT_MS = 90000
+let serverUpdatePollTimer: number | null = null
+let serverUpdatePollStartedAt = 0
 
 const isLoginPage = computed(() => route.path === '/login')
 const isFullscreenPage = computed(() => route.meta.fullscreen === true)
@@ -54,8 +69,34 @@ const themeIcon = computed(() => {
 })
 
 const updateBadgeText = computed(() => {
+  if (serverUpdateStatus.value?.state === 'running') {
+    return serverUpdateStatus.value.target_version ? `正在升级到 ${serverUpdateStatus.value.target_version}` : '正在升级'
+  }
+  if (serverUpdateStatus.value?.state === 'restarting') return '服务重启中'
+  if (serverUpdateStatus.value?.state === 'failed') return '升级失败'
+  if (serverUpdateStatus.value?.state === 'succeeded') return `已升级到 ${serverUpdateStatus.value.current_version || runtimeInfo.value.version}`
   if (!updateInfo.value) return '未检查更新'
   return updateInfo.value.available ? `可升级到 ${updateInfo.value.latest}` : '已是最新版本'
+})
+
+const activeServerUpdate = computed(() => {
+  const state = serverUpdateStatus.value?.state
+  return state === 'running' || state === 'restarting'
+})
+
+const serverUpdateStatusTitle = computed(() => {
+  switch (serverUpdateStatus.value?.state) {
+    case 'running':
+      return '升级进行中'
+    case 'restarting':
+      return '服务重启中'
+    case 'succeeded':
+      return '升级成功'
+    case 'failed':
+      return '升级失败'
+    default:
+      return ''
+  }
 })
 
 const loadRuntimeInfo = async () => {
@@ -84,6 +125,90 @@ const loadRuntimeInfo = async () => {
     }
   } catch (error) {
     console.error('Failed to load runtime info', error)
+  }
+}
+
+const stopServerUpdatePolling = () => {
+  if (serverUpdatePollTimer !== null) {
+    window.clearTimeout(serverUpdatePollTimer)
+    serverUpdatePollTimer = null
+  }
+}
+
+const scheduleServerUpdatePolling = (delay: number = SERVER_UPDATE_POLL_INTERVAL_MS) => {
+  stopServerUpdatePolling()
+  serverUpdatePollTimer = window.setTimeout(() => {
+    void pollServerUpdateStatus()
+  }, delay)
+}
+
+const pollServerUpdateStatus = async () => {
+  if (!getToken() || isLoginPage.value) {
+    stopServerUpdatePolling()
+    return
+  }
+
+  try {
+    const { data } = await getServerUpdateStatus()
+    serverUpdateStatus.value = data
+
+    if (data.state === 'running' || data.state === 'restarting') {
+      updatingServer.value = true
+      scheduleServerUpdatePolling()
+      return
+    }
+
+    stopServerUpdatePolling()
+    updatingServer.value = false
+
+    if (data.state === 'succeeded') {
+      await loadRuntimeInfo()
+      message.success(data.message || `服务端已升级到 ${data.current_version || data.target_version}`)
+      showUpdateModal.value = false
+      window.setTimeout(() => window.location.reload(), 1200)
+      return
+    }
+
+    if (data.state === 'failed') {
+      message.error(data.message || '服务端升级失败')
+    }
+  } catch {
+    if (!updatingServer.value) return
+
+    if (Date.now() - serverUpdatePollStartedAt >= SERVER_UPDATE_POLL_TIMEOUT_MS) {
+      stopServerUpdatePolling()
+      updatingServer.value = false
+      serverUpdateStatus.value = {
+        current_version: runtimeInfo.value.version,
+        finished_at: Date.now(),
+        message: '服务端在预期时间内没有恢复，请检查日志确认更新是否成功',
+        started_at: serverUpdatePollStartedAt,
+        state: 'failed',
+        target_version: updateInfo.value?.latest || '',
+        updated_at: Date.now(),
+      }
+      message.error(serverUpdateStatus.value.message)
+      return
+    }
+
+    scheduleServerUpdatePolling(3000)
+  }
+}
+
+const restoreServerUpdateState = async () => {
+  if (!getToken() || isLoginPage.value) return
+
+  try {
+    const { data } = await getServerUpdateStatus()
+    serverUpdateStatus.value = data
+
+    if (data.state === 'running' || data.state === 'restarting') {
+      updatingServer.value = true
+      serverUpdatePollStartedAt = Date.now()
+      scheduleServerUpdatePolling()
+    }
+  } catch {
+    // Ignore restore errors and rely on manual refresh.
   }
 }
 
@@ -116,14 +241,23 @@ const handleApplyServerUpdate = () => {
     positiveText: '立即升级',
     negativeText: '取消',
     onPositiveClick: async () => {
-      updatingServer.value = true
       try {
-        await applyServerUpdate(updateInfo.value!.download_url!)
-        message.success('升级任务已提交，页面将在 5 秒后尝试刷新')
-        showUpdateModal.value = false
-        window.setTimeout(() => window.location.reload(), 5000)
+        await applyServerUpdate(updateInfo.value!.download_url!, updateInfo.value!.latest)
+        serverUpdateStatus.value = {
+          current_version: runtimeInfo.value.version,
+          finished_at: 0,
+          message: `正在升级到 ${updateInfo.value!.latest}`,
+          started_at: Date.now(),
+          state: 'running',
+          target_version: updateInfo.value!.latest,
+          updated_at: Date.now(),
+        }
+        serverUpdatePollStartedAt = Date.now()
+        updatingServer.value = true
+        message.info('升级任务已提交，正在等待服务端重启')
+        scheduleServerUpdatePolling(800)
       } catch (error: any) {
-        message.error(error.response?.data || '升级失败')
+        message.error(error.message || '升级失败')
         updatingServer.value = false
       }
     },
@@ -139,16 +273,18 @@ const closeMenus = (event: MouseEvent) => {
 watch(() => route.fullPath, () => {
   showThemeMenu.value = false
   showUserMenu.value = false
-  if (!isLoginPage.value) loadRuntimeInfo()
+  if (!isLoginPage.value) void loadRuntimeInfo()
 })
 
 onMounted(() => {
   document.addEventListener('click', closeMenus)
-  loadRuntimeInfo()
+  void loadRuntimeInfo()
+  void restoreServerUpdateState()
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeMenus)
+  stopServerUpdatePolling()
 })
 </script>
 
@@ -246,11 +382,15 @@ onUnmounted(() => {
         <div><span>文件名</span><strong>{{ updateInfo.asset_name || '未提供' }}</strong></div>
         <div><span>文件大小</span><strong>{{ formatBytes(updateInfo.asset_size || 0) }}</strong></div>
       </div>
+      <div v-if="serverUpdateStatus && serverUpdateStatus.state !== 'idle'" class="update-status" :class="`update-status--${serverUpdateStatus.state}`">
+        <strong>{{ serverUpdateStatusTitle }}</strong>
+        <p>{{ serverUpdateStatus.message || '正在等待服务端返回更新结果' }}</p>
+      </div>
       <div v-if="updateInfo?.release_note" class="release-note">{{ updateInfo.release_note }}</div>
       <template #footer>
         <button class="glass-btn" @click="showUpdateModal = false">关闭</button>
-        <button v-if="updateInfo?.available" class="glass-btn primary" :disabled="updatingServer" @click="handleApplyServerUpdate">
-          {{ updatingServer ? '升级中...' : '立即升级' }}
+        <button v-if="updateInfo?.available" class="glass-btn primary" :disabled="updatingServer || activeServerUpdate" @click="handleApplyServerUpdate">
+          {{ updatingServer || activeServerUpdate ? '处理中...' : '立即升级' }}
         </button>
       </template>
     </GlassModal>
@@ -524,6 +664,34 @@ onUnmounted(() => {
 .update-grid strong {
   color: var(--color-text-primary);
   word-break: break-word;
+}
+
+.update-status {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border-light);
+  background: var(--glass-bg-light);
+}
+
+.update-status strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-text-primary);
+}
+
+.update-status p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.update-status--failed {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.update-status--succeeded {
+  border-color: rgba(36, 166, 122, 0.3);
 }
 
 .release-note {
