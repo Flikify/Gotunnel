@@ -265,6 +265,14 @@ class MainActivity : AppCompatActivity() {
             override fun stop(reason: String) = Unit
 
             override fun restart(reason: String) = Unit
+
+            override fun appendHostLog(
+                level: String,
+                eventCode: String,
+                source: String,
+                message: String,
+                fieldsJson: String,
+            ) = Unit
         }
     }
 
