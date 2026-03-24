@@ -20,6 +20,8 @@ const search = ref('')
 
 const quoteBashArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
 const quotePowerShellSingle = (value: string) => value.replace(/'/g, "''")
+const githubInstallScriptUrl = 'https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.sh'
+const githubInstallPs1Url = 'https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.ps1'
 
 const resolveTunnelHost = () => window.location.hostname || 'localhost'
 const formatServerAddr = (host: string, port: number) => {
@@ -59,15 +61,13 @@ const writeClipboardText = async (value: string) => {
 
 const buildInstallCommands = (data: InstallCommandResponse) => {
   const serverAddr = formatServerAddr(resolveTunnelHost(), data.tunnel_port)
-  const installScriptUrl = `${window.location.origin || 'http://localhost:7500'}/install.sh`
-  const installPs1Url = `${window.location.origin || 'http://localhost:7500'}/install.ps1`
   const psServerAddr = quotePowerShellSingle(serverAddr)
   const psToken = quotePowerShellSingle(data.token)
 
   return {
-    linux: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}`,
-    macos: `bash <(curl -fsSL -H "X-GoTunnel-Install-Token: ${data.token}" ${installScriptUrl}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}`,
-    windows: `powershell -c \"irm ${installPs1Url} -Headers @{ 'X-GoTunnel-Install-Token' = '${psToken}' } | iex; Install-GoTunnel -Server '${psServerAddr}' -Token '${psToken}'\"`,
+    linux: `tmp="$(mktemp)"; curl -fsSL ${quoteBashArg(githubInstallScriptUrl)} -o "$tmp"; bash "$tmp" -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}; rm -f "$tmp"`,
+    macos: `tmp="$(mktemp)"; curl -fsSL ${quoteBashArg(githubInstallScriptUrl)} -o "$tmp"; bash "$tmp" -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}; rm -f "$tmp"`,
+    windows: `powershell -NoProfile -ExecutionPolicy Bypass -Command \"$script = Join-Path $env:TEMP 'gotunnel-install.ps1'; Invoke-WebRequest '${githubInstallPs1Url}' -OutFile $script; & $script -Server '${psServerAddr}' -Token '${psToken}'\"`,
   }
 }
 

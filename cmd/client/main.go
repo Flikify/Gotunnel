@@ -18,6 +18,13 @@ var Version string
 var BuildTime string
 var GitCommit string
 
+type runtimeOptions struct {
+	AppConfig      clientapp.Config
+	ServiceMode    bool
+	ServiceName    string
+	ServiceLogPath string
+}
+
 func init() {
 	version.SetVersion(Version)
 	version.SetBuildInfo(GitCommit, BuildTime)
@@ -32,6 +39,9 @@ func main() {
 	clientID := flag.String("id", "", "client id")
 	reconnectMin := flag.Int("reconnect-min", 0, "minimum reconnect delay in seconds")
 	reconnectMax := flag.Int("reconnect-max", 0, "maximum reconnect delay in seconds")
+	serviceMode := flag.Bool("service", false, "run as a managed Windows service")
+	serviceName := flag.String("service-name", "GoTunnelClient", "Windows service name")
+	serviceLogPath := flag.String("service-log-file", "", "path to the Windows service bootstrap log")
 	flag.Parse()
 
 	var cfg *config.ClientConfig
@@ -71,29 +81,42 @@ func main() {
 		log.Fatal("Usage: client [-c config.yaml] | [-s <server:port> -t <token>]")
 	}
 
-	app := clientapp.NewService()
-	app.Configure(clientapp.Config{
-		Server:     cfg.Server,
-		Token:      cfg.Token,
-		DataDir:    cfg.DataDir,
-		ClientID:   cfg.ClientID,
-		ClientName: cfg.Name,
-		TLSEnabled: !cfg.NoTLS,
-		ReconnectDelay: func() time.Duration {
-			if cfg.ReconnectMinSec <= 0 {
-				return 0
-			}
-			return time.Duration(cfg.ReconnectMinSec) * time.Second
-		}(),
-		ReconnectMaxDelay: func() time.Duration {
-			if cfg.ReconnectMaxSec <= 0 {
-				return 0
-			}
-			return time.Duration(cfg.ReconnectMaxSec) * time.Second
-		}(),
-	})
+	opts := runtimeOptions{
+		AppConfig: clientapp.Config{
+			Server:     cfg.Server,
+			Token:      cfg.Token,
+			DataDir:    cfg.DataDir,
+			ClientID:   cfg.ClientID,
+			ClientName: cfg.Name,
+			TLSEnabled: !cfg.NoTLS,
+			ReconnectDelay: func() time.Duration {
+				if cfg.ReconnectMinSec <= 0 {
+					return 0
+				}
+				return time.Duration(cfg.ReconnectMinSec) * time.Second
+			}(),
+			ReconnectMaxDelay: func() time.Duration {
+				if cfg.ReconnectMaxSec <= 0 {
+					return 0
+				}
+				return time.Duration(cfg.ReconnectMaxSec) * time.Second
+			}(),
+		},
+		ServiceMode:    *serviceMode,
+		ServiceName:    *serviceName,
+		ServiceLogPath: *serviceLogPath,
+	}
 
-	if !cfg.NoTLS {
+	if err := runClient(opts); err != nil {
+		log.Fatalf("Client stopped: %v", err)
+	}
+}
+
+func runConsoleClient(cfg clientapp.Config) error {
+	app := clientapp.NewService()
+	app.Configure(cfg)
+
+	if cfg.TLSEnabled {
 		log.Printf("[Client] TLS enabled")
 	}
 
@@ -101,9 +124,10 @@ func main() {
 	defer stop()
 
 	if err := app.RunContext(ctx); err != nil {
-		log.Fatalf("Client stopped: %v", err)
+		return err
 	}
 
 	<-ctx.Done()
 	log.Printf("[Client] Shutting down")
+	return nil
 }

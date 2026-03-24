@@ -318,8 +318,19 @@ Authorization: Bearer <token>
 
 #### 安装脚本
 
-- `GET /install.sh`
-- `GET /install.ps1`
+- `GET /install.sh`（兼容保留）
+- `GET /install.ps1`（兼容保留）
+
+推荐直接使用 GitHub 中的安装脚本：
+
+- `https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.sh`
+- `https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.ps1`
+
+当前安装脚本行为：
+
+- Windows：注册为 Windows Service，开机自启，失败自动重启。
+- Linux：注册为 `systemd` 服务 `gotunnel-client.service`，开机自启，失败自动重启。
+- macOS：注册为 `launchd` daemon `com.gotunnel.client`，开机自启，异常退出自动拉起。
 
 ## 使用场景
 
