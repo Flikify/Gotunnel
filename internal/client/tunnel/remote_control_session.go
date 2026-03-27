@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -17,9 +18,9 @@ import (
 )
 
 const (
-	remoteControlDefaultQuality         = 55
-	remoteControlDefaultMaxSide         = 1440
-	remoteControlDefaultFrameIntervalMS = 150
+	remoteControlDefaultQuality         = 45
+	remoteControlDefaultMaxSide         = 1280
+	remoteControlDefaultFrameIntervalMS = 80
 	remoteControlMinimumFrameIntervalMS = 50
 )
 
@@ -190,12 +191,13 @@ func (s *remoteControlSession) captureFrame(force bool) (*protocol.RemoteControl
 
 	s.setDesktopSize(width, height)
 
-	encoded, err := encodeRemoteControlFrame(img, s.maxSide, s.quality)
+	source := prepareRemoteControlImage(img, s.maxSide)
+	if !force && s.isDuplicateFrame(source) {
+		return nil, nil
+	}
+	encoded, err := encodeRemoteControlFrame(source, s.quality)
 	if err != nil {
 		return nil, err
-	}
-	if !force && s.isDuplicateFrame(encoded) {
-		return nil, nil
 	}
 
 	return &protocol.RemoteControlFrame{
@@ -206,8 +208,8 @@ func (s *remoteControlSession) captureFrame(force bool) (*protocol.RemoteControl
 	}, nil
 }
 
-func (s *remoteControlSession) isDuplicateFrame(encoded []byte) bool {
-	hash := sha256.Sum256(encoded)
+func (s *remoteControlSession) isDuplicateFrame(img image.Image) bool {
+	hash := hashRemoteControlImage(img)
 
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
@@ -221,12 +223,7 @@ func (s *remoteControlSession) isDuplicateFrame(encoded []byte) bool {
 	return false
 }
 
-func encodeRemoteControlFrame(img image.Image, maxSide, quality int) ([]byte, error) {
-	source := img
-	if maxSide > 0 {
-		source = resizeImage(img, maxSide)
-	}
-
+func encodeRemoteControlFrame(source image.Image, quality int) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, source, &jpeg.Options{Quality: quality}); err != nil {
 		return nil, fmt.Errorf("encode remote control frame: %w", err)
@@ -235,6 +232,13 @@ func encodeRemoteControlFrame(img image.Image, maxSide, quality int) ([]byte, er
 		return nil, fmt.Errorf("remote control frame exceeds %d bytes", protocol.MaxMessageSize)
 	}
 	return buf.Bytes(), nil
+}
+
+func prepareRemoteControlImage(img image.Image, maxSide int) image.Image {
+	if maxSide <= 0 {
+		return img
+	}
+	return resizeImage(img, maxSide)
 }
 
 func resizeImage(img image.Image, maxSide int) image.Image {
@@ -250,8 +254,52 @@ func resizeImage(img image.Image, maxSide int) image.Image {
 	targetHeight := max(1, int(math.Round(float64(height)*scale)))
 
 	dst := image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
-	draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
+	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
 	return dst
+}
+
+func hashRemoteControlImage(img image.Image) [32]byte {
+	if rgba, ok := img.(*image.RGBA); ok {
+		return hashRemoteControlRGBA(rgba)
+	}
+
+	bounds := img.Bounds()
+	sum := sha256.New()
+	var meta [16]byte
+	binary.BigEndian.PutUint64(meta[:8], uint64(bounds.Dx()))
+	binary.BigEndian.PutUint64(meta[8:], uint64(bounds.Dy()))
+	_, _ = sum.Write(meta[:])
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			var pixel [8]byte
+			binary.BigEndian.PutUint16(pixel[:2], uint16(r))
+			binary.BigEndian.PutUint16(pixel[2:4], uint16(g))
+			binary.BigEndian.PutUint16(pixel[4:6], uint16(b))
+			binary.BigEndian.PutUint16(pixel[6:], uint16(a))
+			_, _ = sum.Write(pixel[:])
+		}
+	}
+
+	var out [32]byte
+	copy(out[:], sum.Sum(nil))
+	return out
+}
+
+func hashRemoteControlRGBA(img *image.RGBA) [32]byte {
+	sum := sha256.New()
+	bounds := img.Bounds()
+	var meta [24]byte
+	binary.BigEndian.PutUint64(meta[:8], uint64(bounds.Dx()))
+	binary.BigEndian.PutUint64(meta[8:16], uint64(bounds.Dy()))
+	binary.BigEndian.PutUint64(meta[16:], uint64(img.Stride))
+	_, _ = sum.Write(meta[:])
+	_, _ = sum.Write(img.Pix)
+
+	var out [32]byte
+	copy(out[:], sum.Sum(nil))
+	return out
 }
 
 func (s *remoteControlSession) handleInput(input protocol.RemoteControlInput) error {

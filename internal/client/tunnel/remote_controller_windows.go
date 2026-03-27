@@ -214,10 +214,38 @@ func windowsVirtualKey(key string) (uint16, bool) {
 		case r >= '0' && r <= '9':
 			return uint16(r), true
 		}
+		if vk, ok := windowsCharacterKeyMap[rune(key[0])]; ok {
+			return vk, true
+		}
 	}
 
 	vk, ok := windowsKeyMap[key]
 	return vk, ok
+}
+
+var windowsCharacterKeyMap = map[rune]uint16{
+	';':  0xBA,
+	':':  0xBA,
+	'=':  0xBB,
+	'+':  0xBB,
+	',':  0xBC,
+	'<':  0xBC,
+	'-':  0xBD,
+	'_':  0xBD,
+	'.':  0xBE,
+	'>':  0xBE,
+	'/':  0xBF,
+	'?':  0xBF,
+	'`':  0xC0,
+	'~':  0xC0,
+	'[':  0xDB,
+	'{':  0xDB,
+	'\\': 0xDC,
+	'|':  0xDC,
+	']':  0xDD,
+	'}':  0xDD,
+	'\'': 0xDE,
+	'"':  0xDE,
 }
 
 func scalePrimaryDisplayPoint(x, y int) (int, int) {

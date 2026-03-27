@@ -61,6 +61,37 @@ func TestRemoteControlHandlerSendsErrorEnvelopeOnOpenFailure(t *testing.T) {
 	}
 }
 
+func TestRemoteControlHandlerPassesTuningParams(t *testing.T) {
+	params := make(chan protocol.RemoteControlStart, 1)
+	server, token := newRemoteControlTestServer(t, &fakeRemoteControlService{
+		openFn: func(clientID string, start protocol.RemoteControlStart) (*service.RemoteControlSession, error) {
+			params <- start
+			return nil, service.ErrClientNotOnline
+		},
+	})
+	defer server.Close()
+
+	url := strings.Replace(server.URL, "http", "ws", 1) +
+		"/api/clients/client-1/remote-control/ws?token=" + token +
+		"&quality=45&max_side=1280&frame_interval_ms=80"
+	headers := http.Header{}
+	headers.Set("Origin", server.URL)
+	ws, _, err := websocket.DefaultDialer.Dial(url, headers)
+	if err != nil {
+		t.Fatalf("Dial returned error: %v", err)
+	}
+	defer ws.Close()
+
+	select {
+	case got := <-params:
+		if got.Quality != 45 || got.MaxSide != 1280 || got.FrameIntervalMS != 80 {
+			t.Fatalf("unexpected start params: %+v", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected service to receive start params")
+	}
+}
+
 func TestRemoteControlHandlerBridgesStopAndBrowserDisconnect(t *testing.T) {
 	serverStream, clientStream := net.Pipe()
 	defer clientStream.Close()

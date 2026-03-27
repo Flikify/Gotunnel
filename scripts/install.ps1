@@ -210,10 +210,10 @@ function Install-GoTunnel {
 
   if (-not $existingService) {
     Write-Host "Creating Windows service $ServiceName"
-    Invoke-GoTunnelSc -Arguments @('create', $ServiceName, 'binPath=', $serviceCommand, 'start=', 'auto', 'obj=', 'LocalSystem', 'DisplayName=', $DisplayName) | Out-Null
+    Invoke-GoTunnelSc -Arguments @('create', $ServiceName, ('binPath= {0}' -f $serviceCommand), 'start= auto', 'obj= LocalSystem', ('DisplayName= {0}' -f $DisplayName)) | Out-Null
   } else {
     Write-Host "Updating Windows service $ServiceName"
-    Invoke-GoTunnelSc -Arguments @('config', $ServiceName, 'binPath=', $serviceCommand, 'start=', 'auto', 'obj=', 'LocalSystem', 'DisplayName=', $DisplayName) | Out-Null
+    Invoke-GoTunnelSc -Arguments @('config', $ServiceName, ('binPath= {0}' -f $serviceCommand), 'start= auto', 'obj= LocalSystem', ('DisplayName= {0}' -f $DisplayName)) | Out-Null
   }
 
   Invoke-GoTunnelSc -Arguments @('description', $ServiceName, 'GoTunnel client tunnel service managed by the installer.') | Out-Null

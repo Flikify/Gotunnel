@@ -38,6 +38,11 @@ const router = useRouter()
 const toast = useToast()
 
 const clientId = computed(() => route.params.id as string)
+const remoteControlProfile = {
+  quality: 45,
+  maxSide: 1280,
+  frameIntervalMs: 80,
+}
 const remoteImage = ref<HTMLImageElement | null>(null)
 const fullscreenHost = ref<HTMLElement | null>(null)
 const socket = ref<WebSocket | null>(null)
@@ -49,12 +54,12 @@ const desktopWidth = ref(0)
 const desktopHeight = ref(0)
 const frameIntervalMs = ref(150)
 const fps = ref(0)
-const frameTimes = ref<number[]>([])
 const clientName = ref('')
 const clientOs = ref('')
 const online = ref(false)
 
 const pressedKeys = new Set<string>()
+const frameTimes: number[] = []
 let pointerMoveRaf: number | null = null
 let pendingMove: { x: number, y: number } | null = null
 let pendingPointer: PointerTarget | null = null
@@ -102,7 +107,7 @@ async function loadClientAndOpenSession() {
   errorMessage.value = ''
   stopReason.value = ''
   frameSrc.value = ''
-  frameTimes.value = []
+  frameTimes.length = 0
   fps.value = 0
   state.value = 'idle'
 
@@ -133,14 +138,14 @@ async function loadClientAndOpenSession() {
 function openSession() {
   closeSession('')
   frameSrc.value = ''
-  frameTimes.value = []
+  frameTimes.length = 0
   fps.value = 0
   errorMessage.value = ''
   stopReason.value = ''
   state.value = 'connecting'
 
   try {
-    const ws = createRemoteControlSocket(clientId.value)
+    const ws = createRemoteControlSocket(clientId.value, remoteControlProfile)
     socket.value = ws
     ws.onmessage = handleSocketMessage
     ws.onerror = () => {
@@ -234,8 +239,15 @@ function handleSocketMessage(event: MessageEvent<string>) {
 
 function recordFrame() {
   const now = Date.now()
-  frameTimes.value = [...frameTimes.value.filter((value) => now - value < 1000), now]
-  fps.value = frameTimes.value.length
+  frameTimes.push(now)
+  while (frameTimes.length > 0) {
+    const oldest = frameTimes[0]
+    if (oldest === undefined || now - oldest < 1000) {
+      break
+    }
+    frameTimes.shift()
+  }
+  fps.value = frameTimes.length
 }
 
 function sendMessage(payload: RemoteControlMessage) {
@@ -331,6 +343,23 @@ function handleImageClick(event: MouseEvent) {
     sendMessage({ type: 'input', event_type: 'mouse_move', x: point.x, y: point.y })
     sendMessage({ type: 'input', event_type: 'mouse_click', button: toMouseButton(event.button), x: point.x, y: point.y })
   }, singleClickDelayMs)
+}
+
+function handleContextMenu(event: MouseEvent) {
+  event.preventDefault()
+  if (!remoteImage.value || state.value !== 'connected') return
+
+  const point = toNormalizedPoint(event)
+  if (!point) return
+  if (clickTimer !== null) {
+    window.clearTimeout(clickTimer)
+    clickTimer = null
+  }
+
+  dragging = false
+  pendingPointer = null
+  sendMessage({ type: 'input', event_type: 'mouse_move', x: point.x, y: point.y })
+  sendMessage({ type: 'input', event_type: 'mouse_click', button: 'right', x: point.x, y: point.y })
 }
 
 function handleImageDoubleClick(event: MouseEvent) {
@@ -584,7 +613,7 @@ function goBack() {
     </header>
 
     <main class="remote-page__stage">
-      <div class="remote-stage">
+      <div class="remote-stage" @contextmenu.prevent>
         <img
           v-if="frameSrc"
           ref="remoteImage"
@@ -596,6 +625,7 @@ function goBack() {
           @mousemove="handleImageMouseMove"
           @click="handleImageClick"
           @dblclick="handleImageDoubleClick"
+          @contextmenu="handleContextMenu"
           @wheel="handleWheel"
         />
 
@@ -625,19 +655,19 @@ function goBack() {
     radial-gradient(circle at top right, rgba(49, 161, 132, 0.16), transparent 28%),
     linear-gradient(180deg, #07111e 0%, #030813 100%);
   color: var(--remote-text);
-  padding: 18px;
+  padding: 14px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 18px;
+  gap: 14px;
 }
 
 .remote-page__bar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
-  padding: 18px 20px;
-  border-radius: 24px;
+  padding: 12px 14px;
+  border-radius: 18px;
   background: var(--remote-panel);
   border: 1px solid var(--remote-panel-border);
   box-shadow:
@@ -651,13 +681,14 @@ function goBack() {
   border: 1px solid rgba(141, 175, 230, 0.18);
   background: rgba(18, 30, 51, 0.82);
   color: var(--remote-text);
-  border-radius: 16px;
-  padding: 12px 16px;
+  border-radius: 12px;
+  padding: 9px 12px;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
   transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  font-size: 13px;
 }
 
 .remote-page__back:hover,
@@ -673,8 +704,8 @@ function goBack() {
 }
 
 .remote-page__title h1 {
-  margin: 4px 0 6px;
-  font-size: 30px;
+  margin: 2px 0 4px;
+  font-size: 22px;
   line-height: 1.05;
   letter-spacing: -0.03em;
 }
@@ -683,15 +714,15 @@ function goBack() {
 .remote-stage__empty span {
   margin: 0;
   color: var(--remote-text-dim);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .remote-page__eyebrow {
   display: inline-block;
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.26em;
+  letter-spacing: 0.2em;
   color: rgba(148, 187, 244, 0.78);
 }
 
@@ -706,11 +737,11 @@ function goBack() {
 
 .remote-page__stats span {
   border-radius: 999px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   background: rgba(19, 31, 53, 0.88);
   border: 1px solid rgba(124, 159, 216, 0.14);
   color: #d9e8ff;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .remote-page__badge {
@@ -725,8 +756,8 @@ function goBack() {
 
 .remote-stage {
   height: 100%;
-  min-height: calc(100vh - 138px);
-  border-radius: 30px;
+  min-height: calc(100vh - 108px);
+  border-radius: 24px;
   background:
     radial-gradient(circle at top, rgba(58, 100, 163, 0.22), transparent 42%),
     linear-gradient(180deg, rgba(5, 10, 19, 0.98), rgba(3, 8, 15, 0.98));
@@ -734,7 +765,7 @@ function goBack() {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.03),
     0 32px 90px rgba(0, 0, 0, 0.38);
-  padding: 18px;
+  padding: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -771,8 +802,8 @@ function goBack() {
 
 @media (max-width: 1100px) {
   .remote-page {
-    padding: 12px;
-    gap: 12px;
+    padding: 10px;
+    gap: 10px;
   }
 
   .remote-page__bar {
@@ -786,7 +817,7 @@ function goBack() {
   }
 
   .remote-stage {
-    min-height: calc(100vh - 188px);
+    min-height: calc(100vh - 162px);
   }
 }
 </style>

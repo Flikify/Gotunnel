@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -62,7 +63,11 @@ func (h *RemoteControlHandler) Stream(c *gin.Context) {
 	}
 	defer wsConn.Close()
 
-	session, err := h.service.OpenSession(clientID, protocol.RemoteControlStart{})
+	session, err := h.service.OpenSession(clientID, protocol.RemoteControlStart{
+		Quality:         queryInt(c, "quality"),
+		MaxSide:         queryInt(c, "max_side"),
+		FrameIntervalMS: queryInt(c, "frame_interval_ms"),
+	})
 	if err != nil {
 		_ = wsConn.WriteJSON(remoteControlWSMessage{Type: "error", Message: err.Error()})
 		return
@@ -235,6 +240,18 @@ func writeRemoteControlWSMessage(conn *websocket.Conn, mu *sync.Mutex, payload r
 	mu.Lock()
 	defer mu.Unlock()
 	return conn.WriteJSON(payload)
+}
+
+func queryInt(c *gin.Context, key string) int {
+	value := strings.TrimSpace(c.Query(key))
+	if value == "" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0
+	}
+	return parsed
 }
 
 func sameOriginWebSocketRequest(r *http.Request) bool {

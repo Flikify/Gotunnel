@@ -98,6 +98,12 @@ export interface LogStreamOptions {
   level?: string
 }
 
+export interface RemoteControlSocketOptions {
+  quality?: number
+  maxSide?: number
+  frameIntervalMs?: number
+}
+
 type LoginResponse = WithRequired<OperationResult<'POST /api/auth/login'>, 'token'>
 
 export const login = (username: string, password: string) =>
@@ -261,7 +267,7 @@ export const getClientSystemStats = (clientId: string) =>
 export const getClientScreenshot = (clientId: string, quality?: number) =>
   get<ScreenshotData>(`/clients/${clientId}/screenshot${quality ? `?quality=${quality}` : ''}`)
 
-export const createRemoteControlSocket = (clientId: string): WebSocket => {
+export const createRemoteControlSocket = (clientId: string, options: RemoteControlSocketOptions = {}): WebSocket => {
   const token = getToken()
   if (!token) {
     throw new Error('missing authentication token')
@@ -270,6 +276,9 @@ export const createRemoteControlSocket = (clientId: string): WebSocket => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const url = new URL(`${protocol}//${window.location.host}/api/clients/${clientId}/remote-control/ws`)
   url.searchParams.set('token', token)
+  if (options.quality !== undefined) url.searchParams.set('quality', String(options.quality))
+  if (options.maxSide !== undefined) url.searchParams.set('max_side', String(options.maxSide))
+  if (options.frameIntervalMs !== undefined) url.searchParams.set('frame_interval_ms', String(options.frameIntervalMs))
   return new WebSocket(url)
 }
 
