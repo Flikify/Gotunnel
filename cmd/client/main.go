@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -31,6 +32,13 @@ func init() {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "service" {
+		if err := runServiceCLI(os.Args[2:]); err != nil {
+			log.Fatalf("Service command failed: %v", err)
+		}
+		return
+	}
+
 	server := flag.String("s", "", "server address (ip:port)")
 	token := flag.String("t", "", "auth token")
 	configPath := flag.String("c", "", "config file path")
@@ -40,8 +48,10 @@ func main() {
 	reconnectMin := flag.Int("reconnect-min", 0, "minimum reconnect delay in seconds")
 	reconnectMax := flag.Int("reconnect-max", 0, "maximum reconnect delay in seconds")
 	serviceMode := flag.Bool("service", false, "run as a managed Windows service")
-	serviceName := flag.String("service-name", "GoTunnelClient", "Windows service name")
-	serviceLogPath := flag.String("service-log-file", "", "path to the Windows service bootstrap log")
+	serviceAction := flag.String("service-action", "", "manage background service: install|uninstall|start|stop|restart|status")
+	serviceName := flag.String("service-name", defaultServiceName(), "service name / label")
+	serviceDisplayName := flag.String("service-display-name", defaultServiceDisplayName(), "service display name")
+	serviceLogPath := flag.String("service-log-file", "", "service log file path")
 	flag.Parse()
 
 	var cfg *config.ClientConfig
@@ -75,6 +85,19 @@ func main() {
 	}
 	if *reconnectMax > 0 {
 		cfg.ReconnectMaxSec = *reconnectMax
+	}
+
+	if handled, err := maybeHandleServiceCommand(serviceCommandOptions{
+		Action:      *serviceAction,
+		Name:        *serviceName,
+		DisplayName: *serviceDisplayName,
+		ConfigPath:  *configPath,
+		LogPath:     *serviceLogPath,
+	}, cfg); handled {
+		if err != nil {
+			log.Fatalf("Service command failed: %v", err)
+		}
+		return
 	}
 
 	if cfg.Server == "" || cfg.Token == "" {

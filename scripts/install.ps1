@@ -4,6 +4,7 @@ param(
   [string]$Token,
   [string]$Version = 'latest',
   [string]$Repository = 'Flikify/Gotunnel',
+  [string]$Cdn = '',
   [string]$ServiceName = 'GoTunnelClient',
   [string]$DisplayName = 'GoTunnel Client',
   [string]$InstallDir = '',
@@ -49,14 +50,6 @@ function Get-GoTunnelDefaultDataDir {
   return Join-Path ${env:ProgramData} 'GoTunnel'
 }
 
-function ConvertTo-GoTunnelYamlScalar {
-  param(
-    [Parameter(Mandatory = $true)][string]$Value
-  )
-
-  return '"' + ($Value.Replace('\', '\\').Replace('"', '\"')) + '"'
-}
-
 function Ensure-GoTunnelAdministrator {
   if (Test-GoTunnelAdministrator) {
     return
@@ -76,17 +69,16 @@ function Ensure-GoTunnelAdministrator {
   exit 0
 }
 
-function Invoke-GoTunnelSc {
+function Join-GoTunnelCdnUrl {
   param(
-    [Parameter(Mandatory = $true)][string[]]$Arguments
+    [Parameter(Mandatory = $true)][string]$Url,
+    [string]$Prefix = ''
   )
 
-  $output = & sc.exe @Arguments 2>&1
-  if ($LASTEXITCODE -ne 0) {
-    $text = ($output | Out-String).Trim()
-    throw "sc.exe $($Arguments -join ' ') failed: $text"
+  if (-not $Prefix) {
+    return $Url
   }
-  return $output
+  return ('{0}/{1}' -f $Prefix.TrimEnd('/'), $Url)
 }
 
 function Get-GoTunnelRelease {
@@ -112,7 +104,8 @@ function Get-GoTunnelDownloadUrl {
   param(
     [Parameter(Mandatory = $true)][string]$Repository,
     [Parameter(Mandatory = $true)][string]$Version,
-    [Parameter(Mandatory = $true)][string]$Arch
+    [Parameter(Mandatory = $true)][string]$Arch,
+    [string]$Cdn = ''
   )
 
   $release = Get-GoTunnelRelease -Repository $Repository -Version $Version
@@ -125,28 +118,9 @@ function Get-GoTunnelDownloadUrl {
   }
 
   return @{
-    DownloadUrl = $asset.browser_download_url
+    DownloadUrl = Join-GoTunnelCdnUrl -Url $asset.browser_download_url -Prefix $Cdn
     Tag         = $release.tag_name
   }
-}
-
-function Write-GoTunnelConfigFile {
-  param(
-    [Parameter(Mandatory = $true)][string]$Path,
-    [Parameter(Mandatory = $true)][string]$Server,
-    [Parameter(Mandatory = $true)][string]$Token,
-    [Parameter(Mandatory = $true)][string]$DataDir
-  )
-
-  $yaml = @(
-    "server: $(ConvertTo-GoTunnelYamlScalar -Value $Server)"
-    "token: $(ConvertTo-GoTunnelYamlScalar -Value $Token)"
-    "data_dir: $(ConvertTo-GoTunnelYamlScalar -Value $DataDir)"
-    'reconnect_min_sec: 5'
-    'reconnect_max_sec: 30'
-  ) -join [Environment]::NewLine
-
-  Set-Content -Path $Path -Value ($yaml + [Environment]::NewLine) -Encoding UTF8
 }
 
 function Install-GoTunnel {
@@ -156,6 +130,7 @@ function Install-GoTunnel {
     [Parameter(Mandatory = $true)][string]$Token,
     [string]$Version = 'latest',
     [string]$Repository = 'Flikify/Gotunnel',
+    [string]$Cdn = '',
     [string]$ServiceName = 'GoTunnelClient',
     [string]$DisplayName = 'GoTunnel Client',
     [string]$InstallDir = '',
@@ -169,16 +144,16 @@ function Install-GoTunnel {
   $downloadDir = Join-Path $resolvedDataDir 'downloads'
   $extractDir = Join-Path $resolvedDataDir 'extract'
   $archivePath = Join-Path $downloadDir 'gotunnel-client.zip'
-  $configPath = Join-Path $resolvedDataDir 'client.yaml'
   $serviceLogPath = Join-Path $resolvedDataDir 'service.log'
   $targetPath = Join-Path $resolvedInstallDir 'gotunnel-client.exe'
+  $configPath = Join-Path $resolvedDataDir 'client.yaml'
 
   New-Item -ItemType Directory -Force -Path $resolvedInstallDir | Out-Null
   New-Item -ItemType Directory -Force -Path $resolvedDataDir | Out-Null
   New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
 
   $arch = Get-GoTunnelArch
-  $asset = Get-GoTunnelDownloadUrl -Repository $Repository -Version $Version -Arch $arch
+  $asset = Get-GoTunnelDownloadUrl -Repository $Repository -Version $Version -Arch $arch -Cdn $Cdn
 
   Write-Host "Downloading GoTunnel client $($asset.Tag) from $($asset.DownloadUrl)"
   Invoke-WebRequest -Uri $asset.DownloadUrl -OutFile $archivePath -MaximumRedirection 5
@@ -196,32 +171,21 @@ function Install-GoTunnel {
     throw 'Failed to find extracted client binary.'
   }
 
-  $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-  if ($existingService) {
-    Write-Host "Stopping existing service $ServiceName"
-    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-    $existingService.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped, (New-TimeSpan -Seconds 20))
-  }
-
   Copy-Item -Path $binary.FullName -Destination $targetPath -Force
-  Write-GoTunnelConfigFile -Path $configPath -Server $Server -Token $Token -DataDir $resolvedDataDir
 
-  $serviceCommand = ('"{0}" -c "{1}" -service -service-name "{2}" -service-log-file "{3}"' -f $targetPath, $configPath, $ServiceName, $serviceLogPath)
-
-  if (-not $existingService) {
-    Write-Host "Creating Windows service $ServiceName"
-    Invoke-GoTunnelSc -Arguments @('create', $ServiceName, ('binPath= {0}' -f $serviceCommand), 'start= auto', 'obj= LocalSystem', ('DisplayName= {0}' -f $DisplayName)) | Out-Null
-  } else {
-    Write-Host "Updating Windows service $ServiceName"
-    Invoke-GoTunnelSc -Arguments @('config', $ServiceName, ('binPath= {0}' -f $serviceCommand), 'start= auto', 'obj= LocalSystem', ('DisplayName= {0}' -f $DisplayName)) | Out-Null
+  Write-Host "Installing Windows service $ServiceName via client command"
+  & $targetPath `
+    service install `
+    -s $Server `
+    -t $Token `
+    -data-dir $resolvedDataDir `
+    -service-name $ServiceName `
+    -service-display-name $DisplayName `
+    -service-log-file $serviceLogPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "gotunnel-client service install command failed with exit code $LASTEXITCODE"
   }
-
-  Invoke-GoTunnelSc -Arguments @('description', $ServiceName, 'GoTunnel client tunnel service managed by the installer.') | Out-Null
-  Invoke-GoTunnelSc -Arguments @('failure', $ServiceName, 'reset=', '86400', 'actions=', 'restart/5000/restart/5000/restart/5000') | Out-Null
-  Invoke-GoTunnelSc -Arguments @('failureflag', $ServiceName, '1') | Out-Null
-
-  Start-Service -Name $ServiceName
-  $startedService = Get-Service -Name $ServiceName
+  $startedService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 
   Write-Host "GoTunnel client installed to $targetPath"
   Write-Host "Config written to $configPath"
@@ -241,6 +205,7 @@ if ($PSBoundParameters.ContainsKey('Server') -or $PSBoundParameters.ContainsKey(
     -Token $Token `
     -Version $Version `
     -Repository $Repository `
+    -Cdn $Cdn `
     -ServiceName $ServiceName `
     -DisplayName $DisplayName `
     -InstallDir $InstallDir `

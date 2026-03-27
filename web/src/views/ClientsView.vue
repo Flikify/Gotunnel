@@ -22,11 +22,25 @@ const quoteBashArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
 const quotePowerShellSingle = (value: string) => value.replace(/'/g, "''")
 const githubInstallScriptUrl = 'https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.sh'
 const githubInstallPs1Url = 'https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.ps1'
+const installCdnOptions = [
+  { label: '官方', prefix: '' },
+  { label: 'GHFast', prefix: 'https://ghfast.top/' },
+]
+
+interface InstallCommandItem {
+  label: string
+  value: string
+}
 
 const resolveTunnelHost = () => window.location.hostname || 'localhost'
 const formatServerAddr = (host: string, port: number) => {
   const normalizedHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
   return `${normalizedHost}:${port}`
+}
+
+const applyCdnPrefix = (prefix: string, url: string) => {
+  if (!prefix) return url
+  return `${prefix.replace(/\/+$/, '')}/${url}`
 }
 
 const fallbackCopyText = (value: string) => {
@@ -59,16 +73,35 @@ const writeClipboardText = async (value: string) => {
   }
 }
 
-const buildInstallCommands = (data: InstallCommandResponse) => {
+const buildInstallCommands = (data: InstallCommandResponse): InstallCommandItem[] => {
   const serverAddr = formatServerAddr(resolveTunnelHost(), data.tunnel_port)
   const psServerAddr = quotePowerShellSingle(serverAddr)
   const psToken = quotePowerShellSingle(data.token)
+  const commands: InstallCommandItem[] = []
 
-  return {
-    linux: `f=$(mktemp);curl -fsSL ${quoteBashArg(githubInstallScriptUrl)} -o $f&&bash $f -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)};rm -f $f`,
-    macos: `f=$(mktemp);curl -fsSL ${quoteBashArg(githubInstallScriptUrl)} -o $f&&bash $f -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)};rm -f $f`,
-    windows: `powershell -NoProfile -ExecutionPolicy Bypass -Command 'iwr \"${githubInstallPs1Url}\" -OutFile \"$env:TEMP\\gotunnel-install.ps1\"; & \"$env:TEMP\\gotunnel-install.ps1\" -Server ''${psServerAddr}'' -Token ''${psToken}'''`,
+  for (const cdn of installCdnOptions) {
+    const bashScriptUrl = applyCdnPrefix(cdn.prefix, githubInstallScriptUrl)
+    const psScriptUrl = applyCdnPrefix(cdn.prefix, githubInstallPs1Url)
+    const bashCdnArg = cdn.prefix ? ` -p ${quoteBashArg(cdn.prefix)}` : ''
+    const psCdnArg = cdn.prefix ? ` -Cdn ''${quotePowerShellSingle(cdn.prefix)}''` : ''
+
+    commands.push(
+      {
+        label: `Linux / ${cdn.label}`,
+        value: `f=$(mktemp);curl -fsSL ${quoteBashArg(bashScriptUrl)} -o $f&&bash $f -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}${bashCdnArg};rm -f $f`,
+      },
+      {
+        label: `macOS / ${cdn.label}`,
+        value: `f=$(mktemp);curl -fsSL ${quoteBashArg(bashScriptUrl)} -o $f&&bash $f -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}${bashCdnArg};rm -f $f`,
+      },
+      {
+        label: `Windows / ${cdn.label}`,
+        value: `powershell -NoProfile -ExecutionPolicy Bypass -Command 'iwr \"${psScriptUrl}\" -OutFile \"$env:TEMP\\gotunnel-install.ps1\"; & \"$env:TEMP\\gotunnel-install.ps1\" -Server ''${psServerAddr}'' -Token ''${psToken}''${psCdnArg}'`,
+      }
+    )
   }
+
+  return commands
 }
 
 const loadClients = async () => {
@@ -181,11 +214,7 @@ onMounted(loadClients)
 
     <GlassModal :show="showInstallModal" title="安装命令" width="760px" @close="showInstallModal = false">
       <div v-if="installCommands" class="install-grid">
-        <article v-for="item in [
-          { label: 'Linux', value: installCommands.linux },
-          { label: 'macOS', value: installCommands.macos },
-          { label: 'Windows', value: installCommands.windows },
-        ]" :key="item.label" class="install-card">
+        <article v-for="item in installCommands" :key="item.label" class="install-card">
           <header>
             <strong>{{ item.label }}</strong>
             <button class="glass-btn small" @click="copyCommand(item.value)">复制</button>

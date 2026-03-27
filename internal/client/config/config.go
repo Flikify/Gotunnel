@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -31,4 +32,17 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 	}
 
 	return &cfg, nil
+}
+
+// SaveClientConfig persists client configuration as YAML.
+func SaveClientConfig(path string, cfg *ClientConfig) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0600)
 }
