@@ -34,6 +34,7 @@ type WebSettings struct {
 	Username  string `yaml:"username"`
 	Password  string `yaml:"password"`
 	JWTSecret string `yaml:"jwt_secret"`
+	CDNPrefix string `yaml:"cdn_prefix"` // GitHub CDN 加速前缀
 }
 
 // LoadServerConfig 加载服务端配置

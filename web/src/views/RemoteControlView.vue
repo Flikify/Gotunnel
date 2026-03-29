@@ -478,21 +478,21 @@ function normalizeWheelDelta(value: number): number {
 }
 
 function toShortcut(event: KeyboardEvent): string[] | null {
-  const modifier = event.metaKey || event.ctrlKey ? 'control' : ''
-  if (!modifier) return null
+  const hasCtrl = event.ctrlKey || event.metaKey
+  const hasAlt = event.altKey
+  const hasShift = event.shiftKey
+
+  if (!hasCtrl && !hasAlt) return null
 
   const key = toRobotKey(event)
   if (!key) return null
 
-  if (!['a', 'c', 's', 'v', 'x', 'y', 'z'].includes(key)) {
-    return null
-  }
-
-  const keys = [modifier]
-  if (event.shiftKey) {
-    keys.push('shift')
-  }
+  const keys: string[] = []
+  if (hasCtrl) keys.push('control')
+  if (hasAlt) keys.push('alt')
+  if (hasShift) keys.push('shift')
   keys.push(key)
+
   return keys
 }
 

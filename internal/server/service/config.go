@@ -25,10 +25,11 @@ type ServerConfigUpdate struct {
 
 // WebConfigUpdate describes the mutable web settings.
 type WebConfigUpdate struct {
-	Enabled  *bool
-	BindPort *int
-	Username *string
-	Password *string
+	Enabled   *bool
+	BindPort  *int
+	Username  *string
+	Password  *string
+	CDNPrefix *string
 }
 
 // ConfigUpdate is the aggregate config change request.
@@ -153,7 +154,11 @@ func (s *configService) Persist(update ConfigUpdate) (PersistConfigResult, error
 		}
 		if update.Web.Password != nil && *update.Web.Password != next.Server.Web.Password {
 			next.Server.Web.Password = *update.Web.Password
-			restartRequiredFields["web.password"] = struct{}{}
+			restartRequiredFields["web.password"] = struct{}
+		}
+		if update.Web.CDNPrefix != nil && *update.Web.CDNPrefix != next.Server.Web.CDNPrefix {
+			next.Server.Web.CDNPrefix = *update.Web.CDNPrefix
+			appliedRuntimeFields["web.cdn_prefix"] = struct{}
 		}
 	}
 

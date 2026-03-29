@@ -24,6 +24,11 @@ type Info struct {
 
 // CheckForComponent returns update information for the running platform.
 func CheckForComponent(component string) (*Info, error) {
+	return CheckForComponentWithCDN(component, "")
+}
+
+// CheckForComponentWithCDN returns update information with optional CDN prefix.
+func CheckForComponentWithCDN(component, cdnPrefix string) (*Info, error) {
 	release, err := version.GetLatestRelease()
 	if err != nil {
 		return nil, fmt.Errorf("get latest release: %w", err)
@@ -33,12 +38,13 @@ func CheckForComponent(component string) (*Info, error) {
 	currentVersion := version.Version
 	updateInfo, err := version.CheckUpdate(component)
 	if err == nil && updateInfo != nil {
+		downloadURL := version.ApplyCDNPrefix(updateInfo.DownloadURL, cdnPrefix)
 		return &Info{
 			Available:   version.CompareVersions(currentVersion, latestVersion) < 0,
 			Current:     currentVersion,
 			Latest:      latestVersion,
 			ReleaseNote: release.Body,
-			DownloadURL: updateInfo.DownloadURL,
+			DownloadURL: downloadURL,
 			AssetName:   updateInfo.AssetName,
 			AssetSize:   updateInfo.AssetSize,
 		}, nil
@@ -54,6 +60,11 @@ func CheckForComponent(component string) (*Info, error) {
 
 // CheckClientForPlatform returns the matching client package for a target platform.
 func CheckClientForPlatform(osName, arch string) (*Info, error) {
+	return CheckClientForPlatformWithCDN(osName, arch, "")
+}
+
+// CheckClientForPlatformWithCDN returns the matching client package with optional CDN prefix.
+func CheckClientForPlatformWithCDN(osName, arch, cdnPrefix string) (*Info, error) {
 	if osName == "" {
 		osName = runtime.GOOS
 	}
@@ -66,12 +77,13 @@ func CheckClientForPlatform(osName, arch string) (*Info, error) {
 		return nil, fmt.Errorf("get latest release: %w", err)
 	}
 
+	downloadURL := version.ApplyCDNPrefix(updateInfo.DownloadURL, cdnPrefix)
 	return &Info{
 		Available:   true,
 		Current:     "",
 		Latest:      updateInfo.Latest,
 		ReleaseNote: updateInfo.ReleaseNote,
-		DownloadURL: updateInfo.DownloadURL,
+		DownloadURL: downloadURL,
 		AssetName:   updateInfo.AssetName,
 		AssetSize:   updateInfo.AssetSize,
 	}, nil

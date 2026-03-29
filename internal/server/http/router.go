@@ -98,7 +98,7 @@ func (r *GinRouter) SetupRoutes(deps Dependencies) {
 		api.GET("/runtime/config", configHandler.Get)
 		api.PUT("/runtime/config", configHandler.Update)
 
-		updateHandler := handler.NewUpdateHandler(service.NewUpdateService(deps.ServerRuntime))
+		updateHandler := handler.NewUpdateHandler(service.NewUpdateService(deps.ServerRuntime, deps.ConfigService))
 		api.GET("/updates/server", updateHandler.CheckServer)
 		api.GET("/updates/server/status", updateHandler.CheckServerStatus)
 		api.GET("/updates/clients/latest", updateHandler.CheckClient)

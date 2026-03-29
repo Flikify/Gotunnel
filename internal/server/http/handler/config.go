@@ -46,10 +46,11 @@ func (h *ConfigHandler) Get(c *gin.Context) {
 			ClientResponseTimeoutSec: cfg.Server.ClientResponseTimeoutSec,
 		},
 		Web: dto.WebConfigInfo{
-			Enabled:  cfg.Server.Web.Enabled,
-			BindPort: cfg.Server.Web.BindPort,
-			Username: cfg.Server.Web.Username,
-			Password: "****",
+			Enabled:   cfg.Server.Web.Enabled,
+			BindPort:  cfg.Server.Web.BindPort,
+			Username:  cfg.Server.Web.Username,
+			Password:  "****",
+			CDNPrefix: cfg.Server.Web.CDNPrefix,
 		},
 	}
 

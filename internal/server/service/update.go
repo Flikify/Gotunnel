@@ -6,6 +6,10 @@ type updateRuntime interface {
 	SendUpdateToClient(clientID, downloadURL string) error
 }
 
+type updateConfig interface {
+	Snapshot() interface{ Server struct{ Web struct{ CDNPrefix string } } }
+}
+
 type UpdateService interface {
 	CheckServer() (*updateapp.Info, error)
 	CheckClient(osName, arch string) (*updateapp.Info, error)
@@ -16,18 +20,27 @@ type UpdateService interface {
 
 type updateService struct {
 	runtime updateRuntime
+	config  updateConfig
 }
 
-func NewUpdateService(runtime updateRuntime) UpdateService {
-	return &updateService{runtime: runtime}
+func NewUpdateService(runtime updateRuntime, config updateConfig) UpdateService {
+	return &updateService{runtime: runtime, config: config}
 }
 
 func (s *updateService) CheckServer() (*updateapp.Info, error) {
-	return updateapp.CheckForComponent("server")
+	cdnPrefix := ""
+	if s.config != nil {
+		cdnPrefix = s.config.Snapshot().Server.Web.CDNPrefix
+	}
+	return updateapp.CheckForComponentWithCDN("server", cdnPrefix)
 }
 
 func (s *updateService) CheckClient(osName, arch string) (*updateapp.Info, error) {
-	return updateapp.CheckClientForPlatform(osName, arch)
+	cdnPrefix := ""
+	if s.config != nil {
+		cdnPrefix = s.config.Snapshot().Server.Web.CDNPrefix
+	}
+	return updateapp.CheckClientForPlatformWithCDN(osName, arch, cdnPrefix)
 }
 
 func (s *updateService) GetServerUpdateStatus() (*updateapp.ServerUpdateStatus, error) {

@@ -24,10 +24,11 @@ func (r UpdateServerConfigRequest) ToConfigUpdate() service.ConfigUpdate {
 	}
 	if r.Web != nil {
 		update.Web = &service.WebConfigUpdate{
-			Enabled:  r.Web.Enabled,
-			BindPort: r.Web.BindPort,
-			Username: r.Web.Username,
-			Password: r.Web.Password,
+			Enabled:   r.Web.Enabled,
+			BindPort:  r.Web.BindPort,
+			Username:  r.Web.Username,
+			Password:  r.Web.Password,
+			CDNPrefix: r.Web.CDNPrefix,
 		}
 	}
 	return update
@@ -46,10 +47,11 @@ type ServerConfigPart struct {
 
 // WebConfigPart is the web console config subset.
 type WebConfigPart struct {
-	Enabled  *bool   `json:"enabled"`
-	BindPort *int    `json:"bind_port" binding:"omitempty,min=1,max=65535"`
-	Username *string `json:"username" binding:"omitempty,min=3,max=32"`
-	Password *string `json:"password" binding:"omitempty,min=6,max=64"`
+	Enabled   *bool   `json:"enabled"`
+	BindPort  *int    `json:"bind_port" binding:"omitempty,min=1,max=65535"`
+	Username  *string `json:"username" binding:"omitempty,min=3,max=32"`
+	Password  *string `json:"password" binding:"omitempty,min=6,max=64"`
+	CDNPrefix *string `json:"cdn_prefix" binding:"omitempty,max=256"`
 }
 
 // ServerConfigResponse is the config response payload.
@@ -78,8 +80,9 @@ type ServerConfigInfo struct {
 
 // WebConfigInfo describes the web console config.
 type WebConfigInfo struct {
-	Enabled  bool   `json:"enabled"`
-	BindPort int    `json:"bind_port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Enabled   bool   `json:"enabled"`
+	BindPort  int    `json:"bind_port"`
+	Username  string `json:"username"`
+	Password  string `json:"password"`
+	CDNPrefix string `json:"cdn_prefix"`
 }

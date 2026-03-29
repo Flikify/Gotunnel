@@ -55,6 +55,14 @@ type UpdateInfo struct {
 	AssetSize   int64  `json:"asset_size"`
 }
 
+// ApplyCDNPrefix applies CDN prefix to download URL
+func ApplyCDNPrefix(downloadURL, cdnPrefix string) string {
+	if cdnPrefix == "" || downloadURL == "" {
+		return downloadURL
+	}
+	return strings.TrimRight(cdnPrefix, "/") + "/" + downloadURL
+}
+
 func SetVersion(v string) {
 	if v != "" {
 		Version = v

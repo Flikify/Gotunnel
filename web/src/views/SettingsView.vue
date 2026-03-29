@@ -28,6 +28,7 @@ const configForm = ref({
   client_response_timeout_sec: 15,
   web_username: '',
   web_password: '',
+  web_cdn_prefix: '',
 })
 
 const loadVersionInfo = async () => {
@@ -54,6 +55,7 @@ const loadServerConfig = async () => {
       client_response_timeout_sec: data.server.client_response_timeout_sec,
       web_username: data.web.username,
       web_password: '',
+      web_cdn_prefix: data.web.cdn_prefix || '',
     }
   } catch (error) {
     console.error('Failed to load server config', error)
@@ -84,6 +86,7 @@ const handleSaveConfig = async () => {
       },
       web: {
         username: configForm.value.web_username,
+        cdn_prefix: configForm.value.web_cdn_prefix,
       },
     }
 
@@ -171,6 +174,11 @@ onMounted(() => {
           <label class="form-group form-group--full">
             <span>Web 密码</span>
             <input v-model="configForm.web_password" class="glass-input" type="password" placeholder="留空则保持不变" />
+          </label>
+          <label class="form-group form-group--full">
+            <span>GitHub CDN 加速前缀</span>
+            <input v-model="configForm.web_cdn_prefix" class="glass-input" type="text" placeholder="例如: https://ghproxy.com/" />
+            <small class="form-hint">用于加速 GitHub 下载，留空则直连 GitHub。例如: https://ghproxy.com/</small>
           </label>
         </form>
       </SectionCard>
