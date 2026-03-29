@@ -1,13 +1,16 @@
 package service
 
-import "github.com/gotunnel/internal/server/updateapp"
+import (
+	"github.com/gotunnel/internal/server/config"
+	"github.com/gotunnel/internal/server/updateapp"
+)
 
 type updateRuntime interface {
 	SendUpdateToClient(clientID, downloadURL string) error
 }
 
 type updateConfig interface {
-	Snapshot() interface{ Server struct{ Web struct{ CDNPrefix string } } }
+	Snapshot() config.ServerConfig
 }
 
 type UpdateService interface {
