@@ -19,7 +19,10 @@ func safeArchivePath(destDir, entryName string) (string, error) {
 	cleanDest := filepath.Clean(destDir)
 	cleanEntry := filepath.Clean(entryName)
 
-	if cleanEntry == "." || cleanEntry == string(os.PathSeparator) {
+	if cleanEntry == "." {
+		return "", nil
+	}
+	if cleanEntry == string(os.PathSeparator) {
 		return "", fmt.Errorf("invalid archive entry path %q", entryName)
 	}
 	if filepath.IsAbs(cleanEntry) {
@@ -139,6 +142,9 @@ func ExtractTarGz(archivePath, destDir string) error {
 		if err != nil {
 			return err
 		}
+		if targetPath == "" {
+			continue
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -176,6 +182,9 @@ func ExtractZip(archivePath, destDir string) error {
 		targetPath, err := safeArchivePath(destDir, file.Name)
 		if err != nil {
 			return err
+		}
+		if targetPath == "" {
+			continue
 		}
 
 		if file.FileInfo().IsDir() {

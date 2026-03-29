@@ -303,9 +303,9 @@ jobs:
           ARCHIVE="gotunnel-${{ matrix.component }}-${TAG}-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.archive_ext }}"
           mkdir -p dist/out
           if [ "${{ matrix.archive_ext }}" = "zip" ]; then
-            (cd dist/package && zip -r "../out/${ARCHIVE}" .)
+            (cd dist/package && zip -r "../out/${ARCHIVE}" *)
           else
-            tar -C dist/package -czf "dist/out/${ARCHIVE}" .
+            tar -C dist/package -czf "dist/out/${ARCHIVE}" *
           fi
           echo "archive=dist/out/${ARCHIVE}" >> "$GITHUB_OUTPUT"
 
