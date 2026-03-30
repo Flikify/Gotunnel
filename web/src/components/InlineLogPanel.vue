@@ -19,19 +19,21 @@ const logContainer = ref<HTMLElement | null>(null)
 const startStream = () => {
   if (eventSource) {
     eventSource.close()
+    eventSource = null
   }
 
   loading.value = true
   isStreaming.value = true
+  logs.value = []
 
   eventSource = createLogStream(
     props.clientId,
     { lines: 100, follow: true, level: '' },
     (entry) => {
-      logs.value.push(entry)
-      if (logs.value.length > 500) {
-        logs.value = logs.value.slice(-300)
+      if (logs.value.length >= 300) {
+        logs.value.shift()
       }
+      logs.value.push(entry)
       if (autoScroll.value) {
         nextTick(() => scrollToBottom())
       }
