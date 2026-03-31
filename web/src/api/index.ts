@@ -134,6 +134,7 @@ export const login = (username: string, password: string) =>
 
 export const checkAuth = () => get<{ valid?: boolean; username?: string }>('/auth/check')
 export const getServerStatus = () => get<ServerStatus>('/runtime/status')
+export const getServerInfo = () => get<{ bind_port: number }>('/runtime/status')
 
 export const getClients = () => get<ClientStatus[]>('/clients')
 export const getClient = (id: string) => get<ClientDetail>(`/clients/${id}`)
