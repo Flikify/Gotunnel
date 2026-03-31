@@ -29,8 +29,6 @@ export type {
   CreateClientRequest,
   HourlyTrafficResponse,
   InstallCommandResponse,
-  LogEntry,
-  LogStreamOptions,
   LoginResponse,
   ProxyRule,
   RemoteControlSocketOptions,
@@ -247,40 +245,6 @@ export const applyServerUpdate = (downloadUrl: string, targetVersion: string, re
   post('/updates/server/actions/apply', { download_url: downloadUrl, target_version: targetVersion, restart })
 export const applyClientUpdate = (clientId: string, downloadUrl: string) =>
   post('/updates/clients/actions/apply', { client_id: clientId, download_url: downloadUrl })
-
-export const createLogStream = (
-  clientId: string,
-  options: import('./types').LogStreamOptions = {},
-  onLog: (entry: import('./types').LogEntry) => void,
-  onError?: (error: Event) => void
-): EventSource => {
-  const token = getToken()
-  const params = new URLSearchParams()
-  if (token) params.append('token', token)
-  if (options.lines !== undefined) params.append('lines', String(options.lines))
-  if (options.follow !== undefined) params.append('follow', String(options.follow))
-  if (options.level) params.append('level', options.level)
-
-  const url = `/api/clients/${clientId}/logs?${params.toString()}`
-  const eventSource = new EventSource(url)
-
-  eventSource.addEventListener('log', (event) => {
-    try {
-      const entry = JSON.parse((event as MessageEvent).data) as import('./types').LogEntry
-      onLog(entry)
-    } catch (error) {
-      console.error('Failed to parse log entry', error)
-    }
-  })
-
-  eventSource.addEventListener('heartbeat', () => {})
-
-  if (onError) {
-    eventSource.onerror = onError
-  }
-
-  return eventSource
-}
 
 export const getTrafficStats = () => get<TrafficStats>('/runtime/traffic/stats')
 export const getTrafficHourly = () => get<{ records?: TrafficRecordResult[] }>('/runtime/traffic/hourly')

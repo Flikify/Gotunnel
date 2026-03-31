@@ -100,9 +100,6 @@ func (r *GinRouter) SetupRoutes(deps Dependencies) {
 		api.POST("/updates/server/actions/apply", updateHandler.ApplyServer)
 		api.POST("/updates/clients/actions/apply", updateHandler.ApplyClient)
 
-		logHandler := handler.NewLogHandler(diagnostics)
-		api.GET("/clients/:id/logs", logHandler.StreamLogs)
-
 		obsHandler := handler.NewObservabilityHandler(events, diagnostics)
 		api.GET("/events", obsHandler.ListEvents)
 		api.GET("/events/health", obsHandler.Health)

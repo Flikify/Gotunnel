@@ -67,11 +67,6 @@ func (s *Server) OpenClientStream(clientID string) (net.Conn, error) {
 	return s.sessions.openStream(clientID)
 }
 
-// LogSessions returns the shared log session registry.
-func (s *Server) LogSessions() *LogSessionManager {
-	return s.logSessions
-}
-
 // Shutdown 优雅关闭服务端
 func (s *Server) Shutdown(timeout time.Duration) error {
 	return s.listenerLoop.shutdownGracefully(timeout, s.sessions.disconnectAll)

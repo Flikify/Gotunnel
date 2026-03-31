@@ -5,7 +5,6 @@ import (
 	"net"
 	"time"
 
-	serverruntime "github.com/gotunnel/internal/server/runtime"
 	"github.com/gotunnel/pkg/observability"
 	"github.com/gotunnel/pkg/protocol"
 )
@@ -20,15 +19,12 @@ type RemoteOpsRuntime interface {
 	IsClientOnline(clientID string) bool
 	OpenClientStream(clientID string) (net.Conn, error)
 	ClientResponseTimeout() time.Duration
-	LogSessions() *serverruntime.LogSessionManager
 	LocalDiagnosticStore() *observability.DiagnosticStore
 }
 
-// RemoteOpsService coordinates log, status, and screenshot operations.
+// RemoteOpsService coordinates status and screenshot operations.
 type RemoteOpsService interface {
 	IsClientOnline(clientID string) bool
-	StartClientLogStream(clientID, sessionID string, lines int, follow bool, level string) (<-chan protocol.LogEntry, error)
-	StopClientLogStream(sessionID string)
 	GetClientSystemStats(clientID string) (*protocol.SystemStatsResponse, error)
 	GetClientScreenshot(clientID string, quality int) (*protocol.ScreenshotResponse, error)
 }
@@ -44,55 +40,6 @@ func NewRemoteOpsService(runtime RemoteOpsRuntime) RemoteOpsService {
 
 func (s *remoteOpsService) IsClientOnline(clientID string) bool {
 	return s.runtime.IsClientOnline(clientID)
-}
-
-func (s *remoteOpsService) StartClientLogStream(clientID, sessionID string, lines int, follow bool, level string) (<-chan protocol.LogEntry, error) {
-	stream, err := s.runtime.OpenClientStream(clientID)
-	if err != nil {
-		return nil, err
-	}
-
-	req := protocol.LogRequest{
-		SessionID: sessionID,
-		Lines:     lines,
-		Follow:    follow,
-		Level:     level,
-	}
-	msg, err := protocol.NewMessage(protocol.MsgTypeLogRequest, req)
-	if err != nil {
-		stream.Close()
-		return nil, err
-	}
-	if err := protocol.WriteMessage(stream, msg); err != nil {
-		stream.Close()
-		return nil, err
-	}
-
-	session := s.runtime.LogSessions().CreateSession(clientID, sessionID, stream)
-	listener := session.AddListener()
-	go s.readClientLogs(session)
-	return listener, nil
-}
-
-func (s *remoteOpsService) StopClientLogStream(sessionID string) {
-	session := s.runtime.LogSessions().GetSession(sessionID)
-	if session == nil {
-		return
-	}
-
-	if stream, err := s.runtime.OpenClientStream(session.ClientID); err == nil {
-		_ = withStreamDeadline(stream, s.runtime.ClientResponseTimeout(), func() error {
-			defer stream.Close()
-			req := protocol.LogStopRequest{SessionID: sessionID}
-			msg, err := protocol.NewMessage(protocol.MsgTypeLogStop, req)
-			if err != nil {
-				return err
-			}
-			return protocol.WriteMessage(stream, msg)
-		})
-	}
-
-	s.runtime.LogSessions().RemoveSession(sessionID)
 }
 
 func (s *remoteOpsService) GetClientSystemStats(clientID string) (*protocol.SystemStatsResponse, error) {
@@ -125,32 +72,6 @@ func (s *remoteOpsService) GetClientScreenshot(clientID string, quality int) (*p
 		return nil, fmt.Errorf("screenshot failed: %s", screenshot.Error)
 	}
 	return &screenshot, nil
-}
-
-func (s *remoteOpsService) readClientLogs(session *serverruntime.LogSession) {
-	defer s.runtime.LogSessions().RemoveSession(session.ID)
-
-	for {
-		msg, err := protocol.ReadMessage(session.Stream)
-		if err != nil {
-			return
-		}
-		if msg.Type != protocol.MsgTypeLogData {
-			continue
-		}
-
-		var data protocol.LogData
-		if err := msg.ParsePayload(&data); err != nil {
-			continue
-		}
-
-		for _, entry := range data.Entries {
-			session.Broadcast(entry)
-		}
-		if data.EOF {
-			return
-		}
-	}
 }
 
 func (s *remoteOpsService) remoteOpTimeout(minTimeout time.Duration) time.Duration {

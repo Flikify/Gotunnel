@@ -124,13 +124,6 @@ func (c *Client) logWarnf(format string, args ...interface{}) {
 }
 
 // ObserveLogs subscribes an in-process callback to future client log entries.
-func (c *Client) ObserveLogs(fn func(protocol.LogEntry)) func() {
-	if c.logger == nil || fn == nil {
-		return func() {}
-	}
-	return c.logger.AddObserver(fn)
-}
-
 func (c *Client) ObserveDiagnostics(fn func(observability.DiagnosticRecord)) func() {
 	if c.logger == nil || fn == nil {
 		return func() {}
@@ -495,10 +488,6 @@ func (c *Client) handleStream(stream net.Conn) {
 		c.handleClientRestart(stream, msg)
 	case protocol.MsgTypeUpdateDownload:
 		c.handleUpdateDownload(stream, msg)
-	case protocol.MsgTypeLogRequest:
-		go c.handleLogRequest(stream, msg)
-	case protocol.MsgTypeLogStop:
-		c.handleLogStop(stream, msg)
 	case protocol.MsgTypeDiagnosticsQuery:
 		go c.handleDiagnosticsQuery(stream, msg)
 	case protocol.MsgTypeSystemStatsRequest:
@@ -876,28 +865,6 @@ func restartClientProcess(path, serverAddr, token string) {
 	cmd.Stderr = os.Stderr
 	cmd.Start()
 	os.Exit(0)
-}
-
-func (c *Client) handleLogRequest(stream net.Conn, msg *protocol.Message) {
-	var req protocol.LogRequest
-	if err := msg.ParsePayload(&req); err != nil {
-		stream.Close()
-		return
-	}
-
-	queryMsg, _ := protocol.NewMessage(protocol.MsgTypeDiagnosticsQuery, protocol.DiagnosticsQueryRequest{
-		SessionID: req.SessionID,
-		Query: observability.LogQuery{
-			Level:  req.Level,
-			Limit:  req.Lines,
-			Follow: req.Follow,
-		},
-	})
-	c.handleDiagnosticsQuery(stream, queryMsg)
-}
-
-func (c *Client) handleLogStop(stream net.Conn, msg *protocol.Message) {
-	defer stream.Close()
 }
 
 func (c *Client) handleDiagnosticsQuery(stream net.Conn, msg *protocol.Message) {

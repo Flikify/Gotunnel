@@ -7,19 +7,13 @@ import (
 	"time"
 
 	"github.com/gotunnel/pkg/observability"
-	"github.com/gotunnel/pkg/protocol"
 )
 
 type Logger struct {
 	store      *observability.DiagnosticStore
 	observerMu sync.RWMutex
-	observers  map[int]func(observedRecord)
+	observers  map[int]func(observability.DiagnosticRecord)
 	nextObsID  int
-}
-
-type observedRecord struct {
-	Diagnostic observability.DiagnosticRecord
-	Legacy     protocol.LogEntry
 }
 
 func NewLogger(dataDir, nodeID string) (*Logger, error) {
@@ -34,7 +28,7 @@ func NewLogger(dataDir, nodeID string) (*Logger, error) {
 	}
 	return &Logger{
 		store:     store,
-		observers: make(map[int]func(observedRecord)),
+		observers: make(map[int]func(observability.DiagnosticRecord)),
 	}, nil
 }
 
@@ -77,26 +71,16 @@ func (l *Logger) Record(level, component, eventCode, message string, fields map[
 	if err := l.store.Record(record); err != nil {
 		return
 	}
-	legacy := legacyLogEntry(record)
 
 	l.observerMu.RLock()
-	observers := make([]func(observedRecord), 0, len(l.observers))
+	observers := make([]func(observability.DiagnosticRecord), 0, len(l.observers))
 	for _, fn := range l.observers {
 		observers = append(observers, fn)
 	}
 	l.observerMu.RUnlock()
 	for _, fn := range observers {
-		fn(observedRecord{Diagnostic: record, Legacy: legacy})
+		fn(record)
 	}
-}
-
-func (l *Logger) AddObserver(fn func(protocol.LogEntry)) func() {
-	if fn == nil {
-		return func() {}
-	}
-	return l.AddDiagnosticObserver(func(record observability.DiagnosticRecord) {
-		fn(legacyLogEntry(record))
-	})
 }
 
 func (l *Logger) AddDiagnosticObserver(fn func(observability.DiagnosticRecord)) func() {
@@ -106,27 +90,13 @@ func (l *Logger) AddDiagnosticObserver(fn func(observability.DiagnosticRecord)) 
 	l.observerMu.Lock()
 	id := l.nextObsID
 	l.nextObsID++
-	l.observers[id] = func(record observedRecord) {
-		fn(record.Diagnostic)
-	}
+	l.observers[id] = fn
 	l.observerMu.Unlock()
 	return func() {
 		l.observerMu.Lock()
 		delete(l.observers, id)
 		l.observerMu.Unlock()
 	}
-}
-
-func (l *Logger) GetRecentLogs(lines int, level string) []protocol.LogEntry {
-	records := l.store.Tail(lines)
-	out := make([]protocol.LogEntry, 0, len(records))
-	for _, record := range records {
-		if level != "" && record.Level != level {
-			continue
-		}
-		out = append(out, legacyLogEntry(record))
-	}
-	return out
 }
 
 func (l *Logger) Query(query observability.LogQuery) (observability.LogPage, error) {
@@ -138,17 +108,3 @@ func (l *Logger) Follow(query observability.LogQuery) (<-chan observability.Diag
 }
 
 func (l *Logger) Close() {}
-
-func legacyLogEntry(record observability.DiagnosticRecord) protocol.LogEntry {
-	return protocol.LogEntry{
-		Timestamp: record.Timestamp,
-		Level:     record.Level,
-		Message:   record.Message,
-		Source:    record.Component,
-		EventCode: record.EventCode,
-		NodeRole:  record.NodeRole,
-		NodeID:    record.NodeID,
-		Fields:    record.Fields,
-		Corr:      record.Corr,
-	}
-}

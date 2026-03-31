@@ -14,7 +14,6 @@ type runtimeControl struct {
 	clientStore            db.ClientStore
 	sessions               *clientSessionRegistry
 	proxies                *proxyManager
-	logSessions            *LogSessionManager
 	channel                *controlChannel
 	validateProxyRuleLimit func([]domain.ProxyRule) error
 }
@@ -23,7 +22,6 @@ func newRuntimeControl(
 	clientStore db.ClientStore,
 	sessions *clientSessionRegistry,
 	proxies *proxyManager,
-	logSessions *LogSessionManager,
 	channel *controlChannel,
 	validateProxyRuleLimit func([]domain.ProxyRule) error,
 ) *runtimeControl {
@@ -31,7 +29,6 @@ func newRuntimeControl(
 		clientStore:            clientStore,
 		sessions:               sessions,
 		proxies:                proxies,
-		logSessions:            logSessions,
 		channel:                channel,
 		validateProxyRuleLimit: validateProxyRuleLimit,
 	}
@@ -52,7 +49,6 @@ func (c *runtimeControl) registerClient(cs *ClientSession) {
 func (c *runtimeControl) unregisterClient(cs *ClientSession) {
 	c.proxies.stop(cs.ID)
 	c.sessions.remove(cs.ID)
-	c.logSessions.CleanupClientSessions(cs.ID)
 	c.persistClientConnectionInfo(cs.ID, cs.RemoteAddr, cs.OS, cs.Arch, cs.Version, time.Now().Unix())
 }
 

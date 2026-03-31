@@ -8,7 +8,6 @@ import (
 	domain "github.com/gotunnel/internal/core/domain"
 	"github.com/gotunnel/internal/server/config"
 	"github.com/gotunnel/internal/server/http/handler"
-	serverruntime "github.com/gotunnel/internal/server/runtime"
 	"github.com/gotunnel/internal/server/service"
 	db "github.com/gotunnel/internal/server/storage/sqlite"
 	"github.com/gotunnel/pkg/auth"
@@ -35,7 +34,6 @@ func TestSetupRoutesRegistersCoreEndpoints(t *testing.T) {
 
 	want := map[string]bool{
 		"GET /install.sh":                           false,
-		"GET /api/clients/:id/logs":                 false,
 		"GET /api/clients/:id/remote-control/ws":    false,
 		"GET /api/updates/clients/latest":           false,
 		"PUT /api/runtime/config":                   false,
@@ -130,10 +128,6 @@ func (s *fakeServerRuntime) IsPortAvailable(port int, excludeClientID string) bo
 func (s *fakeServerRuntime) OpenClientStream(clientID string) (net.Conn, error) { return nil, nil }
 
 func (s *fakeServerRuntime) ClientResponseTimeout() time.Duration { return time.Second }
-
-func (s *fakeServerRuntime) LogSessions() *serverruntime.LogSessionManager {
-	return serverruntime.NewLogSessionManager()
-}
 
 func (s *fakeServerRuntime) LocalDiagnosticStore() *observability.DiagnosticStore { return nil }
 

@@ -43,7 +43,6 @@ type Server struct {
 	lifecycle    *sessionLifecycle
 	listenerLoop *listenerRuntime
 	tlsConfig    *tls.Config
-	logSessions  *LogSessionManager // 日志会话管理器
 	diagStore    *observability.DiagnosticStore
 	eventStore   db.OperationalEventStore
 	ingestor     *eventIngestor
@@ -56,12 +55,11 @@ func NewServer(cs db.ClientStore, bindAddr string, bindPort int, token string, h
 		bindPort:     bindPort,
 		sessions:     newClientSessionRegistry(),
 		listenerLoop: newListenerRuntime(maxConnections),
-		logSessions:  NewLogSessionManager(),
 	}
 	s.channel = newControlChannel(s.clientResponseTimeout)
 	s.proxies = newProxyManager(s.recordTraffic, s.clientResponseTimeout, s.requestProxyOpen, s.emitServerEvent)
 	s.admission = newClientAdmission(token, cs)
-	s.control = newRuntimeControl(cs, s.sessions, s.proxies, s.logSessions, s.channel, s.validateProxyRuleLimit)
+	s.control = newRuntimeControl(cs, s.sessions, s.proxies, s.channel, s.validateProxyRuleLimit)
 	s.lifecycle = newSessionLifecycle(
 		s.validateProxyRuleLimit,
 		s.control.registerClient,

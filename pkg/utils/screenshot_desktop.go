@@ -4,13 +4,14 @@ package utils
 
 import (
 	"fmt"
+	"image"
 
 	"github.com/kbinani/screenshot"
 )
 
 // CaptureScreenshot captures the primary display.
 func CaptureScreenshot(quality int) ([]byte, int, int, error) {
-	img, err := screenshot.CaptureDisplay(0)
+	img, err := capturePrimaryScreenshot()
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("capture screen: %w", err)
 	}
@@ -21,6 +22,30 @@ func CaptureScreenshot(quality int) ([]byte, int, int, error) {
 	}
 
 	return encodeJPEG(img, quality)
+}
+
+func capturePrimaryScreenshot() (*image.RGBA, error) {
+	primaryIndex := PrimaryDisplayIndex()
+	img, err := screenshot.CaptureDisplay(primaryIndex)
+	if err == nil {
+		return img, nil
+	}
+
+	lastErr := fmt.Errorf("display %d: %w", primaryIndex, err)
+	displayCount := screenshot.NumActiveDisplays()
+	for i := 0; i < displayCount; i++ {
+		if i == primaryIndex {
+			continue
+		}
+
+		fallback, fallbackErr := screenshot.CaptureDisplay(i)
+		if fallbackErr == nil {
+			return fallback, nil
+		}
+		lastErr = fmt.Errorf("%w; display %d: %v", lastErr, i, fallbackErr)
+	}
+
+	return nil, lastErr
 }
 
 // CaptureAllScreens captures the full virtual desktop across all connected displays.

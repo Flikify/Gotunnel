@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	serverruntime "github.com/gotunnel/internal/server/runtime"
 	"github.com/gotunnel/pkg/observability"
 	"github.com/gotunnel/pkg/protocol"
 )
@@ -46,10 +45,6 @@ func (f *fakeRemoteControlRuntime) OpenClientStream(clientID string) (net.Conn, 
 }
 
 func (f *fakeRemoteControlRuntime) ClientResponseTimeout() time.Duration { return time.Second }
-
-func (f *fakeRemoteControlRuntime) LogSessions() *serverruntime.LogSessionManager {
-	return serverruntime.NewLogSessionManager()
-}
 
 func (f *fakeRemoteControlRuntime) LocalDiagnosticStore() *observability.DiagnosticStore { return nil }
 

@@ -146,12 +146,6 @@ type fakeRemoteOpsService struct{}
 
 func (s *fakeRemoteOpsService) IsClientOnline(clientID string) bool { return true }
 
-func (s *fakeRemoteOpsService) StartClientLogStream(clientID, sessionID string, lines int, follow bool, level string) (<-chan protocol.LogEntry, error) {
-	return nil, errors.New("unused")
-}
-
-func (s *fakeRemoteOpsService) StopClientLogStream(sessionID string) {}
-
 func (s *fakeRemoteOpsService) GetClientSystemStats(clientID string) (*protocol.SystemStatsResponse, error) {
 	return nil, errors.New("unused")
 }

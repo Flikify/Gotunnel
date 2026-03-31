@@ -19,14 +19,6 @@ type HourlyTrafficResponse struct {
 	Records []db.TrafficRecord `json:"records"`
 }
 
-// LogEntry describes a single streamed client log line.
-type LogEntry struct {
-	Timestamp int64  `json:"ts"`
-	Level     string `json:"level"`
-	Message   string `json:"msg"`
-	Source    string `json:"src"`
-}
-
 // SystemStatsResponse describes client system metrics.
 type SystemStatsResponse struct {
 	CPUUsage    float64 `json:"cpu_usage"`

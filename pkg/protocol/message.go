@@ -42,10 +42,7 @@ const (
 	MsgTypeUpdateProgress uint8 = 74 // 更新进度
 	MsgTypeUpdateResult   uint8 = 75 // 更新结果
 
-	// 日志相关消息
-	MsgTypeLogRequest        uint8 = 80 // 请求客户端日志
-	MsgTypeLogData           uint8 = 81 // 日志数据
-	MsgTypeLogStop           uint8 = 82 // 停止日志流
+	// 诊断相关消息
 	MsgTypeDiagnosticsQuery  uint8 = 83 // 远程诊断查询
 	MsgTypeDiagnosticsChunk  uint8 = 84 // 远程诊断结果块
 	MsgTypeOperationalEvents uint8 = 85 // 高价值运维事件批量上报
@@ -200,39 +197,6 @@ type UpdateProgressResponse struct {
 type UpdateResultResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
-}
-
-// LogRequest 日志请求
-type LogRequest struct {
-	SessionID string `json:"session_id"` // 会话 ID
-	Lines     int    `json:"lines"`      // 请求的日志行数
-	Follow    bool   `json:"follow"`     // 是否持续推送新日志
-	Level     string `json:"level"`      // 日志级别过滤
-}
-
-// LogEntry 日志条目
-type LogEntry struct {
-	Timestamp int64                            `json:"ts"`    // Unix 时间戳 (毫秒)
-	Level     string                           `json:"level"` // 日志级别: debug, info, warn, error
-	Message   string                           `json:"msg"`   // 日志消息
-	Source    string                           `json:"src"`   // 来源组件
-	EventCode string                           `json:"event_code,omitempty"`
-	NodeRole  string                           `json:"node_role,omitempty"`
-	NodeID    string                           `json:"node_id,omitempty"`
-	Fields    map[string]string                `json:"fields,omitempty"`
-	Corr      observability.CorrelationContext `json:"corr,omitempty"`
-}
-
-// LogData 日志数据
-type LogData struct {
-	SessionID string     `json:"session_id"` // 会话 ID
-	Entries   []LogEntry `json:"entries"`    // 日志条目
-	EOF       bool       `json:"eof"`        // 是否结束
-}
-
-// LogStopRequest 停止日志流请求
-type LogStopRequest struct {
-	SessionID string `json:"session_id"` // 会话 ID
 }
 
 type DiagnosticsQueryRequest struct {

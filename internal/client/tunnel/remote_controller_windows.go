@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/atotto/clipboard"
+	"github.com/gotunnel/pkg/utils"
 	"github.com/kbinani/screenshot"
 )
 
@@ -44,7 +45,7 @@ func newRemoteController() RemoteController {
 }
 
 func (c *windowsRemoteController) Capture() (image.Image, error) {
-	return screenshot.CaptureDisplay(0)
+	return screenshot.CaptureDisplay(utils.PrimaryDisplayIndex())
 }
 
 func (c *windowsRemoteController) ReadClipboard() (string, error) {
@@ -249,7 +250,7 @@ var windowsCharacterKeyMap = map[rune]uint16{
 }
 
 func scalePrimaryDisplayPoint(x, y int) (int, int) {
-	bounds := screenshot.GetDisplayBounds(0)
+	bounds := utils.PrimaryDisplayBounds()
 	logicalWidth := getSystemMetric(smCXScreen)
 	logicalHeight := getSystemMetric(smCYScreen)
 

@@ -17,7 +17,6 @@ import {
   type UpdateInfo, type SystemStats, type ScreenshotData
 } from '../api'
 import type { ProxyRule } from '../types'
-import InlineLogPanel from '../components/InlineLogPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -635,10 +634,6 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Inline Log Panel -->
-          <div class="glass-card">
-            <InlineLogPanel :client-id="clientId" />
-          </div>
         </div>
       </div>
 

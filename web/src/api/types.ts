@@ -204,19 +204,6 @@ export interface InstallCommandResponse {
   tunnel_port: number
 }
 
-export interface LogEntry {
-  ts: number
-  level: string
-  msg: string
-  src: string
-}
-
-export interface LogStreamOptions {
-  lines?: number
-  follow?: boolean
-  level?: string
-}
-
 export interface RemoteControlSocketOptions {
   quality?: number
   maxSide?: number
