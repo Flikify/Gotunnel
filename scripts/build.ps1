@@ -138,10 +138,6 @@ function Compress-Binary {
 }
 
 function Build-Web {
-    Write-Info "Generating Swagger docs..."
-    & go generate (Join-Path $RootDir "cmd\server")
-    if ($LASTEXITCODE -ne 0) { throw "swagger generation failed" }
-
     Write-Info "Building web UI..."
     $LegacyDistDir = Join-Path $RootDir "web\dist"
     if (Test-Path $LegacyDistDir) {

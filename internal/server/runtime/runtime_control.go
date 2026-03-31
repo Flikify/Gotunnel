@@ -38,6 +38,13 @@ func newRuntimeControl(
 }
 
 func (c *runtimeControl) registerClient(cs *ClientSession) {
+	// 如果同一个客户端 ID 已在线，踢掉旧连接
+	if oldSession, exists := c.sessions.get(cs.ID); exists {
+		log.Printf("[Server] Client %s reconnected, closing old session from %s", cs.ID, oldSession.RemoteAddr)
+		_ = oldSession.Session.Close()
+		c.sessions.remove(cs.ID)
+	}
+
 	c.sessions.add(cs)
 	c.persistClientConnectionInfo(cs.ID, cs.RemoteAddr, cs.OS, cs.Arch, cs.Version, 0)
 }

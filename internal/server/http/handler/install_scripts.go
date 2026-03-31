@@ -9,7 +9,7 @@ Usage: bash install.sh [-s <server:port>] [-t <token>]
 
 Options:
   -s  Tunnel server address (optional, will prompt if not provided)
-  -t  One-time install token (optional, will prompt if not provided)
+  -t  Server authentication token (optional, will prompt if not provided)
 EOF
 }
 
@@ -53,12 +53,12 @@ detect_arch() {
 }
 
 SERVER_ADDR=""
-INSTALL_TOKEN=""
+AUTH_TOKEN=""
 
 while getopts ":s:t:h" opt; do
   case "$opt" in
     s) SERVER_ADDR="$OPTARG" ;;
-    t) INSTALL_TOKEN="$OPTARG" ;;
+    t) AUTH_TOKEN="$OPTARG" ;;
     h)
       usage
       exit 0
@@ -80,11 +80,11 @@ if [[ -z "$SERVER_ADDR" ]]; then
   read -p "Enter tunnel server address (e.g., 10.0.0.2:7000): " SERVER_ADDR
 fi
 
-if [[ -z "$INSTALL_TOKEN" ]]; then
-  read -p "Enter install token: " INSTALL_TOKEN
+if [[ -z "$AUTH_TOKEN" ]]; then
+  read -p "Enter server authentication token: " AUTH_TOKEN
 fi
 
-if [[ -z "$SERVER_ADDR" || -z "$INSTALL_TOKEN" ]]; then
+if [[ -z "$SERVER_ADDR" || -z "$AUTH_TOKEN" ]]; then
   echo "error: server address and token are required" >&2
   exit 1
 fi
@@ -133,20 +133,29 @@ fi
 cp "$EXTRACTED_BIN" "$TARGET_BIN"
 chmod 0755 "$TARGET_BIN"
 
-if [[ -f "$PID_FILE" ]]; then
-  OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-  if [[ -n "$OLD_PID" ]]; then
-    kill "$OLD_PID" >/dev/null 2>&1 || true
-  fi
+CONFIG_FILE="$INSTALL_ROOT/client.yaml"
+cat > "$CONFIG_FILE" <<EOF
+server: $SERVER_ADDR
+token: $AUTH_TOKEN
+data_dir: $INSTALL_ROOT
+EOF
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Installing as system service requires root privileges..."
+  exec sudo "$TARGET_BIN" service install -c "$CONFIG_FILE"
 fi
 
-nohup "$TARGET_BIN" -s "$SERVER_ADDR" -t "$INSTALL_TOKEN" >>"$LOG_FILE" 2>&1 &
-NEW_PID=$!
-echo "$NEW_PID" >"$PID_FILE"
-
+echo "Installing as system service..."
+"$TARGET_BIN" service install -c "$CONFIG_FILE"
+echo "Service installed and started"
 echo "GoTunnel client installed to $TARGET_BIN"
-echo "Client started in background with PID $NEW_PID"
-echo "Logs: $LOG_FILE"
+echo "Config: $CONFIG_FILE"
+echo ""
+if [[ "$OS_NAME" == "linux" ]]; then
+  echo "Manage with: sudo systemctl start/stop/restart/status gotunnel-client"
+else
+  echo "Manage with: sudo launchctl ... or gotunnel-client service start/stop/restart/status"
+fi
 `
 
 const windowsInstallScript = `function Get-GoTunnelArch {
@@ -191,7 +200,7 @@ function Install-GoTunnel {
   }
 
   if (-not $Token) {
-    $Token = Read-Host "Enter install token"
+    $Token = Read-Host "Enter server authentication token"
   }
 
   if (-not $Server -or -not $Token) {
@@ -199,10 +208,11 @@ function Install-GoTunnel {
   }
 
   $Arch = Get-GoTunnelArch
-  $InstallRoot = Join-Path $env:LOCALAPPDATA 'GoTunnel'
+  $InstallRoot = Join-Path $env:ProgramData 'GoTunnel'
   $ExtractDir = Join-Path $InstallRoot 'extract'
   $ArchivePath = Join-Path $InstallRoot 'gotunnel-client.zip'
   $TargetPath = Join-Path $InstallRoot 'gotunnel-client.exe'
+  $ConfigPath = Join-Path $InstallRoot 'client.yaml'
   $DownloadUrl = Get-GoTunnelDownloadUrl -Arch $Arch
 
   New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
@@ -225,13 +235,17 @@ function Install-GoTunnel {
 
   Copy-Item -Path $Binary.FullName -Destination $TargetPath -Force
 
-  Get-Process |
-    Where-Object { $_.Path -eq $TargetPath } |
-    Stop-Process -Force -ErrorAction SilentlyContinue
+  @"
+server: $Server
+token: $Token
+data_dir: $InstallRoot
+"@ | Out-File -FilePath $ConfigPath -Encoding UTF8
 
-  Start-Process -FilePath $TargetPath -ArgumentList @('-s', $Server, '-t', $Token) -WindowStyle Hidden
+  & $TargetPath service install -c $ConfigPath
 
   Write-Host "GoTunnel client installed to $TargetPath"
-  Write-Host 'Client started in background.'
+  Write-Host "Config: $ConfigPath"
+  Write-Host "Service installed and started"
+  Write-Host "Manage with: sc.exe or services.msc"
 }
 `

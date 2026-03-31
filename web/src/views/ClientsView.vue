@@ -5,17 +5,16 @@ import GlassModal from '../components/GlassModal.vue'
 import MetricCard from '../components/MetricCard.vue'
 import PageFrame from '../components/PageFrame.vue'
 import SectionCard from '../components/SectionCard.vue'
-import { generateInstallCommand, getClients } from '../api'
+import { getClients, getServerInfo } from '../api'
 import { useToast } from '../composables/useToast'
-import type { ClientStatus, InstallCommandResponse } from '../types'
+import type { ClientStatus } from '../types'
 
 const router = useRouter()
 const message = useToast()
 const clients = ref<ClientStatus[]>([])
 const loading = ref(true)
 const showInstallModal = ref(false)
-const installData = ref<InstallCommandResponse | null>(null)
-const generatingInstall = ref(false)
+const tunnelPort = ref(7000)
 const search = ref('')
 
 const quoteBashArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
@@ -64,23 +63,22 @@ const writeClipboardText = async (value: string) => {
   }
 }
 
-const buildInstallCommands = (data: InstallCommandResponse): InstallCommandItem[] => {
-  const serverAddr = formatServerAddr(resolveTunnelHost(), data.tunnel_port)
+const buildInstallCommands = (): InstallCommandItem[] => {
+  const serverAddr = formatServerAddr(resolveTunnelHost(), tunnelPort.value)
   const psServerAddr = quotePowerShellSingle(serverAddr)
-  const psToken = quotePowerShellSingle(data.token)
 
   return [
     {
       label: 'Linux',
-      value: `bash <(curl -fsSL ${githubInstallScriptUrl}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}`,
+      value: `bash <(curl -fsSL ${githubInstallScriptUrl}) -s ${quoteBashArg(serverAddr)}`,
     },
     {
       label: 'macOS',
-      value: `bash <(curl -fsSL ${githubInstallScriptUrl}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(data.token)}`,
+      value: `bash <(curl -fsSL ${githubInstallScriptUrl}) -s ${quoteBashArg(serverAddr)}`,
     },
     {
       label: 'Windows',
-      value: `powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr '${githubInstallPs1Url}' | iex; Install-GoTunnel -Server '${psServerAddr}' -Token '${psToken}'"`,
+      value: `powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr '${githubInstallPs1Url}' | iex; Install-GoTunnel -Server '${psServerAddr}'"`,
     }
   ]
 }
@@ -99,16 +97,13 @@ const loadClients = async () => {
 }
 
 const openInstallModal = async () => {
-  generatingInstall.value = true
   try {
-    const { data } = await generateInstallCommand()
-    installData.value = data
+    const { data } = await getServerInfo()
+    tunnelPort.value = data.bind_port || 7000
     showInstallModal.value = true
   } catch (error) {
-    console.error('Failed to generate install command', error)
-    message.error('安装命令生成失败')
-  } finally {
-    generatingInstall.value = false
+    console.error('Failed to get server info', error)
+    message.error('获取服务器信息失败')
   }
 }
 
@@ -134,7 +129,7 @@ const filteredClients = computed(() => {
 
 const onlineClients = computed(() => clients.value.filter((client) => client.online).length)
 const offlineClients = computed(() => Math.max(clients.value.length - onlineClients.value, 0))
-const installCommands = computed(() => (installData.value ? buildInstallCommands(installData.value) : null))
+const installCommands = computed(() => buildInstallCommands())
 
 onMounted(loadClients)
 </script>
@@ -142,8 +137,8 @@ onMounted(loadClients)
 <template>
   <PageFrame title="客户端" eyebrow="Clients" subtitle="统一管理已注册节点、连接状态与快速安装命令，减少操作跳转。">
     <template #actions>
-      <button class="glass-btn" :disabled="generatingInstall" @click="openInstallModal">
-        {{ generatingInstall ? '生成中...' : '安装命令' }}
+      <button class="glass-btn" @click="openInstallModal">
+        安装命令
       </button>
       <button class="glass-btn primary" @click="loadClients">{{ loading ? '刷新中...' : '刷新列表' }}</button>
     </template>

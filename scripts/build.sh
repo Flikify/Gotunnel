@@ -55,9 +55,6 @@ compress_binary() {
 }
 
 build_web() {
-    log_info "Generating Swagger docs..."
-    go generate "$ROOT_DIR/cmd/server"
-
     log_info "Building web UI..."
     rm -rf "$ROOT_DIR/web/dist"
     pushd "$ROOT_DIR/web" >/dev/null

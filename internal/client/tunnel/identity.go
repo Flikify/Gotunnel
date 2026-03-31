@@ -53,7 +53,6 @@ func resolveClientName(explicit string) string {
 
 func resolveClientID(dataDir, explicit string) string {
 	if explicit != "" {
-		_ = persistClientID(dataDir, explicit)
 		return explicit
 	}
 

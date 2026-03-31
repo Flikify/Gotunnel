@@ -51,7 +51,8 @@ func main() {
 	serviceAction := flag.String("service-action", "", "manage background service: install|uninstall|start|stop|restart|status")
 	serviceName := flag.String("service-name", defaultServiceName(), "service name / label")
 	serviceDisplayName := flag.String("service-display-name", defaultServiceDisplayName(), "service display name")
-	serviceLogPath := flag.String("service-log-file", "", "service log file path")
+	serviceLogPath := flag.String("log", "", "service log file path")
+	flag.String("service-log-file", "", "deprecated: use -log instead")
 	flag.Parse()
 
 	var cfg *config.ClientConfig

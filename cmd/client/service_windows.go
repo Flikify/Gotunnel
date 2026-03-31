@@ -20,7 +20,11 @@ import (
 )
 
 func runClient(opts runtimeOptions) error {
-	if !opts.ServiceMode {
+	isService, err := svc.IsWindowsService()
+	if err != nil {
+		return fmt.Errorf("check service mode: %w", err)
+	}
+	if !isService {
 		return runConsoleClient(opts.AppConfig)
 	}
 	return runWindowsService(opts)
@@ -218,15 +222,7 @@ func windowsServiceConfig(exePath string, opts serviceCommandOptions) mgr.Config
 }
 
 func windowsServiceArgs(opts serviceCommandOptions) []string {
-	args := []string{
-		"-c", opts.ConfigPath,
-		"-service",
-		"-service-name", opts.Name,
-	}
-	if opts.LogPath != "" {
-		args = append(args, "-service-log-file", opts.LogPath)
-	}
-	return args
+	return []string{"-c", opts.ConfigPath}
 }
 
 func buildWindowsServiceCommandLine(exePath string, args []string) string {

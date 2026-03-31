@@ -8,8 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gotunnel/internal/server/service"
 	db "github.com/gotunnel/internal/server/storage/sqlite"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 
 	"github.com/gotunnel/internal/server/http/handler"
 	"github.com/gotunnel/internal/server/http/middleware"
@@ -58,9 +56,6 @@ func (r *GinRouter) SetupRoutes(deps Dependencies) {
 	engine.Use(middleware.Recovery())
 	engine.Use(middleware.Logger())
 	engine.Use(middleware.CORS())
-
-	// Swagger 文档
-	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// 认证路由 (无需 JWT)
 	authHandler := handler.NewAuthHandler(deps.Username, deps.Password, deps.JWTAuth)
