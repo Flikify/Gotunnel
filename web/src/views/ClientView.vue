@@ -431,10 +431,10 @@ onMounted(() => {
   loadServerVersion()
   loadServerRuntimeConfig()
   loadClient()
-  // 启动自动轮询，每 5 秒刷新一次
+  // 启动自动轮询，每 10 秒刷新一次
   pollTimer.value = window.setInterval(() => {
     loadClient()
-  }, 5000)
+  }, 10000)
 })
 
 onUnmounted(() => {

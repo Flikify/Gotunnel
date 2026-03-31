@@ -33,8 +33,12 @@ func init() {
 }
 
 func main() {
-	configPath := flag.String("c", "server.yaml", "config file path")
+	configPath := flag.String("c", "", "config file path (required)")
 	flag.Parse()
+
+	if *configPath == "" {
+		log.Fatal("Error: -c flag is required. Usage: server -c <config-file>")
+	}
 
 	log.Fatal(bootstrap.Run(*configPath))
 }

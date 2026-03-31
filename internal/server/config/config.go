@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -33,7 +34,6 @@ type WebSettings struct {
 	BindPort  int    `yaml:"bind_port"`
 	Username  string `yaml:"username"`
 	Password  string `yaml:"password"`
-	JWTSecret string `yaml:"jwt_secret"`
 	CDNPrefix string `yaml:"cdn_prefix"` // GitHub CDN 加速前缀
 }
 
@@ -73,7 +73,12 @@ func setDefaults(cfg *ServerConfig) {
 		cfg.Server.ClientResponseTimeoutSec = 15
 	}
 	if cfg.Server.DBPath == "" {
-		cfg.Server.DBPath = "gotunnel.db"
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			cfg.Server.DBPath = "gotunnel.db"
+		} else {
+			cfg.Server.DBPath = filepath.Join(homeDir, ".gotunnel", "gotunnel.db")
+		}
 	}
 
 	// Web 默认启用
@@ -81,15 +86,10 @@ func setDefaults(cfg *ServerConfig) {
 		cfg.Server.Web.BindPort = 7500
 		cfg.Server.Web.Enabled = true
 	}
-
-	// Token 未配置时自动生成 32 位
-	if cfg.Server.Token == "" {
-		cfg.Server.Token = generateToken(32)
-	}
 }
 
-// generateToken 生成随机 token
-func generateToken(length int) string {
+// GenerateToken 生成随机 token
+func GenerateToken(length int) string {
 	bytes := make([]byte, length/2)
 	n, err := rand.Read(bytes)
 	if err != nil || n != len(bytes) {
@@ -101,23 +101,15 @@ func generateToken(length int) string {
 
 // GenerateWebCredentials 生成 Web 控制台凭据
 func GenerateWebCredentials(cfg *ServerConfig) bool {
+	generated := false
 	if cfg.Server.Web.Username == "" {
 		cfg.Server.Web.Username = "admin"
 	}
 	if cfg.Server.Web.Password == "" {
-		cfg.Server.Web.Password = generateToken(16)
-		return true // 表示生成了新密码
+		cfg.Server.Web.Password = GenerateToken(16)
+		generated = true
 	}
-	return false
-}
-
-// GenerateWebJWTSecret ensures the web console uses an isolated JWT signing key.
-func GenerateWebJWTSecret(cfg *ServerConfig) bool {
-	if cfg.Server.Web.JWTSecret == "" {
-		cfg.Server.Web.JWTSecret = generateToken(32)
-		return true
-	}
-	return false
+	return generated
 }
 
 // SaveServerConfig 保存服务端配置

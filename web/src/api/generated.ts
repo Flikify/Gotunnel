@@ -214,7 +214,6 @@ export interface DtoWebConfigInfo {
   enabled?: boolean
   password?: string
   username?: string
-  cdn_prefix?: string
 }
 
 export interface DtoWebConfigPart {
@@ -222,7 +221,6 @@ export interface DtoWebConfigPart {
   enabled?: boolean
   password?: string
   username?: string
-  cdn_prefix?: string
 }
 
 export interface HandlerInstallCommandResponse {

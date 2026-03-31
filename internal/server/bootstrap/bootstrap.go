@@ -27,6 +27,12 @@ func Run(configPath string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	// 确保数据库目录存在
+	dbDir := filepath.Dir(cfg.Server.DBPath)
+	if err := os.MkdirAll(dbDir, 0700); err != nil {
+		return fmt.Errorf("create db directory: %w", err)
+	}
+
 	store, err := db.NewSQLiteStore(cfg.Server.DBPath)
 	if err != nil {
 		return fmt.Errorf("init database: %w", err)
@@ -82,20 +88,29 @@ func Run(configPath string) error {
 	}
 
 	if cfg.Server.Web.Enabled {
+		generatedToken := false
+		if cfg.Server.Token == "" {
+			cfg.Server.Token = config.GenerateToken(32)
+			generatedToken = true
+			log.Printf("[Server] Auto-generated token: %s", cfg.Server.Token)
+			log.Printf("[Server] Please save this token and update your config file")
+		}
+
 		generatedWebCreds := config.GenerateWebCredentials(cfg)
-		generatedWebJWT := config.GenerateWebJWTSecret(cfg)
 		if generatedWebCreds {
 			log.Printf("[Web] Auto-generated credentials - Username: %s, Password: %s",
 				cfg.Server.Web.Username, cfg.Server.Web.Password)
 			log.Printf("[Web] Please save these credentials and update your config file")
 		}
-		if generatedWebJWT {
-			log.Printf("[Web] Generated isolated JWT signing secret for the web console")
-		}
-		if generatedWebCreds || generatedWebJWT {
+		if generatedToken || generatedWebCreds {
 			if err := config.SaveServerConfig(configPath, cfg); err != nil {
-				log.Printf("[Web] Warning: failed to save config: %v", err)
+				log.Printf("[Warning] Failed to save config: %v", err)
 			}
+		}
+
+		jwtSecret, err := loadOrCreateJWTSecret(store)
+		if err != nil {
+			return fmt.Errorf("load JWT secret: %w", err)
 		}
 
 		if webTLSConfig == nil {
@@ -105,7 +120,7 @@ func Run(configPath string) error {
 		webServer := app.NewWebServer(store, server, cfg, configPath, webTLSConfig)
 		addr := fmt.Sprintf("%s:%d", cfg.Server.BindAddr, cfg.Server.Web.BindPort)
 		go func() {
-			if err := webServer.Run(addr, cfg.Server.Web.Username, cfg.Server.Web.Password, cfg.Server.Web.JWTSecret); err != nil {
+			if err := webServer.Run(addr, cfg.Server.Web.Username, cfg.Server.Web.Password, jwtSecret); err != nil {
 				log.Printf("[Web] Server error: %v", err)
 			}
 		}()
@@ -127,6 +142,7 @@ func Run(configPath string) error {
 const (
 	serverTLSCertMetadataKey = "server_tls_cert_pem"
 	serverTLSKeyMetadataKey  = "server_tls_key_pem"
+	serverJWTSecretKey       = "server_jwt_secret"
 )
 
 func loadOrCreateTLSConfig(store interface {
@@ -160,4 +176,24 @@ func loadOrCreateTLSConfig(store interface {
 		return nil, err
 	}
 	return crypto.TLSConfigFromPEM(generatedCertPEM, generatedKeyPEM)
+}
+
+func loadOrCreateJWTSecret(store interface {
+	GetServerMetadata(key string) (string, error)
+	SetServerMetadata(key, value string) error
+}) (string, error) {
+	secret, err := store.GetServerMetadata(serverJWTSecretKey)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	if secret != "" {
+		return secret, nil
+	}
+
+	secret = crypto.GenerateRandomHex(32)
+	if err := store.SetServerMetadata(serverJWTSecretKey, secret); err != nil {
+		return "", err
+	}
+	log.Printf("[Web] Generated JWT signing secret")
+	return secret, nil
 }

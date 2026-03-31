@@ -79,7 +79,7 @@ const formatTime = (ts: number): string => {
 }
 
 onMounted(() => {
-  startStream()
+  // 不自动启动，让用户手动点击
 })
 
 onUnmounted(() => {
