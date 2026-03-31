@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents working in this repository.
 
 ## Build Commands
 
@@ -9,74 +9,91 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 go build -o server ./cmd/server
 go build -o client ./cmd/client
 
-# Run server (zero-config, auto-generates token and TLS cert)
-./server
-./server -c server.yaml  # with config file
+# Run server
+./server -c server.yaml
 
 # Run client
 ./client -s <server>:7000 -t <token>
 
 # Web UI development (in web/ directory)
-cd web && npm install && npm run dev    # development server
-cd web && npm run build                  # production build (outputs to web/dist/)
+cd web && npm install && npm run dev
+cd web && npm run build          # production build → web/dist/
 
-# Cross-platform build (Windows PowerShell)
-.\scripts\build.ps1
+# Cross-platform build
+./scripts/build.sh all           # Linux/Mac
+.\scripts\build.ps1              # Windows
+```
 
-# Cross-platform build (Linux/Mac)
-./scripts/build.sh all
+## Test Commands
+
+```bash
+# Run all Go tests
+go test ./...
+
+# Run tests in a specific package
+go test ./internal/server/service/
+go test ./pkg/protocol/
+
+# Run a single test by name
+go test -run TestClientServiceCreateClientPersistsRules ./internal/server/service/
+go test -run TestRemoteControlFrameRoundTrip ./pkg/protocol/
+
+# Verbose output
+go test -v -run TestValidateProxyRuleLimit ./internal/server/runtime/
+
+# Count and timeout
+go test -count=1 -timeout=30s ./...
+
+# No lint command configured; use `go vet` as baseline
+go vet ./...
 ```
 
 ## Architecture Overview
 
-GoTunnel is an intranet penetration tool (similar to frp) with **server-centric configuration** - clients require zero configuration and receive mapping rules from the server after authentication.
+GoTunnel is an intranet penetration tool (like frp) with **server-centric configuration**. Clients receive mapping rules from the server after authentication.
 
 ### Core Design
 
-- **Yamux Multiplexing**: Single TCP connection carries both control (auth, config, heartbeat) and data channels
-- **Binary Protocol**: `[Type(1 byte)][Length(4 bytes)][Payload(JSON)]` - see `pkg/protocol/message.go`
-- **TLS by Default**: Auto-generated self-signed ECDSA P-256 certificates, no manual setup required
-- **Embedded Web UI**: Vue.js SPA embedded in server binary via `//go:embed`
-- **JS Plugin System**: Extensible plugin system using goja JavaScript runtime
+- **Yamux Multiplexing**: Single TCP connection carries control + data channels
+- **Binary Protocol**: `[Type(1 byte)][Length(4 bytes)][Payload(JSON)]` — see `pkg/protocol/message.go`
+- **TLS by Default**: Auto-generated self-signed ECDSA P-256 certificates
+- **Embedded Web UI**: Vue.js SPA embedded via `//go:embed`
+- **JS Plugin System**: goja JavaScript runtime
 
 ### Package Structure
 
 ```
-cmd/server/          # Server entry point
-cmd/client/          # Client entry point
+cmd/server/              # Server entry point
+cmd/client/              # Client entry point
+internal/core/
+  ├── client/            # Client domain model
+  ├── rule/              # Proxy rule domain model
+  └── domain/            # Aggregate type aliases
 internal/server/
-  ├── runtime/       # Core tunnel runtime, client session management
-  ├── config/        # YAML configuration loading
-  ├── storage/sqlite/# SQLite storage adapters
-  ├── app/           # Web server, SPA handler
-  ├── http/          # REST API endpoints (Swagger documented)
-  └── plugin/        # Server-side JS plugin manager
+  ├── runtime/           # Tunnel runtime, session management
+  ├── config/            # YAML configuration loading
+  ├── storage/sqlite/    # SQLite storage adapters (ClientStore interface)
+  ├── app/               # Web server, SPA handler
+  ├── http/
+  │   ├── handler/       # REST API handlers (Swagger documented)
+  │   └── dto/           # Request/response DTOs
+  ├── service/           # Business logic services
+  ├── bootstrap/         # Server startup orchestration
+  └── plugin/            # Server-side JS plugin manager
 internal/client/
-  └── tunnel/        # Client tunnel logic, auto-reconnect, plugin execution
+  └── tunnel/            # Client tunnel logic, auto-reconnect
 pkg/
-  ├── protocol/      # Message types and serialization
-  ├── crypto/        # TLS certificate generation
-  ├── relay/         # Bidirectional data relay (32KB buffers)
-  ├── auth/          # JWT authentication
-  ├── utils/         # Port availability checking
-  ├── version/       # Version info and update checking (GitHub Releases API)
-  └── update/        # Shared update logic (download, extract tar.gz/zip)
-web/                 # Vue 3 + TypeScript frontend (Vite)
-scripts/             # Build scripts (build.sh, build.ps1)
+  ├── protocol/          # Message types and serialization
+  ├── crypto/            # TLS certificate generation
+  ├── relay/             # Bidirectional data relay (32KB buffers)
+  ├── auth/              # JWT authentication
+  ├── utils/             # Port availability checking
+  ├── version/           # Version info, GitHub Releases API
+  ├── update/            # Download, extract, binary replacement
+  └── observability/     # Operational event storage
+web/                     # Vue 3 + TypeScript (Vite)
+scripts/                 # Build scripts
 ```
-
-### Key Interfaces
-
-- `ClientStore` (internal/server/storage/sqlite/): Database abstraction for client rules storage
-- `ServerInterface` (internal/server/http/handler/): API handler interface
-
-### Proxy Types
-
-1. **TCP** (default): Direct port forwarding (remote_port → local_ip:local_port)
-2. **UDP**: UDP port forwarding
-3. **HTTP**: HTTP proxy through client network
-4. **HTTPS**: HTTPS proxy through client network
-5. **SOCKS5**: SOCKS5 proxy through client network
 
 ### Data Flow
 
@@ -85,28 +102,50 @@ External User → Server Port → Yamux Stream → Client → Local Service
 ### Configuration
 
 - Server: YAML config + SQLite database for client rules
-- Client: Command-line flags only (server address, token)
+- Client: Command-line flags only (`-s` server address, `-t` token)
 - Default ports: 7000 (tunnel), 7500 (web console)
 
-## API Documentation
+## Code Style
 
-The server provides Swagger-documented REST APIs at `/api/`.
+### Imports
 
-### Key Endpoints
+- Group imports in two blocks: stdlib first, then external (separated by blank line)
+- Use import aliases when the package name is ambiguous or collides:
+  - `domain "github.com/gotunnel/internal/core/domain"`
+  - `db "github.com/gotunnel/internal/server/storage/sqlite"`
+  - `coreclient "github.com/gotunnel/internal/core/client"`
+- Use blank identifier `_` imports for side-effect-only imports (e.g., Swagger docs)
 
-- `POST /api/auth/login` - JWT authentication
-- `GET /api/clients` - List all clients
-- `GET /api/clients/{id}` - Get client details
-- `PUT /api/clients/{id}` - Update client config
-- `POST /api/clients/{id}/actions/push-config` - Push config to online client
-- `GET /api/runtime/status` - Get server runtime status
-- `GET /api/updates/server` - Check server updates
-- `POST /api/updates/server/actions/apply` - Apply server update
+### Naming
 
-## Update System
+- Exported types use PascalCase; unexported use camelCase
+- Test fakes are named `fake<Interface>` (e.g., `fakeClientService`, `fakeClientRepository`)
+- Constructor functions are `New<Type>` (e.g., `NewClientHandler`, `NewClientService`)
+- Test functions follow `Test<Unit><Behavior>` (e.g., `TestClientServiceCreateClientPersistsRules`)
+- Chinese comments are used for exported documentation; English is acceptable
 
-Both server and client support self-update from GitHub releases.
+### Error Handling
 
-- Release assets are compressed archives (`.tar.gz` for Linux/Mac, `.zip` for Windows)
-- The `pkg/update/` package handles download, extraction, and binary replacement
-- Updates can be triggered from the Web UI at `/update` page
+- Return `error` as the last return value
+- Use sentinel errors for service-layer business rules (e.g., `ErrClientAlreadyExists`, `ErrClientNotOnline`)
+- Use `errors.Is()` for sentinel error comparison in tests
+- HTTP handlers map service errors to appropriate HTTP status codes via helper functions (`InternalError`, `NotFound`, `BindJSON`)
+- Prefer `t.Fatalf` with descriptive format strings in tests: `t.Fatalf("unexpected status: got %d want %d", got, want)`
+
+### Testing
+
+- Tests live in `_test.go` files in the same package (white-box testing)
+- Use standard `testing` package — no external test frameworks
+- Define fakes as unexported structs implementing the required interfaces inline
+- Use `net.Pipe()` for simulating network connections
+- Use `httptest.NewRecorder()` and `gin.CreateTestContext()` for HTTP handler tests
+- Set `gin.SetMode(gin.TestMode)` before handler tests
+- Table-driven tests are welcome but not required
+
+### General Conventions
+
+- Prefer interfaces for dependencies to enable testability
+- Lock/unlock mutexes explicitly (no `defer` for short critical sections is acceptable)
+- Use `//go:embed` directives for static assets
+- Swagger annotations on HTTP handlers: `// @Summary`, `// @Router`, etc.
+- Validate and set defaults in config methods (see `ApplyRuntimeConfig`)
