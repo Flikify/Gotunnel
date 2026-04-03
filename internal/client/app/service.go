@@ -27,6 +27,7 @@ type Config struct {
 	TLSEnabled        bool
 	TLSConfig         *tls.Config
 	Features          *tunnel.PlatformFeatures
+	RemoteOpsProxy    tunnel.RemoteOpsProxy
 	ReconnectDelay    time.Duration
 	ReconnectMaxDelay time.Duration
 }
@@ -212,6 +213,7 @@ func (s *Service) prepareLocked(cancel context.CancelFunc) (*tunnel.Client, erro
 		ClientID:          s.config.ClientID,
 		ClientName:        s.config.ClientName,
 		Features:          s.config.Features,
+		RemoteOpsProxy:    s.config.RemoteOpsProxy,
 		ReconnectDelay:    s.config.ReconnectDelay,
 		ReconnectMaxDelay: s.config.ReconnectMaxDelay,
 	})

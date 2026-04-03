@@ -593,22 +593,24 @@ function goBack() {
         <p>{{ statusText }}</p>
       </div>
 
-      <div class="remote-page__stats">
-        <span class="remote-page__badge">{{ connectionBadge }}</span>
-        <span>{{ desktopWidth || '—' }}x{{ desktopHeight || '—' }}</span>
-        <span>{{ fps }} FPS</span>
-        <span>{{ frameIntervalMs }}ms</span>
-      </div>
+      <div class="remote-page__controls">
+        <div class="remote-page__stats">
+          <span class="remote-page__badge">{{ connectionBadge }}</span>
+          <span>{{ desktopWidth || '—' }}x{{ desktopHeight || '—' }}</span>
+          <span>{{ fps }} FPS</span>
+          <span>{{ frameIntervalMs }}ms</span>
+        </div>
 
-      <div class="remote-page__actions">
-        <button class="remote-page__action" @click="loadClientAndOpenSession">
-          <RefreshOutline />
-          <span>重连</span>
-        </button>
-        <button class="remote-page__action remote-page__action--primary" @click="toggleFullscreen">
-          <ExpandOutline />
-          <span>全屏</span>
-        </button>
+        <div class="remote-page__actions">
+          <button class="remote-page__action" @click="loadClientAndOpenSession">
+            <RefreshOutline />
+            <span>重连</span>
+          </button>
+          <button class="remote-page__action remote-page__action--primary" @click="toggleFullscreen">
+            <ExpandOutline />
+            <span>全屏</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -663,11 +665,11 @@ function goBack() {
 
 .remote-page__bar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px 14px;
   align-items: center;
-  padding: 12px 14px;
-  border-radius: 18px;
+  padding: 10px 14px;
+  border-radius: 16px;
   background: var(--remote-panel);
   border: 1px solid var(--remote-panel-border);
   box-shadow:
@@ -682,13 +684,23 @@ function goBack() {
   background: rgba(18, 30, 51, 0.82);
   color: var(--remote-text);
   border-radius: 12px;
-  padding: 9px 12px;
+  padding: 8px 12px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
   transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
   font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.remote-page__back :deep(svg),
+.remote-page__action :deep(svg) {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .remote-page__back:hover,
@@ -703,11 +715,18 @@ function goBack() {
   border-color: rgba(137, 182, 255, 0.36);
 }
 
+.remote-page__title {
+  min-width: 0;
+}
+
 .remote-page__title h1 {
-  margin: 2px 0 4px;
-  font-size: 22px;
-  line-height: 1.05;
+  margin: 2px 0 2px;
+  font-size: 20px;
+  line-height: 1.08;
   letter-spacing: -0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .remote-page__title p,
@@ -726,22 +745,33 @@ function goBack() {
   color: rgba(148, 187, 244, 0.78);
 }
 
+.remote-page__controls {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .remote-page__stats,
 .remote-page__actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
 .remote-page__stats span {
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 5px 9px;
   background: rgba(19, 31, 53, 0.88);
   border: 1px solid rgba(124, 159, 216, 0.14);
   color: #d9e8ff;
   font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .remote-page__badge {
@@ -756,7 +786,7 @@ function goBack() {
 
 .remote-stage {
   height: 100%;
-  min-height: calc(100vh - 108px);
+  min-height: calc(100vh - 96px);
   border-radius: 24px;
   background:
     radial-gradient(circle at top, rgba(58, 100, 163, 0.22), transparent 42%),
@@ -800,6 +830,17 @@ function goBack() {
   letter-spacing: -0.03em;
 }
 
+@media (max-width: 1320px) {
+  .remote-page__bar {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .remote-page__controls {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+}
+
 @media (max-width: 1100px) {
   .remote-page {
     padding: 10px;
@@ -811,13 +852,14 @@ function goBack() {
     justify-items: stretch;
   }
 
+  .remote-page__controls,
   .remote-page__stats,
   .remote-page__actions {
     justify-content: flex-start;
   }
 
   .remote-stage {
-    min-height: calc(100vh - 162px);
+    min-height: calc(100vh - 152px);
   }
 }
 </style>

@@ -1,8 +1,11 @@
 package tunnel
 
 import (
+	"net"
 	"runtime"
 	"time"
+
+	"github.com/gotunnel/pkg/protocol"
 )
 
 // PlatformFeatures controls which platform-specific capabilities the client may use.
@@ -13,12 +16,19 @@ type PlatformFeatures struct {
 	AllowRemoteControl bool
 }
 
+// RemoteOpsProxy forwards desktop-bound requests to a local helper runtime.
+type RemoteOpsProxy interface {
+	ProxyScreenshot(stream net.Conn, msg *protocol.Message) error
+	ProxyRemoteControl(stream net.Conn, msg *protocol.Message) error
+}
+
 // ClientOptions controls optional client runtime settings.
 type ClientOptions struct {
 	DataDir           string
 	ClientID          string
 	ClientName        string
 	Features          *PlatformFeatures
+	RemoteOpsProxy    RemoteOpsProxy
 	ReconnectDelay    time.Duration
 	ReconnectMaxDelay time.Duration
 }

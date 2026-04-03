@@ -45,6 +45,7 @@ type Client struct {
 	DataDir    string
 
 	features          PlatformFeatures
+	remoteOpsProxy    RemoteOpsProxy
 	reconnectDelay    time.Duration
 	reconnectMaxDelay time.Duration
 
@@ -99,6 +100,7 @@ func NewClientWithOptions(serverAddr, token string, opts ClientOptions) *Client 
 		Name:              resolveClientName(opts.ClientName),
 		DataDir:           dataDir,
 		features:          features,
+		remoteOpsProxy:    opts.RemoteOpsProxy,
 		reconnectDelay:    delay,
 		reconnectMaxDelay: maxDelay,
 		logger:            logger,
@@ -499,6 +501,11 @@ func (c *Client) handleStream(stream net.Conn) {
 	default:
 		stream.Close()
 	}
+}
+
+// HandleControlConnection serves a single already-open control stream.
+func (c *Client) HandleControlConnection(stream net.Conn) {
+	c.handleStream(stream)
 }
 
 func (c *Client) handleProxyConfig(stream net.Conn, msg *protocol.Message) {
@@ -968,6 +975,16 @@ func (c *Client) handleSystemStatsRequest(stream net.Conn, msg *protocol.Message
 }
 
 func (c *Client) handleScreenshotRequest(stream net.Conn, msg *protocol.Message) {
+	if c.remoteOpsProxy != nil {
+		if err := c.remoteOpsProxy.ProxyScreenshot(stream, msg); err != nil {
+			defer stream.Close()
+			resp := protocol.ScreenshotResponse{Error: err.Error()}
+			respMsg, _ := protocol.NewMessage(protocol.MsgTypeScreenshotResponse, resp)
+			_ = protocol.WriteMessage(stream, respMsg)
+		}
+		return
+	}
+
 	defer stream.Close()
 
 	var req protocol.ScreenshotRequest

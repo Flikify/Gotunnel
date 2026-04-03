@@ -344,6 +344,11 @@ f=$(mktemp);curl -fsSL 'https://raw.githubusercontent.com/Flikify/Gotunnel/main/
 - Linux：注册为 `systemd` 服务 `gotunnel-client.service`，开机自启，失败自动重启。
 - macOS：注册为 `launchd` daemon `com.gotunnel.client`，开机自启，异常退出自动拉起。
 
+注意：
+
+- Windows 客户端如果以 Windows Service 运行，会由服务进程保活隧道连接，并在检测到活动用户会话时拉起一个该会话内的 desktop helper 来处理截图和远控画面采集。
+- 如果当前机器没有已登录的活动用户会话，或者桌面被锁定 / 切到 UAC secure desktop，截图和远控画面仍然会不可用。
+
 ## 使用场景
 
 ### 场景一：暴露内网 Web 服务

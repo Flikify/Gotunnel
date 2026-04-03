@@ -660,9 +660,15 @@ onUnmounted(() => {
                 {{ new Date(screenshotData.timestamp).toLocaleTimeString() }} ({{ screenshotData.width }}x{{ screenshotData.height }})
               </div>
             </div>
-            <div v-else class="empty-hint" @click="loadScreenshot">
+            <button
+              v-else
+              type="button"
+              class="empty-hint empty-hint--interactive screenshot-empty-state"
+              :disabled="loadingScreenshot"
+              @click="loadScreenshot"
+            >
               {{ loadingScreenshot ? '截图中...' : '点击获取截图' }}
-            </div>
+            </button>
           </div>
         </div>
 
@@ -1053,6 +1059,32 @@ onUnmounted(() => {
   font-size: 13px;
   text-align: center;
   padding: 16px 0;
+}
+
+.empty-hint--interactive {
+  border: none;
+  background: none;
+  width: 100%;
+  font: inherit;
+}
+
+.screenshot-empty-state {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.screenshot-empty-state:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+}
+
+.screenshot-empty-state:disabled {
+  cursor: wait;
 }
 
 .update-available p {

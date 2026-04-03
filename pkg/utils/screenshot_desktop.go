@@ -11,7 +11,7 @@ import (
 
 // CaptureScreenshot captures the primary display.
 func CaptureScreenshot(quality int) ([]byte, int, int, error) {
-	img, err := capturePrimaryScreenshot()
+	img, err := CapturePrimaryDisplayImage()
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("capture screen: %w", err)
 	}
@@ -22,6 +22,15 @@ func CaptureScreenshot(quality int) ([]byte, int, int, error) {
 	}
 
 	return encodeJPEG(img, quality)
+}
+
+// CapturePrimaryDisplayImage captures the primary display as an RGBA image.
+func CapturePrimaryDisplayImage() (*image.RGBA, error) {
+	img, err := capturePrimaryScreenshot()
+	if err != nil {
+		return nil, annotateScreenshotError(err)
+	}
+	return img, nil
 }
 
 func capturePrimaryScreenshot() (*image.RGBA, error) {
@@ -62,7 +71,7 @@ func CaptureAllScreens(quality int) ([]byte, int, int, error) {
 
 	img, err := screenshot.CaptureRect(virtualBounds)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("capture screen: %w", err)
+		return nil, 0, 0, fmt.Errorf("capture screen: %w", annotateScreenshotError(err))
 	}
 
 	return encodeJPEG(img, quality)

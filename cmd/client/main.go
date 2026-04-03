@@ -38,6 +38,12 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "desktop-helper" {
+		if err := runDesktopHelperCLI(os.Args[2:]); err != nil {
+			log.Fatalf("Desktop helper failed: %v", err)
+		}
+		return
+	}
 
 	server := flag.String("s", "", "server address (ip:port)")
 	token := flag.String("t", "", "auth token")

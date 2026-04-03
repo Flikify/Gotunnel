@@ -11,7 +11,6 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/gotunnel/pkg/utils"
-	"github.com/kbinani/screenshot"
 )
 
 const (
@@ -45,7 +44,7 @@ func newRemoteController() RemoteController {
 }
 
 func (c *windowsRemoteController) Capture() (image.Image, error) {
-	return screenshot.CaptureDisplay(utils.PrimaryDisplayIndex())
+	return utils.CapturePrimaryDisplayImage()
 }
 
 func (c *windowsRemoteController) ReadClipboard() (string, error) {

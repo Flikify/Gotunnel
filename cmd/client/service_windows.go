@@ -14,6 +14,7 @@ import (
 
 	clientapp "github.com/gotunnel/internal/client/app"
 	clientconfig "github.com/gotunnel/internal/client/config"
+	"github.com/gotunnel/internal/client/desktop"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
@@ -38,6 +39,8 @@ func runWindowsService(opts runtimeOptions) error {
 	if err := configureWindowsServiceLog(logPath); err != nil {
 		return err
 	}
+
+	opts.AppConfig.RemoteOpsProxy = desktop.NewServiceRemoteOpsProxy(opts.AppConfig.DataDir)
 
 	log.Printf("[Service] starting %s", opts.ServiceName)
 	return svc.Run(opts.ServiceName, &goTunnelService{

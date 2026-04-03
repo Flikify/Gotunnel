@@ -42,6 +42,14 @@ type remoteControlSession struct {
 }
 
 func (c *Client) handleRemoteControlStart(stream net.Conn, msg *protocol.Message) {
+	if c.remoteOpsProxy != nil {
+		if err := c.remoteOpsProxy.ProxyRemoteControl(stream, msg); err != nil {
+			defer stream.Close()
+			writeRemoteControlMessage(stream, protocol.MsgTypeRemoteControlError, protocol.RemoteControlError{Message: err.Error()})
+		}
+		return
+	}
+
 	defer stream.Close()
 
 	if !c.features.AllowRemoteControl || c.remoteController == nil {

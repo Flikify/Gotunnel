@@ -5,7 +5,7 @@ import GlassModal from '../components/GlassModal.vue'
 import MetricCard from '../components/MetricCard.vue'
 import PageFrame from '../components/PageFrame.vue'
 import SectionCard from '../components/SectionCard.vue'
-import { getClients, getServerInfo } from '../api'
+import { generateInstallCommand, getClients } from '../api'
 import { useToast } from '../composables/useToast'
 import type { ClientStatus } from '../types'
 
@@ -15,12 +15,11 @@ const clients = ref<ClientStatus[]>([])
 const loading = ref(true)
 const showInstallModal = ref(false)
 const tunnelPort = ref(7000)
+const installToken = ref('')
 const search = ref('')
 
 const quoteBashArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
 const quotePowerShellSingle = (value: string) => value.replace(/'/g, "''")
-const githubInstallScriptUrl = 'https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.sh'
-const githubInstallPs1Url = 'https://raw.githubusercontent.com/Flikify/Gotunnel/main/scripts/install.ps1'
 
 interface InstallCommandItem {
   label: string
@@ -28,6 +27,7 @@ interface InstallCommandItem {
 }
 
 const resolveTunnelHost = () => window.location.hostname || 'localhost'
+const resolveInstallScriptUrl = (path: '/install.sh' | '/install.ps1') => new URL(path, window.location.origin).toString()
 const formatServerAddr = (host: string, port: number) => {
   const normalizedHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
   return `${normalizedHost}:${port}`
@@ -65,20 +65,24 @@ const writeClipboardText = async (value: string) => {
 
 const buildInstallCommands = (): InstallCommandItem[] => {
   const serverAddr = formatServerAddr(resolveTunnelHost(), tunnelPort.value)
+  const token = installToken.value
+  const installScriptUrl = resolveInstallScriptUrl('/install.sh')
+  const installPs1Url = resolveInstallScriptUrl('/install.ps1')
   const psServerAddr = quotePowerShellSingle(serverAddr)
+  const psToken = quotePowerShellSingle(token)
 
   return [
     {
       label: 'Linux',
-      value: `bash <(curl -fsSL ${githubInstallScriptUrl}) -s ${quoteBashArg(serverAddr)}`,
+      value: `bash <(curl -fsSL ${quoteBashArg(installScriptUrl)}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(token)}`,
     },
     {
       label: 'macOS',
-      value: `bash <(curl -fsSL ${githubInstallScriptUrl}) -s ${quoteBashArg(serverAddr)}`,
+      value: `bash <(curl -fsSL ${quoteBashArg(installScriptUrl)}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(token)}`,
     },
     {
       label: 'Windows',
-      value: `powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr '${githubInstallPs1Url}' | iex; Install-GoTunnel -Server '${psServerAddr}'"`,
+      value: `powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr '${installPs1Url}' | iex; Install-GoTunnel -Server '${psServerAddr}' -Token '${psToken}'"`,
     }
   ]
 }
@@ -98,12 +102,13 @@ const loadClients = async () => {
 
 const openInstallModal = async () => {
   try {
-    const { data } = await getServerInfo()
-    tunnelPort.value = data.bind_port || 7000
+    const { data } = await generateInstallCommand()
+    tunnelPort.value = data.tunnel_port || 7000
+    installToken.value = data.token
     showInstallModal.value = true
   } catch (error) {
-    console.error('Failed to get server info', error)
-    message.error('获取服务器信息失败')
+    console.error('Failed to generate install command', error)
+    message.error('生成安装命令失败')
   }
 }
 
