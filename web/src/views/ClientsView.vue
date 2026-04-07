@@ -5,7 +5,7 @@ import GlassModal from '../components/GlassModal.vue'
 import MetricCard from '../components/MetricCard.vue'
 import PageFrame from '../components/PageFrame.vue'
 import SectionCard from '../components/SectionCard.vue'
-import { generateInstallCommand, getClients } from '../api'
+import { getClients, getServerConfig } from '../api'
 import { useToast } from '../composables/useToast'
 import type { ClientStatus } from '../types'
 
@@ -15,23 +15,14 @@ const clients = ref<ClientStatus[]>([])
 const loading = ref(true)
 const showInstallModal = ref(false)
 const tunnelPort = ref(7000)
-const installToken = ref('')
 const search = ref('')
-
-const quoteBashArg = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
-const quotePowerShellSingle = (value: string) => value.replace(/'/g, "''")
 
 interface InstallCommandItem {
   label: string
   value: string
 }
 
-const resolveTunnelHost = () => window.location.hostname || 'localhost'
 const resolveInstallScriptUrl = (path: '/install.sh' | '/install.ps1') => new URL(path, window.location.origin).toString()
-const formatServerAddr = (host: string, port: number) => {
-  const normalizedHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
-  return `${normalizedHost}:${port}`
-}
 
 const fallbackCopyText = (value: string) => {
   const textarea = document.createElement('textarea')
@@ -64,25 +55,21 @@ const writeClipboardText = async (value: string) => {
 }
 
 const buildInstallCommands = (): InstallCommandItem[] => {
-  const serverAddr = formatServerAddr(resolveTunnelHost(), tunnelPort.value)
-  const token = installToken.value
   const installScriptUrl = resolveInstallScriptUrl('/install.sh')
   const installPs1Url = resolveInstallScriptUrl('/install.ps1')
-  const psServerAddr = quotePowerShellSingle(serverAddr)
-  const psToken = quotePowerShellSingle(token)
 
   return [
     {
       label: 'Linux',
-      value: `bash <(curl -fsSL ${quoteBashArg(installScriptUrl)}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(token)}`,
+      value: `bash <(curl -fsSL '${installScriptUrl}')`,
     },
     {
       label: 'macOS',
-      value: `bash <(curl -fsSL ${quoteBashArg(installScriptUrl)}) -s ${quoteBashArg(serverAddr)} -t ${quoteBashArg(token)}`,
+      value: `bash <(curl -fsSL '${installScriptUrl}')`,
     },
     {
       label: 'Windows',
-      value: `powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr '${installPs1Url}' | iex; Install-GoTunnel -Server '${psServerAddr}' -Token '${psToken}'"`,
+      value: `powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr '${installPs1Url}' | iex; Install-GoTunnel"`,
     }
   ]
 }
@@ -102,13 +89,12 @@ const loadClients = async () => {
 
 const openInstallModal = async () => {
   try {
-    const { data } = await generateInstallCommand()
-    tunnelPort.value = data.tunnel_port || 7000
-    installToken.value = data.token
+    const { data } = await getServerConfig()
+    tunnelPort.value = data.server.bind_port || 7000
     showInstallModal.value = true
   } catch (error) {
-    console.error('Failed to generate install command', error)
-    message.error('生成安装命令失败')
+    console.error('Failed to load server config', error)
+    message.error('获取安装信息失败')
   }
 }
 
@@ -204,7 +190,7 @@ onMounted(loadClients)
         </article>
       </div>
       <template #footer>
-        <span class="install-footnote">命令内含一次性 token，使用后请重新生成。</span>
+        <span class="install-footnote">安装完成后，客户端会提示输入 `server:port` 和 token。当前隧道端口配置为 {{ tunnelPort }}。</span>
       </template>
     </GlassModal>
   </PageFrame>

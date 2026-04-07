@@ -346,7 +346,7 @@ f=$(mktemp);curl -fsSL 'https://raw.githubusercontent.com/Flikify/Gotunnel/main/
 
 注意：
 
-- Windows 客户端如果以 Windows Service 运行，会由服务进程保活隧道连接，并在检测到活动用户会话时拉起一个该会话内的 desktop helper 来处理截图和远控画面采集。
+- Windows 客户端如果以 Windows Service 运行，会由服务进程保活隧道连接，并通过随用户登录自动启动的 desktop agent 处理截图和远控画面采集。
 - 如果当前机器没有已登录的活动用户会话，或者桌面被锁定 / 切到 UAC secure desktop，截图和远控画面仍然会不可用。
 
 ## 使用场景

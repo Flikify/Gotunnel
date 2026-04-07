@@ -8,8 +8,8 @@ usage() {
 Usage: bash install.sh [-s <server:port>] [-t <token>]
 
 Options:
-  -s  Tunnel server address (optional, will prompt if not provided)
-  -t  Server authentication token (optional, will prompt if not provided)
+  -s  Tunnel server address (optional)
+  -t  Server authentication token (optional)
 EOF
 }
 
@@ -75,19 +75,6 @@ while getopts ":s:t:h" opt; do
       ;;
   esac
 done
-
-if [[ -z "$SERVER_ADDR" ]]; then
-  read -p "Enter tunnel server address (e.g., 10.0.0.2:7000): " SERVER_ADDR
-fi
-
-if [[ -z "$AUTH_TOKEN" ]]; then
-  read -p "Enter server authentication token: " AUTH_TOKEN
-fi
-
-if [[ -z "$SERVER_ADDR" || -z "$AUTH_TOKEN" ]]; then
-  echo "error: server address and token are required" >&2
-  exit 1
-fi
 
 require_cmd curl
 require_cmd tar
@@ -195,18 +182,6 @@ function Install-GoTunnel {
     [Parameter(Mandatory = $false)][string]$Token
   )
 
-  if (-not $Server) {
-    $Server = Read-Host "Enter tunnel server address (e.g., 10.0.0.2:7000)"
-  }
-
-  if (-not $Token) {
-    $Token = Read-Host "Enter server authentication token"
-  }
-
-  if (-not $Server -or -not $Token) {
-    throw "Server address and token are required"
-  }
-
   $Arch = Get-GoTunnelArch
   $InstallRoot = Join-Path $env:ProgramData 'GoTunnel'
   $ExtractDir = Join-Path $InstallRoot 'extract'
@@ -236,12 +211,18 @@ function Install-GoTunnel {
   Copy-Item -Path $Binary.FullName -Destination $TargetPath -Force
 
   @"
-server: $Server
-token: $Token
 data_dir: $InstallRoot
 "@ | Out-File -FilePath $ConfigPath -Encoding UTF8
 
-  & $TargetPath service install -c $ConfigPath
+  $serviceArgs = @('service', 'install', '-c', $ConfigPath)
+  if ($Server) {
+    $serviceArgs += @('-s', $Server)
+  }
+  if ($Token) {
+    $serviceArgs += @('-t', $Token)
+  }
+
+  & $TargetPath @serviceArgs
 
   Write-Host "GoTunnel client installed to $TargetPath"
   Write-Host "Config: $ConfigPath"

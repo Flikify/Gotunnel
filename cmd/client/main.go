@@ -38,9 +38,9 @@ func main() {
 		}
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "desktop-helper" {
+	if len(os.Args) > 1 && (os.Args[1] == "desktop-helper" || os.Args[1] == "desktop-agent") {
 		if err := runDesktopHelperCLI(os.Args[2:]); err != nil {
-			log.Fatalf("Desktop helper failed: %v", err)
+			log.Fatalf("Desktop agent failed: %v", err)
 		}
 		return
 	}
@@ -94,6 +94,10 @@ func main() {
 		cfg.ReconnectMaxSec = *reconnectMax
 	}
 
+	if err := promptForMissingConnectionValues(&cfg.Server, &cfg.Token); err != nil {
+		log.Fatalf("Failed to read connection settings: %v", err)
+	}
+
 	if handled, err := maybeHandleServiceCommand(serviceCommandOptions{
 		Action:      *serviceAction,
 		Name:        *serviceName,
@@ -108,7 +112,7 @@ func main() {
 	}
 
 	if cfg.Server == "" || cfg.Token == "" {
-		log.Fatal("Usage: client [-c config.yaml] | [-s <server:port> -t <token>]")
+		log.Fatal("Usage: client [-c config.yaml] | [-s <server:port> -t <token>] (interactive prompt is available in a terminal)")
 	}
 
 	opts := runtimeOptions{

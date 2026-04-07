@@ -83,8 +83,12 @@ func runServiceInstallCLI(args []string) error {
 	}
 	cfg.DataDir = resolvedDataDir
 
+	if err := promptForMissingConnectionValues(&cfg.Server, &cfg.Token); err != nil {
+		return fmt.Errorf("read connection settings: %w", err)
+	}
+
 	if strings.TrimSpace(cfg.Server) == "" || strings.TrimSpace(cfg.Token) == "" {
-		return fmt.Errorf("service install requires -s and -t, or an existing config file with server and token")
+		return fmt.Errorf("service install requires -s and -t, or an existing config file with server and token; interactive prompt is available in a terminal")
 	}
 
 	resolvedConfigPath, err := filepath.Abs(resolvedConfigPath)

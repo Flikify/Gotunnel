@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"time"
@@ -16,6 +17,7 @@ import (
 	clientconfig "github.com/gotunnel/internal/client/config"
 	"github.com/gotunnel/internal/client/desktop"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -49,10 +51,10 @@ func runWindowsService(opts runtimeOptions) error {
 	})
 }
 
-func runServiceCommand(opts serviceCommandOptions, _ *clientconfig.ClientConfig) error {
+func runServiceCommand(opts serviceCommandOptions, cfg *clientconfig.ClientConfig) error {
 	switch opts.Action {
 	case "install":
-		return installWindowsService(opts)
+		return installWindowsService(opts, cfg)
 	case "uninstall":
 		return uninstallWindowsService(opts.Name)
 	case "start":
@@ -143,11 +145,12 @@ func configureWindowsServiceLog(path string) error {
 	return nil
 }
 
-func installWindowsService(opts serviceCommandOptions) error {
+func installWindowsService(opts serviceCommandOptions, cfg *clientconfig.ClientConfig) error {
 	exePath, err := currentExecutablePath()
 	if err != nil {
 		return err
 	}
+	dataDir := resolveServiceDataDir(cfg, opts.ConfigPath)
 	if opts.LogPath != "" {
 		if err := os.MkdirAll(filepath.Dir(opts.LogPath), 0755); err != nil {
 			return fmt.Errorf("create service log dir: %w", err)
@@ -185,9 +188,15 @@ func installWindowsService(opts serviceCommandOptions) error {
 	if err := service.SetRecoveryActionsOnNonCrashFailures(true); err != nil {
 		return fmt.Errorf("set recovery flags: %w", err)
 	}
+	if err := ensureDesktopAgentAutoStart(opts.Name, exePath, dataDir); err != nil {
+		return fmt.Errorf("register desktop agent autostart: %w", err)
+	}
 
 	if err := service.Start(); err != nil && !errors.Is(err, windows.ERROR_SERVICE_ALREADY_RUNNING) {
 		return fmt.Errorf("start service: %w", err)
+	}
+	if err := startDesktopAgentForCurrentUser(exePath, dataDir); err != nil {
+		log.Printf("[Service] desktop agent warm start skipped: %v", err)
 	}
 	fmt.Printf("Service installed: %s\n", opts.Name)
 	return nil
@@ -236,6 +245,45 @@ func buildWindowsServiceCommandLine(exePath string, args []string) string {
 	return commandLine
 }
 
+func desktopAgentRunValueName(serviceName string) string {
+	if serviceName == "" {
+		serviceName = defaultServiceName()
+	}
+	return serviceName + "DesktopAgent"
+}
+
+func ensureDesktopAgentAutoStart(serviceName, exePath, dataDir string) error {
+	key, _, err := registry.CreateKey(registry.LOCAL_MACHINE, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer key.Close()
+	return key.SetStringValue(desktopAgentRunValueName(serviceName), buildWindowsServiceCommandLine(exePath, []string{"desktop-agent", "-data-dir", dataDir}))
+}
+
+func removeDesktopAgentAutoStart(serviceName string) error {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	defer key.Close()
+	if err := key.DeleteValue(desktopAgentRunValueName(serviceName)); err != nil && !errors.Is(err, registry.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func startDesktopAgentForCurrentUser(exePath, dataDir string) error {
+	if dataDir == "" {
+		return fmt.Errorf("desktop agent data dir is empty")
+	}
+	cmd := exec.Command(exePath, "desktop-agent", "-data-dir", dataDir)
+	return cmd.Start()
+}
+
 func uninstallWindowsService(name string) error {
 	manager, err := mgr.Connect()
 	if err != nil {
@@ -258,6 +306,9 @@ func uninstallWindowsService(name string) error {
 	}
 	if err := service.Delete(); err != nil {
 		return fmt.Errorf("delete service: %w", err)
+	}
+	if err := removeDesktopAgentAutoStart(name); err != nil {
+		log.Printf("[Service] desktop agent autostart cleanup skipped: %v", err)
 	}
 	fmt.Printf("Service removed: %s\n", name)
 	return nil

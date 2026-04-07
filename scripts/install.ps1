@@ -126,8 +126,8 @@ function Get-GoTunnelDownloadUrl {
 function Install-GoTunnel {
   [CmdletBinding()]
   param(
-    [Parameter(Mandatory = $true)][string]$Server,
-    [Parameter(Mandatory = $true)][string]$Token,
+    [string]$Server,
+    [string]$Token,
     [string]$Version = 'latest',
     [string]$Repository = 'Flikify/Gotunnel',
     [string]$Cdn = '',
@@ -174,14 +174,21 @@ function Install-GoTunnel {
   Copy-Item -Path $binary.FullName -Destination $targetPath -Force
 
   Write-Host "Installing Windows service $ServiceName via client command"
-  & $targetPath `
-    service install `
-    -s $Server `
-    -t $Token `
-    -data-dir $resolvedDataDir `
-    -service-name $ServiceName `
-    -service-display-name $DisplayName `
-    -service-log-file $serviceLogPath
+  $serviceArgs = @(
+    'service',
+    'install',
+    '-data-dir', $resolvedDataDir,
+    '-service-name', $ServiceName,
+    '-service-display-name', $DisplayName,
+    '-service-log-file', $serviceLogPath
+  )
+  if ($Server) {
+    $serviceArgs += @('-s', $Server)
+  }
+  if ($Token) {
+    $serviceArgs += @('-t', $Token)
+  }
+  & $targetPath @serviceArgs
   if ($LASTEXITCODE -ne 0) {
     throw "gotunnel-client service install command failed with exit code $LASTEXITCODE"
   }
@@ -195,11 +202,7 @@ function Install-GoTunnel {
   Write-Host "Service status: $($startedService.Status)"
 }
 
-if ($PSBoundParameters.ContainsKey('Server') -or $PSBoundParameters.ContainsKey('Token')) {
-  if (-not $Server -or -not $Token) {
-    throw 'Both -Server and -Token are required.'
-  }
-
+if ($PSCommandPath -and $MyInvocation.InvocationName -ne '.') {
   Install-GoTunnel `
     -Server $Server `
     -Token $Token `

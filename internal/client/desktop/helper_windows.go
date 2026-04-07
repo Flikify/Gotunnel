@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unsafe"
 
@@ -24,9 +23,8 @@ import (
 )
 
 const (
-	desktopHelperDialTimeout   = 2 * time.Second
-	desktopHelperLaunchTimeout = 8 * time.Second
-	windowsInvalidSessionID    = 0xFFFFFFFF
+	desktopHelperDialTimeout = 2 * time.Second
+	windowsInvalidSessionID  = 0xFFFFFFFF
 )
 
 type serviceRemoteOpsProxy struct {
@@ -39,16 +37,25 @@ func NewServiceRemoteOpsProxy(dataDir string) tunnel.RemoteOpsProxy {
 }
 
 func RunHelper(ctx context.Context, dataDir string, sessionID uint32) error {
-	if sessionID == 0 {
-		return fmt.Errorf("invalid helper session id")
-	}
 	dataDir = normalizeDataDir(dataDir)
+	if sessionID == 0 {
+		var err error
+		sessionID, err = currentProcessSessionID()
+		if err != nil {
+			return fmt.Errorf("resolve desktop agent session: %w", err)
+		}
+	}
 
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return fmt.Errorf("create helper data dir: %w", err)
 	}
 
 	socketPath := helperSocketPath(dataDir, sessionID)
+	if conn, err := dialHelperSocket(socketPath); err == nil {
+		conn.Close()
+		<-ctx.Done()
+		return nil
+	}
 	_ = os.Remove(socketPath)
 
 	listener, err := net.Listen("unix", socketPath)
@@ -98,13 +105,12 @@ func newHelperClient(dataDir string) (*tunnel.Client, error) {
 }
 
 func (p *serviceRemoteOpsProxy) ProxyScreenshot(stream net.Conn, msg *protocol.Message) error {
-	defer stream.Close()
-
 	conn, err := p.connectHelper()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
+	defer stream.Close()
 
 	if err := protocol.WriteMessage(conn, msg); err != nil {
 		return fmt.Errorf("forward screenshot request: %w", err)
@@ -123,6 +129,7 @@ func (p *serviceRemoteOpsProxy) ProxyRemoteControl(stream net.Conn, msg *protoco
 		return err
 	}
 	defer conn.Close()
+	defer stream.Close()
 
 	if err := protocol.WriteMessage(conn, msg); err != nil {
 		return fmt.Errorf("forward remote control start: %w", err)
@@ -133,49 +140,63 @@ func (p *serviceRemoteOpsProxy) ProxyRemoteControl(stream net.Conn, msg *protoco
 }
 
 func (p *serviceRemoteOpsProxy) connectHelper() (net.Conn, error) {
-	sessionID, err := activeConsoleSessionID()
-	if err != nil {
-		return nil, err
-	}
-
-	socketPath := helperSocketPath(p.dataDir, sessionID)
-	if conn, err := dialHelperSocket(socketPath); err == nil {
-		return conn, nil
+	candidates := interactiveSessionCandidates()
+	for _, sessionID := range candidates {
+		socketPath := helperSocketPath(p.dataDir, sessionID)
+		if conn, err := dialHelperSocket(socketPath); err == nil {
+			return conn, nil
+		}
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if conn, err := dialHelperSocket(socketPath); err == nil {
-		return conn, nil
-	}
-
-	if err := launchHelperProcess(p.dataDir, sessionID); err != nil {
-		return nil, err
-	}
-
-	deadline := time.Now().Add(desktopHelperLaunchTimeout)
-	for time.Now().Before(deadline) {
-		conn, err := dialHelperSocket(socketPath)
-		if err == nil {
+	for _, sessionID := range candidates {
+		socketPath := helperSocketPath(p.dataDir, sessionID)
+		if conn, err := dialHelperSocket(socketPath); err == nil {
 			return conn, nil
 		}
-		time.Sleep(200 * time.Millisecond)
 	}
 
-	return nil, fmt.Errorf("desktop helper did not become ready in session %d", sessionID)
+	return nil, fmt.Errorf("desktop is unavailable; ensure a Windows user session is signed in and the desktop agent is running")
 }
 
 func dialHelperSocket(socketPath string) (net.Conn, error) {
 	return net.DialTimeout("unix", socketPath, desktopHelperDialTimeout)
 }
 
-func activeConsoleSessionID() (uint32, error) {
-	sessionID := windows.WTSGetActiveConsoleSessionId()
-	if sessionID == windowsInvalidSessionID {
-		return 0, fmt.Errorf("no active user session is available for desktop operations")
+func interactiveSessionCandidates() []uint32 {
+	candidates := make([]uint32, 0, 8)
+	consoleSessionID := windows.WTSGetActiveConsoleSessionId()
+	if consoleSessionID != windowsInvalidSessionID {
+		candidates = append(candidates, consoleSessionID)
 	}
-	return sessionID, nil
+
+	var sessions *windows.WTS_SESSION_INFO
+	var count uint32
+	if err := windows.WTSEnumerateSessions(0, 0, 1, &sessions, &count); err == nil {
+		defer windows.WTSFreeMemory(uintptr(unsafe.Pointer(sessions)))
+
+		entries := unsafe.Slice(sessions, count)
+		for _, session := range entries {
+			if session.State != windows.WTSActive && session.State != windows.WTSConnected {
+				continue
+			}
+			if !containsSessionID(candidates, session.SessionID) {
+				candidates = append(candidates, session.SessionID)
+			}
+		}
+	}
+	return candidates
+}
+
+func containsSessionID(ids []uint32, target uint32) bool {
+	for _, id := range ids {
+		if id == target {
+			return true
+		}
+	}
+	return false
 }
 
 func helperSocketPath(dataDir string, sessionID uint32) string {
@@ -191,84 +212,10 @@ func normalizeDataDir(dataDir string) string {
 	return baseDir
 }
 
-func launchHelperProcess(dataDir string, sessionID uint32) error {
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolve helper executable: %w", err)
+func currentProcessSessionID() (uint32, error) {
+	var sessionID uint32
+	if err := windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &sessionID); err != nil {
+		return 0, err
 	}
-
-	var userToken windows.Token
-	if err := windows.WTSQueryUserToken(sessionID, &userToken); err != nil {
-		return fmt.Errorf("query active session token: %w", err)
-	}
-	defer userToken.Close()
-
-	var primaryToken windows.Token
-	if err := windows.DuplicateTokenEx(userToken, windows.MAXIMUM_ALLOWED, nil, windows.SecurityImpersonation, windows.TokenPrimary, &primaryToken); err != nil {
-		return fmt.Errorf("duplicate active session token: %w", err)
-	}
-	defer primaryToken.Close()
-
-	var env *uint16
-	if err := windows.CreateEnvironmentBlock(&env, primaryToken, false); err != nil {
-		return fmt.Errorf("create helper environment: %w", err)
-	}
-	defer windows.DestroyEnvironmentBlock(env)
-
-	desktopPtr, err := windows.UTF16PtrFromString("winsta0\\default")
-	if err != nil {
-		return fmt.Errorf("encode helper desktop: %w", err)
-	}
-	commandLine, err := windows.UTF16PtrFromString(buildHelperCommandLine(exePath, dataDir, sessionID))
-	if err != nil {
-		return fmt.Errorf("encode helper command line: %w", err)
-	}
-	appName, err := windows.UTF16PtrFromString(exePath)
-	if err != nil {
-		return fmt.Errorf("encode helper path: %w", err)
-	}
-	currentDir, err := windows.UTF16PtrFromString(filepath.Dir(exePath))
-	if err != nil {
-		return fmt.Errorf("encode helper cwd: %w", err)
-	}
-
-	si := windows.StartupInfo{
-		Cb:         uint32(unsafe.Sizeof(windows.StartupInfo{})),
-		Desktop:    desktopPtr,
-		Flags:      windows.STARTF_USESHOWWINDOW,
-		ShowWindow: windows.SW_HIDE,
-	}
-	var pi windows.ProcessInformation
-	if err := windows.CreateProcessAsUser(
-		primaryToken,
-		appName,
-		commandLine,
-		nil,
-		nil,
-		false,
-		windows.CREATE_UNICODE_ENVIRONMENT|windows.CREATE_NO_WINDOW,
-		env,
-		currentDir,
-		&si,
-		&pi,
-	); err != nil {
-		return fmt.Errorf("launch desktop helper: %w", err)
-	}
-	defer windows.CloseHandle(pi.Process)
-	defer windows.CloseHandle(pi.Thread)
-	return nil
-}
-
-func buildHelperCommandLine(exePath, dataDir string, sessionID uint32) string {
-	args := []string{
-		exePath,
-		"desktop-helper",
-		"-data-dir", dataDir,
-		"-helper-session", strconv.FormatUint(uint64(sessionID), 10),
-	}
-	escaped := make([]string, 0, len(args))
-	for _, arg := range args {
-		escaped = append(escaped, syscall.EscapeArg(arg))
-	}
-	return strings.Join(escaped, " ")
+	return sessionID, nil
 }
